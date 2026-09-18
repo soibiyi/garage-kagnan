@@ -16,8 +16,17 @@ class AuthenticatedSessionController extends Controller
     /**
      * Display the login view.
      */
-    public function create(): Response
+    public function create(): Response|RedirectResponse
     {
+        // Si l'utilisateur est déjà connecté, on l'empêche de voir le login
+        if (auth()->check()) {
+            $user = auth()->user();
+            if ($user->role === 'admin') {
+                return redirect()->route('admin.users.index');
+            }
+            return redirect()->route('dashboard');
+        }
+
         return Inertia::render('Auth/Login', [
             'canResetPassword' => Route::has('password.request'),
             'status' => session('status'),
@@ -33,6 +42,15 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        // Récupération de l'utilisateur connecté
+        $user = auth()->user();
+
+        // Redirection dynamique selon le rôle
+        if ($user->role === 'admin') {
+            return redirect()->intended(route('admin.users.index', absolute: false));
+        }
+
+        // Pour les autres rôles (réceptionniste, mécanicien, etc.)
         return redirect()->intended(route('dashboard', absolute: false));
     }
 

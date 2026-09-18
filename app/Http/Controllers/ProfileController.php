@@ -29,6 +29,11 @@ class ProfileController extends Controller
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
+        // Si l'utilisateur n'est pas admin, on bloque la modification autonome
+        if ($request->user()->role !== 'admin') {
+            abort(403, "La modification de votre profil est gérée exclusivement par l'administrateur.");
+        }
+
         $request->user()->fill($request->validated());
 
         if ($request->user()->isDirty('email')) {
@@ -45,6 +50,11 @@ class ProfileController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        // Si l'utilisateur n'est pas admin, on bloque la suppression autonome
+        if ($request->user()->role !== 'admin') {
+            abort(403, "La suppression de votre compte est gérée exclusivement par l'administrateur.");
+        }
+
         $request->validate([
             'password' => ['required', 'current_password'],
         ]);
