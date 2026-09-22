@@ -8,6 +8,7 @@ use App\Models\Vehicule;
 use App\Models\Intervention;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Carbon\Carbon;
 
 class ReceptionController extends Controller
 {
@@ -109,12 +110,20 @@ class ReceptionController extends Controller
             }
         }
 
+        // --- TRAITEMENT DE LA DATE ET DE L'HEURE EXACTE ---
+        $dateBase = !empty($validated['date_reception']) 
+            ? Carbon::parse($validated['date_reception'])->format('Y-m-d') 
+            : now()->format('Y-m-d');
+        
+        // On combine la date choisie (ou du jour) avec l'heure exacte courante
+        $dateHeureExacte = $dateBase . ' ' . now()->format('H:i:s');
+
         // Création de l'intervention avec TOUTES les informations
         Intervention::create([
             'vehicule_id' => $vehicule->id,
             'receptionniste_id' => auth()->id(),
             'numero_ot' => $validated['numero_ot'] ?? 'OT-' . date('Ymd-His'),
-            'date_reception' => $validated['date_reception'] ?? now(),
+            'date_reception' => $dateHeureExacte, // <-- Injecte la date ET l'heure
             'kilometrage' => $validated['kilometrage'],
             'personne_a_contacter' => $validated['personne_a_contacter'] ?? null,
             'circuit' => $validated['circuit'],
