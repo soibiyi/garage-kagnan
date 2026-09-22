@@ -7,6 +7,10 @@ use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\Reception\VehiculeParcController;
+use App\Http\Controllers\Administrative\DossierController;
+use App\Models\Intervention; // <-- 1. Importe le modèle Intervention ici
+use App\Http\Controllers\Mecanicien\MecanicienController;
+
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -17,8 +21,16 @@ Route::get('/', function () {
     ]);
 });
 
+// 2. Modifie la route du dashboard pour récupérer et passer les interventions en atelier
 Route::get('/dashboard', function () {
-    return Inertia::render('Dashboard');
+    $interventionsAtelier = Intervention::with(['vehicule.client', 'receptionniste', 'mecanicien'])
+        ->whereIn('statut', ['atelier', 'en_cours', 'attente_accord'])
+        ->latest('date_reception')
+        ->get();
+
+    return Inertia::render('Dashboard', [
+        'interventionsAtelier' => $interventionsAtelier,
+    ]);
 })->middleware(['auth', 'verified'])->name('dashboard');
 
 // Routes de profil (Breeze)
@@ -52,6 +64,19 @@ Route::middleware(['auth', 'verified'])->group(function () {
 Route::middleware(['auth'])->prefix('parc')->name('parc.')->group(function () {
     Route::get('/', [VehiculeParcController::class, 'index'])->name('index');
     Route::get('/{id}', [VehiculeParcController::class, 'show'])->name('show');
+    Route::patch('/{id}/avancer', [VehiculeParcController::class, 'updateProgress'])->name('progress'); 
+});
+
+// Routes Administration (Dossiers & Devis)
+Route::middleware(['auth'])->prefix('administration')->name('administration.')->group(function () {
+    Route::get('/dossiers', [DossierController::class, 'index'])->name('dossiers.index');
+    Route::get('/dossiers/{dossier}', [DossierController::class, 'show'])->name('dossiers.show');
+    Route::post('/dossiers/{dossier}/devis', [DossierController::class, 'storeDevis'])->name('devis.store');
+});
+
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('/mecanicien/interventions', [MecanicienController::class, 'index'])->name('mecanicien.index');
+    Route::patch('/mecanicien/interventions/{intervention}/progres', [MecanicienController::class, 'progress'])->name('mecanicien.progress');
 });
 
 require __DIR__.'/auth.php';

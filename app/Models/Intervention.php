@@ -22,4 +22,15 @@ class Intervention extends Model
     {
         return $this->belongsTo(User::class, 'receptionniste_id');
     }
+
+    // Relation avec le mécanicien (table users)
+    public function mecanicien()
+    {
+        return $this->belongsTo(User::class, 'mecanicien_id');
+    }
+
+    public function client()
+{
+    return $this->hasOneThrough(Client::class, Vehicule::class, 'id', 'id', 'vehicule_id', 'client_id');
+}
 }

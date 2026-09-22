@@ -47,7 +47,7 @@ const submitProgress = () => {
     });
 };
 
-// Fonction utilitaire pour les badges de statut
+// Traduction et style des statuts (homogénéisé avec la vue show)
 const getStatutBadge = (statut) => {
     const badges = {
         reception: { text: 'Sur le Parc (Réception)', class: 'bg-blue-100 text-blue-800' },
@@ -87,19 +87,11 @@ const filteredInterventions = computed(() => {
 
     <AuthenticatedLayout>
         <template #header>
-            <div class="flex justify-between items-center">
-                <div>
-                    <h2 class="text-xl font-bold leading-tight text-gray-900">
-                        Véhicules sur le Parc 🚗
-                    </h2>
-                    <p class="text-sm text-gray-500 mt-0.5">Suivi des véhicules actuellement dans l'enceinte de l'établissement</p>
-                </div>
-                <Link 
-                    :href="route('reception.create')" 
-                    class="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 transition shadow-sm"
-                >
-                    + Nouvelle Réception
-                </Link>
+            <div>
+                <h2 class="text-xl font-bold leading-tight text-gray-900">
+                    Véhicules sur le Parc 🚗
+                </h2>
+                <p class="text-sm text-gray-500 mt-0.5">Suivi des véhicules actuellement dans l'enceinte de l'établissement</p>
             </div>
         </template>
 
