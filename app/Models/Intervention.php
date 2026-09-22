@@ -12,6 +12,10 @@ class Intervention extends Model
     protected $table = 'interventions';
 
     protected $guarded = []; // Ou listez vos champs de remplissage
+    
+    protected $casts = [
+        'date_reception' => 'datetime',
+    ];
 
     public function vehicule()
     {
@@ -30,7 +34,15 @@ class Intervention extends Model
     }
 
     public function client()
+    {
+        return $this->hasOneThrough(Client::class, Vehicule::class, 'id', 'id', 'vehicule_id', 'client_id');
+    }
+
+    /**
+     * Relation avec le ou les devis liés à cette intervention
+     */
+   public function devis()
 {
-    return $this->hasOneThrough(Client::class, Vehicule::class, 'id', 'id', 'vehicule_id', 'client_id');
+    return $this->hasOne(Devis::class, 'intervention_id');
 }
 }

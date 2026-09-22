@@ -47,6 +47,29 @@ const submitProgress = () => {
     });
 };
 
+// Fonction utilitaire pour calculer le temps écoulé depuis l'entrée
+const calculerTempsEcoule = (dateString) => {
+    if (!dateString) return '';
+    const dateEntree = new Date(dateString);
+    const maintenant = new Date();
+    const diffMs = maintenant - dateEntree;
+
+    if (diffMs < 0) return "À l'instant";
+
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    const diffHeures = Math.floor(diffMinutes / 60);
+    const jours = Math.floor(diffHeures / 24);
+    const heuresRestantes = diffHeures % 24;
+
+    if (jours > 0) {
+        return `${jours}j ${heuresRestantes}h`;
+    } else if (diffHeures > 0) {
+        return `${diffHeures}h`;
+    } else {
+        return `${diffMinutes} min`;
+    }
+};
+
 // Fonction utilitaire pour les badges de statut
 const getStatutBadge = (statut) => {
     const badges = {
@@ -162,7 +185,11 @@ const filteredInterventions = computed(() => {
                                             </span>
                                         </td>
                                         <td class="px-6 py-4 text-gray-500 text-xs">
-                                            {{ new Date(item.date_reception).toLocaleDateString() }} à {{ new Date(item.date_reception).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
+                                            <div>{{ new Date(item.date_reception).toLocaleDateString() }} à {{ new Date(item.date_reception).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</div>
+                                            <!-- Affichage du décompte -->
+                                            <span class="inline-block mt-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 font-bold rounded text-[11px]">
+                                                ⏱️ Il y a {{ calculerTempsEcoule(item.date_reception) }}
+                                            </span>
                                         </td>
                                         <td class="px-6 py-4 text-right">
                                             <div class="flex items-center justify-end gap-2">

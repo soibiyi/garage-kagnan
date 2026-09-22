@@ -161,37 +161,39 @@ const roleInfo = computed(() => {
         </div>
     </div>
 </div>
-                <!-- ========================================== -->
-                <!-- 3. VUE : ADMINISTRATIF -->
-                <!-- ========================================== -->
-                <div v-else-if="user?.role === 'administratif'" class="space-y-6">
-                    <div class="bg-white p-8 rounded-2xl shadow-sm border border-gray-200">
-                        <div class="flex items-center gap-4 mb-6">
-                            <div class="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-2xl shadow-inner">📄</div>
-                            <div>
-                                <h3 class="text-xl font-bold text-gray-900">Devis & Facturation</h3>
-                                <p class="text-sm text-gray-500">Gérez l'édition des devis, validez les coûts et éditez les factures clients.</p>
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                            <Link :href="route('administration.dossiers.index')" class="p-5 bg-gray-50 rounded-xl border border-gray-200 hover:border-blue-300 transition flex items-center justify-between group">
-                                <div>
-                                    <h4 class="font-bold text-gray-900 group-hover:text-blue-600 transition">Devis en attente de validation</h4>
-                                    <p class="text-xs text-gray-500 mt-1">Chiffrages pièces et main-d'œuvre à transformer.</p>
-                                </div>
-                                <span class="text-blue-600 font-bold text-lg transform group-hover:translate-x-1 transition">→</span>
-                            </Link>
-
-                            <div class="p-5 bg-gray-50 rounded-xl border border-gray-200 hover:border-blue-300 transition cursor-pointer flex items-center justify-between">
-                                <div>
-                                    <h4 class="font-bold text-gray-900">Facturation & Règlements</h4>
-                                    <p class="text-xs text-gray-500 mt-1">Suivi des encaissements et factures acquittées.</p>
-                                </div>
-                                <span class="text-gray-400 font-bold text-lg">→</span>
-                            </div>
-                        </div>
-                    </div>
+            <!-- ========================================== -->
+<!-- 3. VUE : ADMINISTRATIF -->
+<!-- ========================================== -->
+<div v-else-if="user?.role === 'administratif'" class="space-y-6">
+    <div class="bg-white p-8 rounded-2xl shadow-sm border border-gray-200">
+        <div class="flex items-center gap-4 mb-6">
+            <div class="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-2xl shadow-inner">📄</div>
+            <div>
+                <h3 class="text-xl font-bold text-gray-900">Devis & Facturation</h3>
+                <p class="text-sm text-gray-500">Gérez l'édition des devis, validez les coûts et éditez les factures clients.</p>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+            <!-- Lien vers Devis en attente -->
+            <Link :href="route('administration.dossiers.index')" class="p-5 bg-gray-50 rounded-xl border border-gray-200 hover:border-blue-300 transition flex items-center justify-between group">
+                <div>
+                    <h4 class="font-bold text-gray-900 group-hover:text-blue-600 transition">Devis en attente de validation</h4>
+                    <p class="text-xs text-gray-500 mt-1">Chiffrages pièces et main-d'œuvre à transformer.</p>
                 </div>
+                <span class="text-blue-600 font-bold text-lg transform group-hover:translate-x-1 transition">→</span>
+            </Link>
+
+            <!-- Lien cliquable vers Facturation & Règlements -->
+            <Link :href="route('administration.facturation.index')" class="p-5 bg-gray-50 rounded-xl border border-gray-200 hover:border-blue-300 transition flex items-center justify-between group">
+                <div>
+                    <h4 class="font-bold text-gray-900 group-hover:text-blue-600 transition">Facturation & Règlements</h4>
+                    <p class="text-xs text-gray-500 mt-1">Suivi des encaissements et factures acquittées.</p>
+                </div>
+                <span class="text-blue-600 font-bold text-lg transform group-hover:translate-x-1 transition">→</span>
+            </Link>
+        </div>
+    </div>
+</div>
 
                 <!-- ========================================== -->
                 <!-- 4. VUE : CHARGÉ DE SUIVI CLIENT -->

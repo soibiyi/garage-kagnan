@@ -72,6 +72,10 @@ Route::middleware(['auth'])->prefix('administration')->name('administration.')->
     Route::get('/dossiers', [DossierController::class, 'index'])->name('dossiers.index');
     Route::get('/dossiers/{dossier}', [DossierController::class, 'show'])->name('dossiers.show');
     Route::post('/dossiers/{dossier}/devis', [DossierController::class, 'storeDevis'])->name('devis.store');
+
+    // FACTURATION & RÈGLEMENTS (Géré directement dans DossierController)
+    Route::get('/facturation', [DossierController::class, 'facturationIndex'])->name('facturation.index');
+    Route::get('/facturation/{dossier}', [DossierController::class, 'facturationShow'])->name('facturation.show');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
