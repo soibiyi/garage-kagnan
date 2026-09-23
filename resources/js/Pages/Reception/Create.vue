@@ -6,6 +6,7 @@ import { ref, computed } from 'vue';
 const props = defineProps({
     clients: Array,
     mecaniciens: Array,
+    defaultNumeroOt: String, // ⬅️ Récupération de la prop du backend
 });
 
 const currentStep = ref(1);
@@ -92,7 +93,7 @@ const form = useForm({
     expiration_sicta: '',
 
     // Intervention - Infos administratives & traçabilité
-    numero_ot: '',
+    numero_ot: props.defaultNumeroOt || '', // ⬅️ Initialisé automatiquement avec le format SGK-JJMMAA/001
     date_reception: new Date().toISOString().split('T')[0],
     kilometrage: '',
     personne_a_contacter: '',
@@ -384,8 +385,9 @@ const submit = () => {
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
                             <div>
-                                <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Numéro OT *</label>
-                                <input type="text" v-model="form.numero_ot" required class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]" placeholder="ex: OT-2026-001" />
+                                <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Numéro OT (Généré auto) *</label>
+                                <input type="text" v-model="form.numero_ot" required readonly class="w-full rounded-2xl border-gray-200 bg-gray-100 text-sm p-3.5 shadow-xs text-gray-600 font-bold cursor-not-allowed" />
+                                <span class="text-[10px] text-[#8A8D8F] mt-1 block">Format : SGK-JJMMAA/001</span>
                             </div>
 
                             <div>
@@ -421,19 +423,12 @@ const submit = () => {
 
                             <div class="sm:col-span-2">
                                 <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Circuit de traitement *</label>
-                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-1">
-                                    <label :class="['border p-4 rounded-2xl cursor-pointer flex items-center gap-3.5 transition shadow-xs', form.circuit === 'normal' ? 'border-[#E11D48] bg-red-50/40' : 'border-gray-200 bg-[#F8FAFC]']">
-                                        <input type="radio" value="normal" v-model="form.circuit" class="text-[#E11D48] focus:ring-[#E11D48]" />
+                                <div class="grid grid-cols-1 gap-4 mt-1">
+                                    <label class="border p-4 rounded-2xl cursor-pointer flex items-center gap-3.5 transition shadow-xs border-[#E11D48] bg-red-50/40">
+                                        <input type="radio" value="normal" v-model="form.circuit" class="text-[#E11D48] focus:ring-[#E11D48]" checked disabled />
                                         <div>
                                             <span class="font-black text-sm text-[#0B0F19] block">Circuit Normal</span>
                                             <span class="text-xs text-[#8A8D8F] font-medium">Avec diagnostic & essai technique</span>
-                                        </div>
-                                    </label>
-                                    <label :class="['border p-4 rounded-2xl cursor-pointer flex items-center gap-3.5 transition shadow-xs', form.circuit === 'devis_direct' ? 'border-[#E11D48] bg-red-50/40' : 'border-gray-200 bg-[#F8FAFC]']">
-                                        <input type="radio" value="devis_direct" v-model="form.circuit" class="text-[#E11D48] focus:ring-[#E11D48]" />
-                                        <div>
-                                            <span class="font-black text-sm text-[#0B0F19] block">Devis Direct</span>
-                                            <span class="text-xs text-[#8A8D8F] font-medium">Panne visible / Chiffrage immédiat</span>
                                         </div>
                                     </label>
                                 </div>

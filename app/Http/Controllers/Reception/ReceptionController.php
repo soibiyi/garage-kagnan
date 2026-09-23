@@ -12,11 +12,23 @@ use Carbon\Carbon;
 
 class ReceptionController extends Controller
 {
-    // Affiche le formulaire de nouvelle réception
+    // Affiche le formulaire de nouvelle réception avec génération automatique du numéro OT
     public function create()
     {
+        // 1. Format de la date du jour : ddmmyy (ex: 230926)
+        $datePart = Carbon::now()->format('dmY');
+        $prefix = "SGK-{$datePart}/";
+
+        // 2. Compter les interventions créées aujourd'hui pour calculer le prochain numéro séquentiel
+        $todayCount = Intervention::whereDate('created_at', Carbon::today())->count();
+        $nextNumber = str_pad($todayCount + 1, 3, '0', STR_PAD_LEFT);
+
+        // 3. Résultat final : SGK-230926/001
+        $defaultNumeroOt = $prefix . $nextNumber;
+
         return Inertia::render('Reception/Create', [
-            'clients' => Client::with('vehicules')->orderBy('nom')->get()
+            'clients' => Client::with('vehicules')->orderBy('nom')->get(),
+            'defaultNumeroOt' => $defaultNumeroOt,
         ]);
     }
 
@@ -100,11 +112,11 @@ class ReceptionController extends Controller
             ]
         );
 
-        // Upload des photos
+        // Upload des photos sur le disque public
         $photoPaths = [];
         foreach (['photo_avant', 'photo_arriere', 'photo_gauche', 'photo_droite'] as $photoField) {
             if ($request->hasFile($photoField)) {
-                $photoPaths[$photoField] = $request->file($photoField)->store('interventions', 'public');
+                $photoPaths[$photoField] = $request->file($photoField)->store('interventions/photos', 'public');
             } else {
                 $photoPaths[$photoField] = null;
             }
@@ -115,15 +127,22 @@ class ReceptionController extends Controller
             ? Carbon::parse($validated['date_reception'])->format('Y-m-d') 
             : now()->format('Y-m-d');
         
-        // On combine la date choisie (ou du jour) avec l'heure exacte courante
         $dateHeureExacte = $dateBase . ' ' . now()->format('H:i:s');
+
+        // Sécurité : s'assurer qu'un numéro OT unique est assigné s'il est vide
+        $numeroOt = $validated['numero_ot'];
+        if (empty($numeroOt)) {
+            $datePart = Carbon::now()->format('dmY');
+            $todayCount = Intervention::whereDate('created_at', Carbon::today())->count();
+            $numeroOt = "SGK-{$datePart}/" . str_pad($todayCount + 1, 3, '0', STR_PAD_LEFT);
+        }
 
         // Création de l'intervention avec TOUTES les informations
         Intervention::create([
             'vehicule_id' => $vehicule->id,
             'receptionniste_id' => auth()->id(),
-            'numero_ot' => $validated['numero_ot'] ?? 'OT-' . date('Ymd-His'),
-            'date_reception' => $dateHeureExacte, // <-- Injecte la date ET l'heure
+            'numero_ot' => $numeroOt,
+            'date_reception' => $dateHeureExacte,
             'kilometrage' => $validated['kilometrage'],
             'personne_a_contacter' => $validated['personne_a_contacter'] ?? null,
             'circuit' => $validated['circuit'],
