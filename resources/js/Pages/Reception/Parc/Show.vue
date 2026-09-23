@@ -6,15 +6,22 @@ const props = defineProps({
     intervention: Object,
 });
 
+// Helper pour générer l'URL correcte de l'image stockée
+const getPhotoUrl = (path) => {
+    if (!path) return null;
+    if (path.startsWith('http')) return path;
+    return `/storage/${path}`;
+};
+
 // Traduction et style des statuts
 const getStatutBadge = (statut) => {
     const badges = {
-        reception: { text: 'Sur le Parc (Réception)', class: 'bg-blue-100 text-blue-800' },
-        atelier: { text: 'En Atelier', class: 'bg-amber-100 text-amber-800' },
-        en_cours: { text: 'En Réparation', class: 'bg-purple-100 text-purple-800' },
-        attente_accord: { text: 'Attente Accord Devis', class: 'bg-rose-100 text-rose-800' },
+        reception: { text: 'Sur le Parc (Réception)', class: 'bg-blue-50 text-blue-700 border border-blue-200' },
+        atelier: { text: 'En Atelier', class: 'bg-amber-50 text-amber-700 border border-amber-200' },
+        en_cours: { text: 'En Réparation', class: 'bg-purple-50 text-purple-700 border border-purple-200' },
+        attente_accord: { text: 'Attente Accord Devis', class: 'bg-rose-50 text-rose-700 border border-rose-200' },
     };
-    return badges[statut] || { text: statut, class: 'bg-gray-100 text-gray-800' };
+    return badges[statut] || { text: statut, class: 'bg-gray-100 text-gray-700 border border-gray-200' };
 };
 
 // Liste des équipements pour affichage dynamique propre
@@ -39,128 +46,133 @@ const equipmentsList = [
 
     <AuthenticatedLayout>
         <template #header>
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 py-2">
                 <div>
-                    <div class="flex items-center gap-3">
-                        <h2 class="text-xl font-bold leading-tight text-gray-900">
-                            Fiche de Réception — OT : <span class="text-indigo-600">{{ intervention.numero_ot }}</span>
+                    <div class="flex items-center gap-3 flex-wrap">
+                        <h2 class="text-2xl font-black tracking-tight text-[#0B0F19]">
+                            Fiche de Réception — OT : <span class="text-[#E11D48]">{{ intervention.numero_ot }}</span>
                         </h2>
-                        <span :class="['px-2.5 py-1 text-xs font-semibold rounded-full', getStatutBadge(intervention.statut).class]">
+                        <span :class="['px-3 py-1 text-xs font-bold rounded-lg uppercase tracking-wide', getStatutBadge(intervention.statut).class]">
                             {{ getStatutBadge(intervention.statut).text }}
                         </span>
                     </div>
-                    <p class="text-sm text-gray-500 mt-0.5">
+                    <p class="text-sm text-[#8A8D8F] font-medium mt-1">
                         Enregistré le {{ new Date(intervention.date_reception).toLocaleDateString() }} à {{ new Date(intervention.date_reception).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
                     </p>
                 </div>
                 <Link 
                     :href="route('parc.index')" 
-                    class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition"
+                    class="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-[#0B0F19] text-xs font-bold rounded-xl transition flex items-center gap-2 shadow-xs"
                 >
-                    ← Retour à la liste du parc
+                    <i class="fa-solid fa-arrow-left"></i>
+                    <span>Retour à la liste du parc</span>
                 </Link>
             </div>
         </template>
 
-        <div class="py-10">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+        <div class="py-12 bg-white min-h-screen">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
 
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
                     <!-- COLONNE GAUCHE & CENTRE : INFOS PRINCIPALES -->
-                    <div class="lg:col-span-2 space-y-6">
+                    <div class="lg:col-span-2 space-y-8">
 
                         <!-- 1. INFORMATIONS VÉHICULE -->
-                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-4">
-                            <h3 class="text-base font-bold text-gray-900 border-b pb-3 flex items-center gap-2">
-                                🚗 Véhicule Concerné
+                        <div class="bg-white p-8 rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 space-y-6">
+                            <h3 class="text-base font-black text-[#0B0F19] border-b border-gray-100 pb-4 flex items-center gap-2.5">
+                                <i class="fa-solid fa-car text-[#E11D48]"></i>
+                                <span>Véhicule Concerné</span>
                             </h3>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 text-sm">
                                 <div>
-                                    <span class="text-gray-400 block text-xs">Immatriculation</span>
-                                    <span class="font-extrabold text-gray-900 uppercase text-base">{{ intervention.vehicule?.immatriculation }}</span>
+                                    <span class="text-[#8A8D8F] block text-xs font-bold uppercase tracking-wider mb-1">Immatriculation</span>
+                                    <span class="font-black text-[#0B0F19] uppercase text-base tracking-wide">{{ intervention.vehicule?.immatriculation }}</span>
                                 </div>
                                 <div>
-                                    <span class="text-gray-400 block text-xs">Marque & Modèle</span>
-                                    <span class="font-bold text-gray-800">{{ intervention.vehicule?.marque }} {{ intervention.vehicule?.modele }}</span>
+                                    <span class="text-[#8A8D8F] block text-xs font-bold uppercase tracking-wider mb-1">Marque & Modèle</span>
+                                    <span class="font-extrabold text-[#0B0F19]">{{ intervention.vehicule?.marque }} {{ intervention.vehicule?.modele }}</span>
                                 </div>
                                 <div>
-                                    <span class="text-gray-400 block text-xs">Numéro de Châssis (VIN)</span>
-                                    <span class="font-mono font-medium text-gray-700">{{ intervention.vehicule?.vin || 'Non renseigné' }}</span>
+                                    <span class="text-[#8A8D8F] block text-xs font-bold uppercase tracking-wider mb-1">Numéro de Châssis (VIN)</span>
+                                    <span class="font-mono font-bold text-gray-700">{{ intervention.vehicule?.vin || 'Non renseigné' }}</span>
                                 </div>
                                 <div>
-                                    <span class="text-gray-400 block text-xs">Kilométrage à l'entrée</span>
-                                    <span class="font-bold text-indigo-600">{{ intervention.kilometrage }} km</span>
+                                    <span class="text-[#8A8D8F] block text-xs font-bold uppercase tracking-wider mb-1">Kilométrage à l'entrée</span>
+                                    <span class="font-black text-[#E11D48]">{{ intervention.kilometrage }} km</span>
                                 </div>
                                 <div>
-                                    <span class="text-gray-400 block text-xs">Expiration Assurance</span>
-                                    <span class="font-medium text-gray-700">{{ intervention.vehicule?.expiration_assurance || 'N/A' }}</span>
+                                    <span class="text-[#8A8D8F] block text-xs font-bold uppercase tracking-wider mb-1">Expiration Assurance</span>
+                                    <span class="font-semibold text-gray-700">{{ intervention.vehicule?.expiration_assurance || 'N/A' }}</span>
                                 </div>
                                 <div>
-                                    <span class="text-gray-400 block text-xs">Expiration SICTA (Visite tech.)</span>
-                                    <span class="font-medium text-gray-700">{{ intervention.vehicule?.expiration_sicta || 'N/A' }}</span>
+                                    <span class="text-[#8A8D8F] block text-xs font-bold uppercase tracking-wider mb-1">Expiration SICTA (Visite tech.)</span>
+                                    <span class="font-semibold text-gray-700">{{ intervention.vehicule?.expiration_sicta || 'N/A' }}</span>
                                 </div>
                             </div>
                         </div>
 
                         <!-- 2. INFORMATIONS CLIENT -->
-                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-4">
-                            <h3 class="text-base font-bold text-gray-900 border-b pb-3 flex items-center gap-2">
-                                👤 Client / Propriétaire
+                        <div class="bg-white p-8 rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 space-y-6">
+                            <h3 class="text-base font-black text-[#0B0F19] border-b border-gray-100 pb-4 flex items-center gap-2.5">
+                                <i class="fa-solid fa-user text-[#E11D48]"></i>
+                                <span>Client / Propriétaire</span>
                             </h3>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 text-sm">
                                 <div>
-                                    <span class="text-gray-400 block text-xs">Nom & Prénom</span>
-                                    <span class="font-bold text-gray-900">{{ intervention.vehicule?.client?.nom }} {{ intervention.vehicule?.client?.prenom }}</span>
+                                    <span class="text-[#8A8D8F] block text-xs font-bold uppercase tracking-wider mb-1">Nom & Prénom</span>
+                                    <span class="font-black text-[#0B0F19]">{{ intervention.vehicule?.client?.nom }} {{ intervention.vehicule?.client?.prenom }}</span>
                                 </div>
                                 <div>
-                                    <span class="text-gray-400 block text-xs">Téléphone</span>
-                                    <span class="font-bold text-gray-800">{{ intervention.vehicule?.client?.telephone }}</span>
+                                    <span class="text-[#8A8D8F] block text-xs font-bold uppercase tracking-wider mb-1">Téléphone</span>
+                                    <span class="font-extrabold text-[#0B0F19]">{{ intervention.vehicule?.client?.telephone }}</span>
                                 </div>
                                 <div>
-                                    <span class="text-gray-400 block text-xs">E-mail</span>
-                                    <span class="text-gray-700">{{ intervention.vehicule?.client?.email || 'Aucun email' }}</span>
+                                    <span class="text-[#8A8D8F] block text-xs font-bold uppercase tracking-wider mb-1">E-mail</span>
+                                    <span class="text-gray-700 font-medium">{{ intervention.vehicule?.client?.email || 'Aucun email' }}</span>
                                 </div>
                                 <div>
-                                    <span class="text-gray-400 block text-xs">Adresse</span>
-                                    <span class="text-gray-700">{{ intervention.vehicule?.client?.adresse || 'Non renseignée' }}</span>
+                                    <span class="text-[#8A8D8F] block text-xs font-bold uppercase tracking-wider mb-1">Adresse</span>
+                                    <span class="text-gray-700 font-medium">{{ intervention.vehicule?.client?.adresse || 'Non renseignée' }}</span>
                                 </div>
                             </div>
                         </div>
 
                         <!-- 3. CARBURANT & TRAITEMENT -->
-                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-4">
-                            <h3 class="text-base font-bold text-gray-900 border-b pb-3 flex items-center gap-2">
-                                ⛽ Carburant & Traitement
+                        <div class="bg-white p-8 rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 space-y-6">
+                            <h3 class="text-base font-black text-[#0B0F19] border-b border-gray-100 pb-4 flex items-center gap-2.5">
+                                <i class="fa-solid fa-gas-pump text-[#E11D48]"></i>
+                                <span>Carburant & Traitement</span>
                             </h3>
-                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 text-sm">
                                 <div>
-                                    <span class="text-gray-400 block text-xs">Niveau de Carburant</span>
-                                    <span class="font-bold text-gray-800">{{ intervention.niveau_carburant }}</span>
+                                    <span class="text-[#8A8D8F] block text-xs font-bold uppercase tracking-wider mb-1">Niveau de Carburant</span>
+                                    <span class="font-extrabold text-[#0B0F19]">{{ intervention.niveau_carburant }}</span>
                                 </div>
                                 <div>
-                                    <span class="text-gray-400 block text-xs">Précision / Jauge</span>
-                                    <span class="font-medium text-gray-700">{{ intervention.intervalle_niveau_carburant || 'N/A' }}</span>
+                                    <span class="text-[#8A8D8F] block text-xs font-bold uppercase tracking-wider mb-1">Précision / Jauge</span>
+                                    <span class="font-semibold text-gray-700">{{ intervention.intervalle_niveau_carburant || 'N/A' }}</span>
                                 </div>
                                 <div>
-                                    <span class="text-gray-400 block text-xs">Circuit</span>
-                                    <span class="inline-block px-2 py-0.5 mt-1 text-xs font-semibold rounded-md bg-gray-100 text-gray-800 uppercase">
+                                    <span class="text-[#8A8D8F] block text-xs font-bold uppercase tracking-wider mb-1">Circuit</span>
+                                    <span class="inline-block px-3 py-1 mt-1 text-xs font-bold rounded-lg bg-gray-100 text-[#0B0F19] uppercase tracking-wider">
                                         {{ intervention.circuit }}
                                     </span>
                                 </div>
                                 <div class="sm:col-span-3">
-                                    <span class="text-gray-400 block text-xs">Personne à contacter</span>
-                                    <span class="font-semibold text-gray-800">{{ intervention.personne_a_contacter }}</span>
+                                    <span class="text-[#8A8D8F] block text-xs font-bold uppercase tracking-wider mb-1">Personne à contacter</span>
+                                    <span class="font-bold text-[#0B0F19]">{{ intervention.personne_a_contacter }}</span>
                                 </div>
                             </div>
                         </div>
 
                         <!-- 4. REMARQUES / OBSERVATIONS -->
-                        <div v-if="intervention.remarques_eventuelles" class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-2">
-                            <h3 class="text-base font-bold text-gray-900 border-b pb-3 flex items-center gap-2">
-                                📝 Remarques et Observations
+                        <div v-if="intervention.remarques_eventuelles" class="bg-white p-8 rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 space-y-4">
+                            <h3 class="text-base font-black text-[#0B0F19] border-b border-gray-100 pb-4 flex items-center gap-2.5">
+                                <i class="fa-solid fa-notes-medical text-[#E11D48]"></i>
+                                <span>Remarques et Observations</span>
                             </h3>
-                            <p class="text-sm text-gray-700 bg-gray-50 p-4 rounded-xl border border-gray-100 whitespace-pre-line">
+                            <p class="text-sm text-gray-700 bg-[#F8FAFC] p-5 rounded-2xl border border-gray-200/60 whitespace-pre-line font-medium leading-relaxed">
                                 {{ intervention.remarques_eventuelles }}
                             </p>
                         </div>
@@ -168,25 +180,26 @@ const equipmentsList = [
                     </div>
 
                     <!-- COLONNE DROITE : ÉQUIPEMENTS & PHOTOS -->
-                    <div class="space-y-6">
+                    <div class="space-y-8">
 
                         <!-- ÉQUIPEMENTS PRÉSENTS -->
-                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-4">
-                            <h3 class="text-base font-bold text-gray-900 border-b pb-3 flex items-center gap-2">
-                                🛠️ Équipements & Accessoires
+                        <div class="bg-white p-8 rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 space-y-6">
+                            <h3 class="text-base font-black text-[#0B0F19] border-b border-gray-100 pb-4 flex items-center gap-2.5">
+                                <i class="fa-solid fa-toolbox text-[#E11D48]"></i>
+                                <span>Équipements & Accessoires</span>
                             </h3>
-                            <div class="space-y-2">
-                                <div v-for="eq in equipmentsList" :key="eq.key" class="flex justify-between items-center text-xs py-1 border-b border-gray-50 last:border-0">
+                            <div class="space-y-3">
+                                <div v-for="eq in equipmentsList" :key="eq.key" class="flex justify-between items-center text-xs py-1.5 border-b border-gray-50 last:border-0 font-medium">
                                     <span class="text-gray-700">{{ eq.label }}</span>
-                                    <span :class="['font-bold px-2 py-0.5 rounded', intervention[eq.key] ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400']">
+                                    <span :class="['font-bold px-2.5 py-1 rounded-lg text-[11px]', intervention[eq.key] ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-[#8A8D8F]']">
                                         {{ intervention[eq.key] ? 'Présent ✓' : 'Absent ✗' }}
                                     </span>
                                 </div>
 
                                 <!-- Pare-brise fissuré (alerte spécifique) -->
-                                <div class="flex justify-between items-center text-xs py-2 mt-2 border-t pt-2">
-                                    <span class="text-red-600 font-semibold">Pare-brise fissuré</span>
-                                    <span :class="['font-bold px-2 py-0.5 rounded', intervention.pare_brise_fissure ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700']">
+                                <div class="flex justify-between items-center text-xs py-3 mt-3 border-t border-gray-100 font-bold">
+                                    <span class="text-[#E11D48]">Pare-brise fissuré</span>
+                                    <span :class="['px-2.5 py-1 rounded-lg text-[11px]', intervention.pare_brise_fissure ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200']">
                                         {{ intervention.pare_brise_fissure ? 'OUI (Attention)' : 'Non' }}
                                     </span>
                                 </div>
@@ -194,19 +207,24 @@ const equipmentsList = [
                         </div>
 
                         <!-- PHOTOS D'ÉTAT INITIAL -->
-                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-4">
-                            <h3 class="text-base font-bold text-gray-900 border-b pb-3 flex items-center gap-2">
-                                📸 Photos d'État Initial
+                        <div class="bg-white p-8 rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 space-y-6">
+                            <h3 class="text-base font-black text-[#0B0F19] border-b border-gray-100 pb-4 flex items-center gap-2.5">
+                                <i class="fa-solid fa-camera text-[#E11D48]"></i>
+                                <span>Photos d'État Initial</span>
                             </h3>
-                            <div class="grid grid-cols-2 gap-3 text-xs">
-                                <div v-for="photoField in ['photo_avant', 'photo_arriere', 'photo_gauche', 'photo_droite']" :key="photoField" class="space-y-1">
-                                    <span class="font-semibold text-gray-600 uppercase text-[10px] block">{{ photoField.replace('photo_', '') }}</span>
-                                    <div v-if="intervention[photoField]" class="aspect-video bg-gray-100 rounded-lg overflow-hidden border border-gray-200">
-                                        <a :href="Storage ? '' : '#'" target="_blank">
-                                            <img :src="intervention[photoField]" alt="Photo état" class="w-full h-full object-cover hover:scale-105 transition" />
+                            <div class="grid grid-cols-2 gap-4 text-xs">
+                                <div v-for="photoField in ['photo_avant', 'photo_arriere', 'photo_gauche', 'photo_droite']" :key="photoField" class="space-y-1.5">
+                                    <span class="font-black text-[#0B0F19] uppercase text-[10px] tracking-wider block">{{ photoField.replace('photo_', '') }}</span>
+                                    
+                                    <div v-if="intervention[photoField]" class="aspect-video bg-[#F8FAFC] rounded-2xl overflow-hidden border border-gray-200 shadow-xs group relative">
+                                        <a :href="getPhotoUrl(intervention[photoField])" target="_blank" class="block w-full h-full">
+                                            <img :src="getPhotoUrl(intervention[photoField])" alt="Photo état initial" class="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+                                            <div class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white">
+                                                <i class="fa-solid fa-expand text-sm"></i>
+                                            </div>
                                         </a>
                                     </div>
-                                    <div v-else class="aspect-video bg-gray-50 rounded-lg flex items-center justify-center text-gray-400 text-[10px] border border-dashed border-gray-200">
+                                    <div v-else class="aspect-video bg-gray-50 rounded-2xl flex items-center justify-center text-[#8A8D8F] text-[10px] font-medium border border-dashed border-gray-200">
                                         Non disponible
                                     </div>
                                 </div>
