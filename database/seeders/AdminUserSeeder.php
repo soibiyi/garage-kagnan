@@ -19,7 +19,7 @@ class AdminUserSeeder extends Seeder
                 'name' => 'Administrateur',
                 'email' => 'admin@garage.com',
                 'password' => Hash::make('password123'), // Changez ce mot de passe par la suite
-                // 'role' => 'admin', // Décommentez ou adaptez selon la gestion de vos rôles
+                 'role' => 'admin', // Décommentez ou adaptez selon la gestion de vos rôles
             ]
         );
     }

@@ -143,7 +143,8 @@ const submitDevis = () => {
                             <table class="min-w-full divide-y divide-slate-200 text-left text-xs">
                                 <thead class="bg-slate-100 text-slate-500 uppercase tracking-wider text-[10px]">
                                     <tr>
-                                        <th class="px-3 py-3 font-semibold w-16 text-center">Qté</th>
+                                        <!-- Largeur augmentée à w-24 pour éviter que le nombre soit coupé -->
+                                        <th class="px-3 py-3 font-semibold w-24 text-center">Qté</th>
                                         <th class="px-3 py-3 font-semibold">Désignation</th>
                                         <th class="px-3 py-3 font-semibold w-32">Réf. Pièce</th>
                                         <th class="px-3 py-3 font-semibold w-12 text-center">Stock</th>
@@ -164,7 +165,7 @@ const submitDevis = () => {
                                                 v-model="ligne.quantite" 
                                                 min="0" 
                                                 step="any"
-                                                class="w-full bg-white border border-slate-300 rounded-lg text-xs text-center font-bold text-slate-900 focus:border-[#E11D48] focus:ring-1 focus:ring-[#E11D48]"
+                                                class="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs text-center font-bold text-slate-900 focus:border-[#E11D48] focus:ring-1 focus:ring-[#E11D48]"
                                             />
                                         </td>
                                         <!-- Désignation -->
