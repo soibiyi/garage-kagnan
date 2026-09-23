@@ -73,12 +73,12 @@ const calculerTempsEcoule = (dateString) => {
 // Fonction utilitaire pour les badges de statut
 const getStatutBadge = (statut) => {
     const badges = {
-        reception: { text: 'Sur le Parc (Réception)', class: 'bg-blue-100 text-blue-800' },
-        atelier: { text: 'En Atelier', class: 'bg-amber-100 text-amber-800' },
-        en_cours: { text: 'En Réparation', class: 'bg-purple-100 text-purple-800' },
-        attente_accord: { text: 'Attente Accord Devis', class: 'bg-rose-100 text-rose-800' },
+        reception: { text: 'Sur le Parc (Réception)', class: 'bg-blue-50 text-blue-700 border border-blue-200' },
+        atelier: { text: 'En Atelier', class: 'bg-amber-50 text-amber-700 border border-amber-200' },
+        en_cours: { text: 'En Réparation', class: 'bg-purple-50 text-purple-700 border border-purple-200' },
+        attente_accord: { text: 'Attente Accord Devis', class: 'bg-rose-50 text-rose-700 border border-rose-200' },
     };
-    return badges[statut] || { text: statut, class: 'bg-gray-100 text-gray-800' };
+    return badges[statut] || { text: statut, class: 'bg-gray-100 text-gray-700 border border-gray-200' };
 };
 
 // Filtrage dynamique des interventions
@@ -106,108 +106,118 @@ const filteredInterventions = computed(() => {
 </script>
 
 <template>
-    <Head title="Véhicules sur le Parc" />
+    <Head title="Véhicules sur le Parc — Garage Kagnan" />
 
     <AuthenticatedLayout>
         <template #header>
-            <div class="flex justify-between items-center">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 py-2">
                 <div>
-                    <h2 class="text-xl font-bold leading-tight text-gray-900">
-                        Véhicules sur le Parc 🚗
+                    <h2 class="text-2xl font-black tracking-tight text-[#0B0F19] flex items-center gap-2.5">
+                        <i class="fa-solid fa-car-tunnel text-[#E11D48] text-xl"></i>
+                        <span>Véhicules sur le Parc</span>
                     </h2>
-                    <p class="text-sm text-gray-500 mt-0.5">Suivi des véhicules actuellement dans l'enceinte de l'établissement</p>
+                    <p class="text-sm text-[#8A8D8F] font-medium mt-0.5">Suivi en temps réel des véhicules actuellement dans l'enceinte de l'établissement</p>
                 </div>
                 <Link 
                     :href="route('reception.create')" 
-                    class="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 transition shadow-sm"
+                    class="px-5 py-2.5 bg-[#E11D48] text-white text-xs font-bold rounded-xl hover:bg-[#BE123C] transition shadow-md shadow-[#E11D48]/20 flex items-center gap-2"
                 >
-                    + Nouvelle Réception
+                    <i class="fa-solid fa-plus"></i>
+                    <span>Nouvelle Réception</span>
                 </Link>
             </div>
         </template>
 
-        <div class="py-10">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+        <div class="py-12 bg-white min-h-screen">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
                 
                 <!-- SECTION RECHERCHE -->
-                <div class="bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-gray-200">
+                <div class="bg-white p-6 rounded-3xl shadow-xl shadow-gray-100 border border-gray-100">
                     <div class="w-full relative">
-                        <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">🔍</span>
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-[#8A8D8F]">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                        </span>
                         <input 
                             v-model="search"
                             type="text" 
-                            placeholder="Rechercher par immat, marque, modèle, client, OT..." 
-                            class="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500"
+                            placeholder="Rechercher par immatriculation, marque, modèle, client, N° OT..." 
+                            class="w-full pl-11 pr-4 py-3 text-sm bg-[#F8FAFC] border border-gray-200 rounded-2xl focus:ring-2 focus:ring-[#E11D48] focus:border-[#E11D48] transition text-[#0B0F19] placeholder:text-[#8A8D8F]"
                         />
                     </div>
                 </div>
 
                 <!-- TABLEAU DES DONNÉES -->
-                <div class="bg-white overflow-hidden shadow-sm sm:rounded-2xl border border-gray-200">
-                    <div class="p-6 text-gray-900">
+                <div class="bg-white overflow-hidden shadow-xl shadow-gray-100 sm:rounded-3xl border border-gray-100">
+                    <div class="p-6 sm:p-8">
                         
-                        <div v-if="filteredInterventions.length === 0" class="text-center py-12">
-                            <p class="text-gray-400 text-sm">Aucun véhicule ne correspond à vos critères de recherche.</p>
+                        <div v-if="filteredInterventions.length === 0" class="text-center py-16 space-y-3">
+                            <div class="w-12 h-12 rounded-2xl bg-gray-100 text-[#8A8D8F] flex items-center justify-center mx-auto text-xl">
+                                <i class="fa-solid fa-folder-open"></i>
+                            </div>
+                            <p class="text-[#8A8D8F] text-sm font-medium">Aucun véhicule ne correspond à vos critères de recherche.</p>
                         </div>
 
                         <div v-else class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-gray-200 text-left text-sm">
-                                <thead class="bg-gray-50 text-gray-500 uppercase tracking-wider text-xs">
+                            <table class="min-w-full divide-y divide-gray-100 text-left text-sm">
+                                <thead class="bg-[#F8FAFC] text-[#8A8D8F] uppercase tracking-wider text-xs font-black">
                                     <tr>
-                                        <th class="px-6 py-3 font-semibold">N° OT</th>
-                                        <th class="px-6 py-3 font-semibold">Immatriculation</th>
-                                        <th class="px-6 py-3 font-semibold">Véhicule</th>
-                                        <th class="px-6 py-3 font-semibold">Client</th>
-                                        <th class="px-6 py-3 font-semibold">Statut</th>
-                                        <th class="px-6 py-3 font-semibold">Date d'entrée</th>
-                                        <th class="px-6 py-3 font-semibold text-right">Actions</th>
+                                        <th class="px-6 py-4">N° OT</th>
+                                        <th class="px-6 py-4">Immatriculation</th>
+                                        <th class="px-6 py-4">Véhicule</th>
+                                        <th class="px-6 py-4">Client</th>
+                                        <th class="px-6 py-4">Statut</th>
+                                        <th class="px-6 py-4">Date d'entrée</th>
+                                        <th class="px-6 py-4 text-right">Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody class="divide-y divide-gray-200">
-                                    <tr v-for="item in filteredInterventions" :key="item.id" class="hover:bg-gray-50 transition">
-                                        <td class="px-6 py-4 font-bold text-indigo-600">
+                                <tbody class="divide-y divide-gray-100">
+                                    <tr v-for="item in filteredInterventions" :key="item.id" class="hover:bg-gray-50/60 transition">
+                                        <td class="px-6 py-4 font-black text-[#E11D48]">
                                             {{ item.numero_ot }}
                                         </td>
-                                        <td class="px-6 py-4 font-extrabold text-gray-900 uppercase">
+                                        <td class="px-6 py-4 font-black text-[#0B0F19] uppercase tracking-wide">
                                             {{ item.vehicule?.immatriculation }}
                                         </td>
-                                        <td class="px-6 py-4 text-gray-700">
+                                        <td class="px-6 py-4 text-gray-700 font-medium">
                                             {{ item.vehicule?.marque }} {{ item.vehicule?.modele }}
-                                            <span class="block text-xs text-gray-400">Kilométrage : {{ item.kilometrage }} km</span>
+                                            <span class="block text-xs text-[#8A8D8F] font-normal">Kilométrage : {{ item.kilometrage }} km</span>
                                         </td>
-                                        <td class="px-6 py-4 text-gray-700">
+                                        <td class="px-6 py-4 text-gray-700 font-medium">
                                             {{ item.vehicule?.client?.nom }} {{ item.vehicule?.client?.prenom }}
-                                            <span class="block text-xs text-gray-400">{{ item.vehicule?.client?.telephone }}</span>
+                                            <span class="block text-xs text-[#8A8D8F] font-normal">{{ item.vehicule?.client?.telephone }}</span>
                                         </td>
                                         <td class="px-6 py-4">
-                                            <span :class="['px-2.5 py-1 text-xs font-semibold rounded-full', getStatutBadge(item.statut).class]">
+                                            <span :class="['px-3 py-1 text-xs font-bold rounded-lg uppercase tracking-wide inline-block', getStatutBadge(item.statut).class]">
                                                 {{ getStatutBadge(item.statut).text }}
                                             </span>
                                         </td>
-                                        <td class="px-6 py-4 text-gray-500 text-xs">
+                                        <td class="px-6 py-4 text-[#8A8D8F] text-xs font-medium">
                                             <div>{{ new Date(item.date_reception).toLocaleDateString() }} à {{ new Date(item.date_reception).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</div>
                                             <!-- Affichage du décompte -->
-                                            <span class="inline-block mt-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 font-bold rounded text-[11px]">
-                                                ⏱️ Il y a {{ calculerTempsEcoule(item.date_reception) }}
+                                            <span class="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 bg-[#E11D48]/10 text-[#E11D48] font-bold rounded text-[11px]">
+                                                <i class="fa-solid fa-clock text-[10px]"></i>
+                                                <span>Il y a {{ calculerTempsEcoule(item.date_reception) }}</span>
                                             </span>
                                         </td>
                                         <td class="px-6 py-4 text-right">
                                             <div class="flex items-center justify-end gap-2">
                                                 <Link 
                                                     :href="route('parc.show', item.id)" 
-                                                    class="inline-flex items-center px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-lg transition"
+                                                    class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-[#0B0F19] text-xs font-bold rounded-xl transition shadow-xs"
                                                     title="Voir toutes les informations"
                                                 >
-                                                    🔍 Infos
+                                                    <i class="fa-solid fa-magnifying-glass text-[10px]"></i>
+                                                    <span>Infos</span>
                                                 </Link>
 
                                                 <button 
                                                     type="button"
                                                     @click="openNextModal(item)"
-                                                    class="inline-flex items-center px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg transition shadow-sm"
+                                                    class="inline-flex items-center gap-1.5 px-4 py-2 bg-[#0B0F19] hover:bg-gray-800 text-white text-xs font-bold rounded-xl transition shadow-sm"
                                                     title="Étape suivante"
                                                 >
-                                                    Suivant →
+                                                    <span>Suivant</span>
+                                                    <i class="fa-solid fa-arrow-right text-[10px]"></i>
                                                 </button>
                                             </div>
                                         </td>
@@ -222,58 +232,64 @@ const filteredInterventions = computed(() => {
         </div>
 
         <!-- ================= MODALE "SUIVANT" ================= -->
-        <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-            <div class="bg-white w-full max-w-lg rounded-2xl shadow-xl overflow-hidden border border-gray-100">
+        <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+            <div class="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden border border-gray-100 animate-in fade-in zoom-in duration-200">
                 
-                <div class="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
-                    <h3 class="font-bold text-gray-900 text-base">
-                        Transmission Dossier (OT : <span class="text-indigo-600">{{ activeIntervention?.numero_ot }}</span>)
-                    </h3>
-                    <button @click="closeModal" class="text-gray-400 hover:text-gray-600 font-bold text-lg">×</button>
+                <div class="px-8 py-6 border-b border-gray-100 flex justify-between items-center bg-[#F8FAFC]">
+                    <div>
+                        <h3 class="font-black text-[#0B0F19] text-base">
+                            Transmission du Dossier
+                        </h3>
+                        <p class="text-xs text-[#8A8D8F] font-medium mt-0.5">Ordre de Travail : <span class="text-[#E11D48] font-bold">{{ activeIntervention?.numero_ot }}</span></p>
+                    </div>
+                    <button @click="closeModal" class="w-8 h-8 rounded-xl bg-white border border-gray-200 text-[#8A8D8F] hover:text-[#0B0F19] flex items-center justify-center font-bold text-lg transition">
+                        <i class="fa-solid fa-xmark text-sm"></i>
+                    </button>
                 </div>
 
-                <form @submit.prevent="submitProgress" class="p-6 space-y-5">
+                <form @submit.prevent="submitProgress" class="p-8 space-y-6">
                     
                     <!-- Sélection du mécanicien -->
                     <div>
-                        <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Mécanicien assigné *</label>
-                        <select v-model="form.mecanicien_id" required class="w-full rounded-xl border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Mécanicien assigné *</label>
+                        <select v-model="form.mecanicien_id" required class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm py-3 px-4 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]">
                             <option value="" disabled>-- Choisir un mécanicien --</option>
                             <option v-for="mec in mecaniciens" :key="mec.id" :value="mec.id">
                                 {{ mec.name }}
                             </option>
                         </select>
-                        <div v-if="form.errors.mecanicien_id" class="text-red-600 text-xs mt-1">{{ form.errors.mecanicien_id }}</div>
+                        <div v-if="form.errors.mecanicien_id" class="text-[#E11D48] text-xs font-semibold mt-1">{{ form.errors.mecanicien_id }}</div>
                     </div>
 
                     <!-- Rapport / Pannes détectées -->
                     <div>
-                        <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Rapport / Pannes détectées *</label>
+                        <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Rapport / Pannes détectées *</label>
                         <textarea 
                             v-model="form.rapport_mecanicien" 
                             required 
                             rows="4"
                             placeholder="Décrivez ici le rapport et les pannes constatées..." 
-                            class="w-full rounded-xl border-gray-300 text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                            class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-4 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]"
                         ></textarea>
-                        <div v-if="form.errors.rapport_mecanicien" class="text-red-600 text-xs mt-1">{{ form.errors.rapport_mecanicien }}</div>
+                        <div v-if="form.errors.rapport_mecanicien" class="text-[#E11D48] text-xs font-semibold mt-1">{{ form.errors.rapport_mecanicien }}</div>
                     </div>
 
                     <!-- Boutons d'action -->
-                    <div class="flex justify-end gap-3 pt-4 border-t">
+                    <div class="flex justify-end gap-3 pt-4 border-t border-gray-100">
                         <button 
                             type="button" 
                             @click="closeModal" 
-                            class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition"
+                            class="px-5 py-2.5 bg-gray-100 hover:bg-gray-200 text-[#0B0F19] text-xs font-bold rounded-xl transition"
                         >
                             Annuler
                         </button>
                         <button 
                             type="submit" 
                             :disabled="form.processing"
-                            class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition disabled:opacity-50"
+                            class="px-6 py-2.5 bg-[#E11D48] hover:bg-[#BE123C] text-white text-xs font-bold rounded-xl shadow-md shadow-[#E11D48]/20 transition disabled:opacity-50 flex items-center gap-2"
                         >
-                            Envoyer à l'administration ✓
+                            <span>Envoyer à l'administration</span>
+                            <i class="fa-solid fa-check text-xs"></i>
                         </button>
                     </div>
 

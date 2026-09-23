@@ -4,126 +4,140 @@ import { Head, usePage, Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
 const props = defineProps({
-    interventionsAtelier: Array, // Reçoit les dossiers en cours/atelier depuis le contrôleur
+    interventionsAtelier: Array,
 });
 
-// Récupération de l'utilisateur connecté via les props partagées d'Inertia
 const page = usePage();
 const user = computed(() => page.props.auth.user);
 
-// Libellés et styles des rôles
+// Libellés et styles des rôles basés sur la nouvelle palette (Noir profond, Gris métallique, Rouge passion)
 const roleInfo = computed(() => {
     const roles = {
-        receptionniste: { label: 'Réceptionniste', badge: 'bg-red-50 text-[#C8102E] border border-[#C8102E]' },
-        mecanicien: { label: 'Mécanicien', badge: 'bg-gray-100 text-[#1A1A1A] border border-gray-300' },
-        administratif: { label: 'Administratif', badge: 'bg-blue-50 text-blue-700 border border-blue-200' },
-        charge_client: { label: 'Chargé de Suivi Client', badge: 'bg-amber-50 text-amber-700 border border-amber-200' },
+        receptionniste: { label: 'Réceptionniste', badge: 'bg-[#0B0F19] text-white border border-[#0B0F19]' },
+        mecanicien: { label: 'Mécanicien', badge: 'bg-[#8A8D8F]/20 text-[#0B0F19] border border-[#8A8D8F]/40' },
+        administratif: { label: 'Administratif', badge: 'bg-[#E11D48]/10 text-[#E11D48] border border-[#E11D48]/30' },
+        charge_client: { label: 'Chargé de Suivi Client', badge: 'bg-gray-100 text-gray-800 border border-gray-300' },
     };
-    return roles[user.value?.role] || { label: user.value?.role, badge: 'bg-gray-100 text-gray-700' };
+    return roles[user.value?.role] || { label: user.value?.role, badge: 'bg-gray-100 text-gray-700 border border-gray-200' };
 });
 </script>
 
 <template>
-    <Head title="Tableau de bord — Garage" />
+    <Head title="Tableau de bord — Garage Kagnan" />
 
     <AuthenticatedLayout>
         <template #header>
-            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 py-2">
                 <div>
-                    <h2 class="text-2xl font-bold tracking-tight text-gray-900">
-                        Espace de Travail — Garage
+                    <h2 class="text-2xl font-black tracking-tight text-[#0B0F19]">
+                        Espace de Travail — <span class="text-[#E11D48]">Garage Kagnan</span>
                     </h2>
-                    <p class="text-sm text-gray-500 mt-0.5">
-                        Bienvenue, <span class="font-semibold text-gray-900">{{ user?.name }}</span>
+                    <p class="text-sm text-[#8A8D8F] mt-0.5 font-medium">
+                        Connecté en tant que <span class="font-bold text-[#0B0F19]">{{ user?.name }}</span>
                     </p>
                 </div>
                 <!-- Badge du rôle -->
-                <span :class="['px-3 py-1.5 text-xs font-bold rounded-full shadow-sm', roleInfo.badge]">
+                <span :class="['px-4 py-1.5 text-xs font-bold rounded-xl shadow-xs uppercase tracking-wider', roleInfo.badge]">
                     {{ roleInfo.label }}
                 </span>
             </div>
         </template>
 
-        <div class="py-10">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+        <div class="py-12 bg-white min-h-screen">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
 
                 <!-- ========================================== -->
                 <!-- 1. VUE : RÉCEPTIONNISTE -->
                 <!-- ========================================== -->
-                <div v-if="user?.role === 'receptionniste'" class="space-y-6">
-                    <div class="bg-white p-8 rounded-2xl shadow-sm border border-gray-200 space-y-6">
-                        <div class="flex items-center gap-4 mb-6">
-                            <div class="w-12 h-12 rounded-2xl bg-red-50 flex items-center justify-center text-2xl shadow-inner">🚗</div>
+                <div v-if="user?.role === 'receptionniste'" class="space-y-8">
+                    <div class="bg-white p-8 sm:p-10 rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 space-y-8">
+                        
+                        <div class="flex items-center gap-5 pb-6 border-b border-gray-100">
+                            <div class="w-14 h-14 rounded-2xl bg-[#0B0F19] flex items-center justify-center text-white shadow-md">
+                                <i class="fa-solid fa-car-tunnel text-2xl"></i>
+                            </div>
                             <div>
-                                <h3 class="text-xl font-bold text-gray-900">Réception Véhicule & Accueil Client</h3>
-                                <p class="text-sm text-gray-500">Enregistrez l'arrivée d'un véhicule et initiez le circuit de prise en charge.</p>
+                                <h3 class="text-xl font-black text-[#0B0F19]">Réception Véhicule & Accueil Client</h3>
+                                <p class="text-sm text-[#8A8D8F] font-medium">Enregistrez l'arrivée d'un véhicule et initiez le circuit de prise en charge.</p>
                             </div>
                         </div>
 
-                        <!-- Les 2 liens de la réception -->
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Link :href="route('reception.create')" class="p-5 bg-gray-50 rounded-xl border border-gray-200 hover:border-[#C8102E] transition flex items-center justify-between group">
-                                <div>
-                                    <h4 class="font-bold text-gray-900 group-hover:text-[#C8102E] transition">+ Nouvelle Réception</h4>
-                                    <p class="text-xs text-gray-500 mt-1">Fiche d'entrée, kilométrage et état initial.</p>
+                        <!-- Actions rapides -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <Link :href="route('reception.create')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#E11D48] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs">
+                                <div class="space-y-1.5">
+                                    <div class="flex items-center gap-2.5 text-[#E11D48]">
+                                        <i class="fa-solid fa-circle-plus text-base"></i>
+                                        <h4 class="font-extrabold text-[#0B0F19] group-hover:text-[#E11D48] transition">Nouvelle Réception</h4>
+                                    </div>
+                                    <p class="text-xs text-[#8A8D8F] font-medium">Fiche d'entrée, kilométrage et état initial.</p>
                                 </div>
-                                <span class="text-[#C8102E] font-bold text-lg transform group-hover:translate-x-1 transition">→</span>
+                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#0B0F19] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs">
+                                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                                </span>
                             </Link>
 
-                            <Link :href="route('parc.index')" class="p-5 bg-gray-50 rounded-xl border border-gray-200 hover:border-[#C8102E] transition flex items-center justify-between group">
-                                <div>
-                                    <h4 class="font-bold text-gray-900 group-hover:text-[#C8102E] transition">Véhicules sur le parc</h4>
-                                    <p class="text-xs text-gray-500 mt-1">Consulter l'état des véhicules en cours d'accueil.</p>
+                            <Link :href="route('parc.index')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#E11D48] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs">
+                                <div class="space-y-1.5">
+                                    <div class="flex items-center gap-2.5 text-[#E11D48]">
+                                        <i class="fa-solid fa-square-parking text-base"></i>
+                                        <h4 class="font-extrabold text-[#0B0F19] group-hover:text-[#E11D48] transition">Véhicules sur le parc</h4>
+                                    </div>
+                                    <p class="text-xs text-[#8A8D8F] font-medium">Consulter l'état des véhicules en cours d'accueil.</p>
                                 </div>
-                                <span class="text-[#C8102E] font-bold text-lg transform group-hover:translate-x-1 transition">→</span>
+                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#0B0F19] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs">
+                                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                                </span>
                             </Link>
                         </div>
 
-                        <!-- ========================================== -->
-                        <!-- TABLEAU EN BAS DE LA SECTION RÉCEPTIONNISTE -->
-                        <!-- ========================================== -->
-                        <div class="mt-8 pt-6 border-t border-gray-200">
-                            <h4 class="text-lg font-bold text-gray-900 mb-4">Dossiers en cours / Atelier</h4>
+                        <!-- TABLEAU DES DOSSIERS EN COURS -->
+                        <div class="pt-6 border-t border-gray-100 space-y-6">
+                            <h4 class="text-lg font-black text-[#0B0F19] flex items-center gap-2.5">
+                                <i class="fa-solid fa-clipboard-list text-[#E11D48] text-base"></i>
+                                <span>Dossiers en cours / Atelier</span>
+                            </h4>
 
-                            <div v-if="interventionsAtelier && interventionsAtelier.length > 0" class="overflow-x-auto">
+                            <div v-if="interventionsAtelier && interventionsAtelier.length > 0" class="overflow-x-auto rounded-2xl border border-gray-200 shadow-xs">
                                 <table class="min-w-full divide-y divide-gray-200">
                                     <thead>
-                                        <tr class="bg-gray-50 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                            <th class="px-4 py-3">OT / Date</th>
-                                            <th class="px-4 py-3">Client</th>
-                                            <th class="px-4 py-3">Véhicule</th>
-                                            <th class="px-4 py-3">Mécanicien</th>
-                                            <th class="px-4 py-3">Statut / Actions</th>
+                                        <tr class="bg-[#F8FAFC] text-left text-xs font-extrabold text-[#8A8D8F] uppercase tracking-wider">
+                                            <th class="px-5 py-4">OT / Date</th>
+                                            <th class="px-5 py-4">Client</th>
+                                            <th class="px-5 py-4">Véhicule</th>
+                                            <th class="px-5 py-4">Mécanicien</th>
+                                            <th class="px-5 py-4">Statut / Actions</th>
                                         </tr>
                                     </thead>
-                                    <tbody class="divide-y divide-gray-200 bg-white text-sm">
-                                        <tr v-for="item in interventionsAtelier" :key="item.id" class="hover:bg-gray-50 transition">
-                                            <td class="px-4 py-3 whitespace-nowrap">
-                                                <span class="font-bold text-gray-900">{{ item.numero_ot || 'N/A' }}</span>
-                                                <div class="text-xs text-gray-400">{{ item.date_reception }}</div>
+                                    <tbody class="divide-y divide-gray-100 bg-white text-sm">
+                                        <tr v-for="item in interventionsAtelier" :key="item.id" class="hover:bg-gray-50/60 transition">
+                                            <td class="px-5 py-4 whitespace-nowrap">
+                                                <span class="font-extrabold text-[#0B0F19]">{{ item.numero_ot || 'N/A' }}</span>
+                                                <div class="text-xs text-[#8A8D8F] font-medium">{{ item.date_reception }}</div>
                                             </td>
-                                            <td class="px-4 py-3 whitespace-nowrap font-medium text-gray-800">
+                                            <td class="px-5 py-4 whitespace-nowrap font-bold text-[#0B0F19]">
                                                 {{ item.vehicule?.client?.nom }} {{ item.vehicule?.client?.prenom }}
                                             </td>
-                                            <td class="px-4 py-3 whitespace-nowrap text-gray-600">
-                                                {{ item.vehicule?.marque }} {{ item.vehicule?.modele }} ({{ item.vehicule?.immatriculation }})
+                                            <td class="px-5 py-4 whitespace-nowrap text-gray-600 font-medium">
+                                                {{ item.vehicule?.marque }} {{ item.vehicule?.modele }} <span class="text-xs text-[#8A8D8F]">({{ item.vehicule?.immatriculation }})</span>
                                             </td>
-                                            <td class="px-4 py-3 whitespace-nowrap text-gray-700">
+                                            <td class="px-5 py-4 whitespace-nowrap text-[#0B0F19] font-bold">
                                                 {{ item.mecanicien?.name || 'Non assigné' }}
                                             </td>
-                                            <td class="px-4 py-3 whitespace-nowrap flex items-center gap-3">
-                                                <span class="px-2 py-1 text-xs font-semibold rounded-lg bg-red-50 text-[#C8102E] border border-red-200">
+                                            <td class="px-5 py-4 whitespace-nowrap flex items-center gap-4">
+                                                <span class="px-3 py-1 text-xs font-black rounded-lg bg-[#E11D48]/10 text-[#E11D48] border border-[#E11D48]/20 uppercase tracking-wide">
                                                     {{ item.statut }}
                                                 </span>
-                                                <Link :href="route('parc.show', item.id)" class="text-gray-700 font-semibold hover:underline">
-                                                    Consulter →
+                                                <Link :href="route('parc.show', item.id)" class="text-[#0B0F19] font-extrabold hover:text-[#E11D48] transition inline-flex items-center gap-1.5 text-xs">
+                                                    <span>Consulter</span>
+                                                    <i class="fa-solid fa-arrow-right text-[10px]"></i>
                                                 </Link>
                                             </td>
                                         </tr>
                                     </tbody>
                                 </table>
                             </div>
-                            <div v-else class="text-center py-6 text-gray-400 text-sm bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                            <div v-else class="text-center py-10 text-[#8A8D8F] text-sm bg-[#F8FAFC] rounded-2xl border border-dashed border-gray-200 font-medium">
                                 Aucun dossier en cours pour le moment.
                             </div>
                         </div>
@@ -132,95 +146,135 @@ const roleInfo = computed(() => {
                 </div>
 
                 <!-- ========================================== -->
-<!-- 2. VUE : MÉCANICIEN -->
-<!-- ========================================== -->
-<div v-else-if="user?.role === 'mecanicien'" class="space-y-6">
-    <div class="bg-white p-8 rounded-2xl shadow-sm border border-gray-200">
-        <div class="flex items-center gap-4 mb-6">
-            <div class="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center text-2xl shadow-inner">🔧</div>
-            <div>
-                <h3 class="text-xl font-bold text-gray-900">Atelier & Diagnostics</h3>
-                <p class="text-sm text-gray-500">Consultez les véhicules assignés, réalisez les essais et diagnostics techniques.</p>
-            </div>
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-            <Link :href="route('mecanicien.index')" class="p-5 bg-gray-50 rounded-xl border border-gray-200 hover:border-gray-400 transition cursor-pointer flex items-center justify-between">
-                <div>
-                    <h4 class="font-bold text-gray-900">Mes Interventions Assignées</h4>
-                    <p class="text-xs text-gray-500 mt-1">Liste des travaux en cours dans votre bay d'atelier.</p>
-                </div>
-                <span class="text-gray-700 font-bold text-lg">→</span>
-            </Link>
-            <div class="p-5 bg-gray-50 rounded-xl border border-gray-200 hover:border-gray-400 transition cursor-pointer flex items-center justify-between">
-                <div>
-                    <h4 class="font-bold text-gray-900">Rapports d'Essai</h4>
-                    <p class="text-xs text-gray-500 mt-1">Saisir les observations suite aux essais routiers.</p>
-                </div>
-                <span class="text-gray-400 font-bold text-lg">→</span>
-            </div>
-        </div>
-    </div>
-</div>
-            <!-- ========================================== -->
-<!-- 3. VUE : ADMINISTRATIF -->
-<!-- ========================================== -->
-<div v-else-if="user?.role === 'administratif'" class="space-y-6">
-    <div class="bg-white p-8 rounded-2xl shadow-sm border border-gray-200">
-        <div class="flex items-center gap-4 mb-6">
-            <div class="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-2xl shadow-inner">📄</div>
-            <div>
-                <h3 class="text-xl font-bold text-gray-900">Devis & Facturation</h3>
-                <p class="text-sm text-gray-500">Gérez l'édition des devis, validez les coûts et éditez les factures clients.</p>
-            </div>
-        </div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-            <!-- Lien vers Devis en attente -->
-            <Link :href="route('administration.dossiers.index')" class="p-5 bg-gray-50 rounded-xl border border-gray-200 hover:border-blue-300 transition flex items-center justify-between group">
-                <div>
-                    <h4 class="font-bold text-gray-900 group-hover:text-blue-600 transition">Devis en attente de validation</h4>
-                    <p class="text-xs text-gray-500 mt-1">Chiffrages pièces et main-d'œuvre à transformer.</p>
-                </div>
-                <span class="text-blue-600 font-bold text-lg transform group-hover:translate-x-1 transition">→</span>
-            </Link>
+                <!-- 2. VUE : MÉCANICIEN -->
+                <!-- ========================================== -->
+                <div v-else-if="user?.role === 'mecanicien'" class="space-y-8">
+                    <div class="bg-white p-8 sm:p-10 rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 space-y-8">
+                        <div class="flex items-center gap-5 pb-6 border-b border-gray-100">
+                            <div class="w-14 h-14 rounded-2xl bg-[#0B0F19] flex items-center justify-center text-white shadow-md">
+                                <i class="fa-solid fa-wrench text-2xl"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-black text-[#0B0F19]">Atelier & Diagnostics</h3>
+                                <p class="text-sm text-[#8A8D8F] font-medium">Consultez les véhicules assignés, réalisez les essais et diagnostics techniques.</p>
+                            </div>
+                        </div>
 
-            <!-- Lien cliquable vers Facturation & Règlements -->
-            <Link :href="route('administration.facturation.index')" class="p-5 bg-gray-50 rounded-xl border border-gray-200 hover:border-blue-300 transition flex items-center justify-between group">
-                <div>
-                    <h4 class="font-bold text-gray-900 group-hover:text-blue-600 transition">Facturation & Règlements</h4>
-                    <p class="text-xs text-gray-500 mt-1">Suivi des encaissements et factures acquittées.</p>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <Link :href="route('mecanicien.index')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#0B0F19] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs">
+                                <div class="space-y-1.5">
+                                    <div class="flex items-center gap-2.5 text-[#0B0F19]">
+                                        <i class="fa-solid fa-screwdriver-wrench text-base"></i>
+                                        <h4 class="font-extrabold text-[#0B0F19]">Mes Interventions Assignées</h4>
+                                    </div>
+                                    <p class="text-xs text-[#8A8D8F] font-medium">Liste des travaux en cours dans votre bay d'atelier.</p>
+                                </div>
+                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#0B0F19] group-hover:bg-[#0B0F19] group-hover:text-white transition-all shadow-xs">
+                                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                                </span>
+                            </Link>
+
+                            <div class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#0B0F19] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs cursor-pointer">
+                                <div class="space-y-1.5">
+                                    <div class="flex items-center gap-2.5 text-[#0B0F19]">
+                                        <i class="fa-solid fa-car-burst text-base"></i>
+                                        <h4 class="font-extrabold text-[#0B0F19]">Rapports d'Essai</h4>
+                                    </div>
+                                    <p class="text-xs text-[#8A8D8F] font-medium">Saisir les observations suite aux essais routiers.</p>
+                                </div>
+                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#0B0F19] group-hover:bg-[#0B0F19] group-hover:text-white transition-all shadow-xs">
+                                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                                </span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <span class="text-blue-600 font-bold text-lg transform group-hover:translate-x-1 transition">→</span>
-            </Link>
-        </div>
-    </div>
-</div>
+
+                <!-- ========================================== -->
+                <!-- 3. VUE : ADMINISTRATIF -->
+                <!-- ========================================== -->
+                <div v-else-if="user?.role === 'administratif'" class="space-y-8">
+                    <div class="bg-white p-8 sm:p-10 rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 space-y-8">
+                        <div class="flex items-center gap-5 pb-6 border-b border-gray-100">
+                            <div class="w-14 h-14 rounded-2xl bg-[#E11D48] flex items-center justify-center text-white shadow-md">
+                                <i class="fa-solid fa-file-invoice text-2xl"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-black text-[#0B0F19]">Devis & Facturation</h3>
+                                <p class="text-sm text-[#8A8D8F] font-medium">Gérez l'édition des devis, validez les coûts et éditez les factures clients.</p>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <Link :href="route('administration.dossiers.index')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#E11D48] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs">
+                                <div class="space-y-1.5">
+                                    <div class="flex items-center gap-2.5 text-[#E11D48]">
+                                        <i class="fa-solid fa-file-pen text-base"></i>
+                                        <h4 class="font-extrabold text-[#0B0F19] group-hover:text-[#E11D48] transition">Devis en attente de validation</h4>
+                                    </div>
+                                    <p class="text-xs text-[#8A8D8F] font-medium">Chiffrages pièces et main-d'œuvre à transformer.</p>
+                                </div>
+                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs">
+                                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                                </span>
+                            </Link>
+
+                            <Link :href="route('administration.facturation.index')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#E11D48] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs">
+                                <div class="space-y-1.5">
+                                    <div class="flex items-center gap-2.5 text-[#E11D48]">
+                                        <i class="fa-solid fa-receipt text-base"></i>
+                                        <h4 class="font-extrabold text-[#0B0F19] group-hover:text-[#E11D48] transition">Facturation & Règlements</h4>
+                                    </div>
+                                    <p class="text-xs text-[#8A8D8F] font-medium">Suivi des encaissements et factures acquittées.</p>
+                                </div>
+                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs">
+                                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                                </span>
+                            </Link>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- ========================================== -->
                 <!-- 4. VUE : CHARGÉ DE SUIVI CLIENT -->
                 <!-- ========================================== -->
-                <div v-else-if="user?.role === 'charge_client'" class="space-y-6">
-                    <div class="bg-white p-8 rounded-2xl shadow-sm border border-gray-200">
-                        <div class="flex items-center gap-4 mb-6">
-                            <div class="w-12 h-12 rounded-2xl bg-amber-50 flex items-center justify-center text-2xl shadow-inner">📞</div>
+                <div v-else-if="user?.role === 'charge_client'" class="space-y-8">
+                    <div class="bg-white p-8 sm:p-10 rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 space-y-8">
+                        <div class="flex items-center gap-5 pb-6 border-b border-gray-100">
+                            <div class="w-14 h-14 rounded-2xl bg-[#8A8D8F] flex items-center justify-center text-white shadow-md">
+                                <i class="fa-solid fa-headset text-2xl"></i>
+                            </div>
                             <div>
-                                <h3 class="text-xl font-bold text-gray-900">Suivi Client & Relances</h3>
-                                <p class="text-sm text-gray-500">Suivez l'état d'avancement des réparations et gérez la communication client.</p>
+                                <h3 class="text-xl font-black text-[#0B0F19]">Suivi Client & Relances</h3>
+                                <p class="text-sm text-[#8A8D8F] font-medium">Suivez l'état d'avancement des réparations et gérez la communication client.</p>
                             </div>
                         </div>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-                            <div class="p-5 bg-gray-50 rounded-xl border border-gray-200 hover:border-amber-300 transition cursor-pointer flex items-center justify-between">
-                                <div>
-                                    <h4 class="font-bold text-gray-900">Suivi des Réparations</h4>
-                                    <p class="text-xs text-gray-500 mt-1">État d'avancement en temps réel pour information client.</p>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#0B0F19] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs cursor-pointer">
+                                <div class="space-y-1.5">
+                                    <div class="flex items-center gap-2.5 text-[#0B0F19]">
+                                        <i class="fa-solid fa-timeline text-base"></i>
+                                        <h4 class="font-extrabold text-[#0B0F19]">Suivi des Réparations</h4>
+                                    </div>
+                                    <p class="text-xs text-[#8A8D8F] font-medium">État d'avancement en temps réel pour information client.</p>
                                 </div>
-                                <span class="text-amber-600 font-bold text-lg">→</span>
+                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#0B0F19] group-hover:bg-[#0B0F19] group-hover:text-white transition-all shadow-xs">
+                                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                                </span>
                             </div>
-                            <div class="p-5 bg-gray-50 rounded-xl border border-gray-200 hover:border-amber-300 transition cursor-pointer flex items-center justify-between">
-                                <div>
-                                    <h4 class="font-bold text-gray-900">Journal des Relances</h4>
-                                    <p class="text-xs text-gray-500 mt-1">Appels de restitution et enquêtes de satisfaction.</p>
+
+                            <div class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#0B0F19] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs cursor-pointer">
+                                <div class="space-y-1.5">
+                                    <div class="flex items-center gap-2.5 text-[#0B0F19]">
+                                        <i class="fa-solid fa-phone-volume text-base"></i>
+                                        <h4 class="font-extrabold text-[#0B0F19]">Journal des Relances</h4>
+                                    </div>
+                                    <p class="text-xs text-[#8A8D8F] font-medium">Appels de restitution et enquêtes de satisfaction.</p>
                                 </div>
-                                <span class="text-gray-400 font-bold text-lg">→</span>
+                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#0B0F19] group-hover:bg-[#0B0F19] group-hover:text-white transition-all shadow-xs">
+                                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                                </span>
                             </div>
                         </div>
                     </div>

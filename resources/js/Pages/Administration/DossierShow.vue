@@ -4,19 +4,19 @@ import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
 const props = defineProps({
-    dossier: Object, // Représente l'intervention
+    dossier: Object,
 });
 
-// Formulaire Inertia incluant les lignes dynamiques du devis (sans le champ remarques)
+// Formulaire Inertia pour les lignes de devis
 const form = useForm({
     lignes: [
         {
             quantite: 1,
-            designation: 'DIAGNOSTIC',
+            designation: 'DIAGNOSTIC TECHNIQUE',
             reference_piece: '',
             pu_net: 10000,
             remise: 0,
-            ne_pas_appliquer_tva: true, // Activé par défaut
+            ne_pas_appliquer_tva: true,
         }
     ],
 });
@@ -29,7 +29,7 @@ const ajouterLigne = () => {
         reference_piece: '',
         pu_net: 0,
         remise: 0,
-        ne_pas_appliquer_tva: true, // Activé par défaut pour les nouvelles lignes
+        ne_pas_appliquer_tva: true,
     });
 };
 
@@ -49,7 +49,7 @@ const calculerMontantHt = (ligne) => {
     return isNaN(total) ? 0 : total;
 };
 
-// Calcul du Total TTC par ligne (si exempt TVA, TTC = HT, sinon TVA de 18%)
+// Calcul du Total TTC par ligne (TVA 18% si applicable)
 const calculerTotalTtc = (ligne) => {
     const ht = calculerMontantHt(ligne);
     if (ligne.ne_pas_appliquer_tva) {
@@ -58,7 +58,7 @@ const calculerTotalTtc = (ligne) => {
     return ht * 1.18;
 };
 
-// Totaux globaux du devis
+// Totaux globaux
 const totalGeneralHt = computed(() => {
     return form.lignes.reduce((acc, ligne) => acc + calculerMontantHt(ligne), 0);
 });
@@ -67,13 +67,10 @@ const totalGeneralTtc = computed(() => {
     return form.lignes.reduce((acc, ligne) => acc + calculerTotalTtc(ligne), 0);
 });
 
-// Soumission du devis
+// Soumission
 const submitDevis = () => {
     form.post(route('administration.devis.store', props.dossier.id), {
         preserveScroll: true,
-        onSuccess: () => {
-            // Actions après succès si besoin
-        },
     });
 };
 </script>
@@ -82,190 +79,212 @@ const submitDevis = () => {
     <Head :title="`Établissement Devis - Intervention N° ${dossier.id}`" />
 
     <AuthenticatedLayout>
+        <!-- En-tête de page -->
         <template #header>
-            <div class="flex justify-between items-center">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <div class="flex items-center gap-3">
-                        <Link :href="route('administration.dossiers.index')" class="text-sm text-gray-500 hover:text-gray-900 transition">
-                            ← Retour aux dossiers
+                    <div class="flex items-center gap-3 text-xs text-slate-500">
+                        <Link :href="route('administration.dossiers.index')" class="hover:text-slate-900 transition flex items-center gap-1.5">
+                            <i class="fa-solid fa-arrow-left"><span>Retour aux dossiers</span></i>
                         </Link>
-                        <span class="text-gray-300">/</span>
-                        <span class="text-xs font-bold px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full">
-                            Intervention #{{ dossier.id }} <span v-if="dossier.numero_ot">(- OT: {{ dossier.numero_ot }})</span>
+                        <span>/</span>
+                        <span class="px-2.5 py-1 bg-slate-100 text-[#E11D48] border border-[#E11D48]/20 rounded-md font-mono font-semibold">
+                            OT #{{ dossier.numero_ot || dossier.id }}
                         </span>
                     </div>
-                    <h2 class="text-xl font-bold tracking-tight text-gray-900 mt-1">
-                        Établissement du Devis & Chiffrage
+                    <h2 class="text-xl font-bold tracking-tight text-slate-900 mt-2 flex items-center gap-2">
+                        <i class="fa-solid fa-file-invoice-dollar text-[#E11D48]"></i>
+                        <span>Établissement du Devis & Chiffrage</span>
                     </h2>
                 </div>
             </div>
         </template>
 
-        <div class="py-10">
+        <div class="py-8 bg-white min-h-screen text-slate-800">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
                 
-                <!-- RAPPORT DU MÉCANICIEN (Issu de la table interventions) -->
-                <div v-if="dossier.rapport_mecanicien" class="bg-amber-50 border border-amber-200 p-6 rounded-2xl shadow-sm">
-                    <h4 class="text-xs font-bold text-amber-800 uppercase tracking-wider mb-2 flex items-center gap-2">
-                        <span>🔧</span> Rapport Mécanicien (Constat technique)
+                <!-- RAPPORT DU MÉCANICIEN -->
+                <div v-if="dossier.rapport_mecanicien" class="bg-amber-50/60 border border-amber-500/20 p-5 rounded-xl shadow-sm relative overflow-hidden">
+                    <div class="absolute left-0 top-0 bottom-0 w-1 bg-amber-500"></div>
+                    <h4 class="text-xs font-bold text-amber-700 uppercase tracking-wider mb-2 flex items-center gap-2">
+                        <i class="fa-solid fa-wrench"></i>
+                        <span>Constat Technique (Rapport Mécanicien)</span>
                     </h4>
-                    <p class="text-sm text-amber-900 whitespace-pre-line leading-relaxed">
+                    <p class="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
                         {{ dossier.rapport_mecanicien }}
                     </p>
                 </div>
 
-                <!-- INFORMATIONS RAPIDES DU VÉHICULE & CLIENT -->
-                <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div>
-                        <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Véhicule & Client</h4>
-                        <p class="text-sm font-bold text-gray-900 uppercase mt-0.5">
-                            {{ dossier.vehicule?.marque }} {{ dossier.vehicule?.modele }} 
-                            <span class="text-indigo-600">({{ dossier.vehicule?.immatriculation }})</span>
-                        </p>
-                        <p class="text-xs text-gray-500 mt-1">
-                            Client : <span class="font-semibold text-gray-700">{{ dossier.vehicule?.client?.name || dossier.vehicule?.client?.nom || 'N/A' }}</span> | 
-                            Kilométrage réception : <span class="font-semibold text-gray-700">{{ dossier.kilometrage }} km</span>
-                        </p>
+                <!-- INFORMATIONS VÉHICULE & CLIENT -->
+                <div class="bg-slate-50 p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div class="flex items-start gap-3">
+                        <div class="w-10 h-10 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-[#E11D48] shrink-0 shadow-sm">
+                            <i class="fa-solid fa-car text-lg"></i>
+                        </div>
+                        <div>
+                            <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Véhicule & Propriétaire</span>
+                            <h3 class="text-sm font-bold text-slate-900 uppercase mt-0.5">
+                                {{ dossier.vehicule?.marque }} {{ dossier.vehicule?.modele }} 
+                                <span class="text-[#E11D48] font-mono ml-1">[{{ dossier.vehicule?.immatriculation }}]</span>
+                            </h3>
+                            <p class="text-xs text-slate-500 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+                                <span><strong class="text-slate-700">Client :</strong> {{ dossier.vehicule?.client?.name || dossier.vehicule?.client?.nom || 'N/A' }}</span>
+                                <span class="text-slate-300">|</span>
+                                <span><strong class="text-slate-700">Kilométrage :</strong> {{ dossier.kilometrage }} km</span>
+                            </p>
+                        </div>
                     </div>
                 </div>
 
                 <!-- TABLEAU DE SAISIE DU DEVIS -->
                 <form @submit.prevent="submitDevis" class="space-y-6">
-                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200 text-left text-sm">
-                            <thead class="bg-gray-50 text-gray-500 uppercase tracking-wider text-[11px]">
-                                <tr>
-                                    <th class="px-3 py-3 font-semibold w-20">Quantité</th>
-                                    <th class="px-3 py-3 font-semibold">Désignation</th>
-                                    <th class="px-3 py-3 font-semibold w-36">Référence pièce</th>
-                                    <th class="px-3 py-3 font-semibold w-12 text-center">Pièce</th>
-                                    <th class="px-3 py-3 font-semibold w-28">PU net</th>
-                                    <th class="px-3 py-3 font-semibold w-24">Remise</th>
-                                    <th class="px-3 py-3 font-semibold w-28">Montant HT</th>
-                                    <th class="px-3 py-3 font-semibold w-28">Total TTC</th>
-                                    <th class="px-3 py-3 font-semibold text-center w-20">Exempt TVA</th>
-                                    <th class="px-3 py-3 font-semibold text-center w-12">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-200">
-                                <tr v-for="(ligne, index) in form.lignes" :key="index" class="hover:bg-gray-50/50">
-                                    <td class="px-3 py-3">
-                                        <input 
-                                            type="number" 
-                                            v-model="ligne.quantite" 
-                                            min="0" 
-                                            step="any"
-                                            class="w-full rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 text-center font-bold"
-                                        />
-                                    </td>
-                                    <td class="px-3 py-3">
-                                        <input 
-                                            type="text" 
-                                            v-model="ligne.designation" 
-                                            placeholder="Désignation..."
-                                            class="w-full rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 uppercase"
-                                        />
-                                    </td>
-                                    <td class="px-3 py-3">
-                                        <input 
-                                            type="text" 
-                                            v-model="ligne.reference_piece" 
-                                            placeholder="Réf..."
-                                            class="w-full rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 uppercase"
-                                        />
-                                    </td>
-                                    <td class="px-3 py-3 text-center">
-                                        <button type="button" class="w-8 h-8 bg-sky-500 hover:bg-sky-600 text-white rounded-lg flex items-center justify-center shadow-sm mx-auto transition" title="Associer pièce">
-                                            +
-                                        </button>
-                                    </td>
-                                    <td class="px-3 py-3">
-                                        <input 
-                                            type="number" 
-                                            v-model="ligne.pu_net" 
-                                            step="0.01"
-                                            class="w-full rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 text-right"
-                                        />
-                                    </td>
-                                    <td class="px-3 py-3">
-                                        <input 
-                                            type="number" 
-                                            v-model="ligne.remise" 
-                                            step="0.01"
-                                            class="w-full rounded-lg border-gray-300 text-xs shadow-sm focus:border-blue-500 focus:ring-blue-500 text-right"
-                                        />
-                                    </td>
-                                    <td class="px-3 py-3">
-                                        <input 
-                                            type="text" 
-                                            :value="calculerMontantHt(ligne).toLocaleString()" 
-                                            readonly
-                                            class="w-full rounded-lg border-gray-200 bg-gray-100 text-xs text-right font-bold text-gray-700"
-                                        />
-                                    </td>
-                                    <td class="px-3 py-3">
-                                        <input 
-                                            type="text" 
-                                            :value="calculerTotalTtc(ligne).toLocaleString()" 
-                                            readonly
-                                            class="w-full rounded-lg border-gray-200 bg-gray-100 text-xs text-right font-bold text-gray-900"
-                                        />
-                                    </td>
-                                    <td class="px-3 py-3 text-center">
-                                        <input 
-                                            type="checkbox" 
-                                            v-model="ligne.ne_pas_appliquer_tva" 
-                                            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
-                                        />
-                                    </td>
-                                    <td class="px-3 py-3 text-center">
-                                        <button 
-                                            type="button" 
-                                            @click="supprimerLigne(index)"
-                                            class="w-8 h-8 bg-rose-600 hover:bg-rose-700 text-white rounded-lg flex items-center justify-center shadow-sm mx-auto transition"
-                                            title="Supprimer la ligne"
-                                        >
-                                            -
-                                        </button>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <div class="bg-slate-50 rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-slate-200 text-left text-xs">
+                                <thead class="bg-slate-100 text-slate-500 uppercase tracking-wider text-[10px]">
+                                    <tr>
+                                        <th class="px-3 py-3 font-semibold w-16 text-center">Qté</th>
+                                        <th class="px-3 py-3 font-semibold">Désignation</th>
+                                        <th class="px-3 py-3 font-semibold w-32">Réf. Pièce</th>
+                                        <th class="px-3 py-3 font-semibold w-12 text-center">Stock</th>
+                                        <th class="px-3 py-3 font-semibold w-28 text-right">PU Net</th>
+                                        <th class="px-3 py-3 font-semibold w-24 text-right">Remise</th>
+                                        <th class="px-3 py-3 font-semibold w-28 text-right">Total HT</th>
+                                        <th class="px-3 py-3 font-semibold w-28 text-right">Total TTC</th>
+                                        <th class="px-3 py-3 font-semibold text-center w-20">Exempt TVA</th>
+                                        <th class="px-3 py-3 font-semibold text-center w-12">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-200">
+                                    <tr v-for="(ligne, index) in form.lignes" :key="index" class="hover:bg-slate-100/60 transition-colors">
+                                        <!-- Quantité -->
+                                        <td class="px-3 py-3 text-center">
+                                            <input 
+                                                type="number" 
+                                                v-model="ligne.quantite" 
+                                                min="0" 
+                                                step="any"
+                                                class="w-full bg-white border border-slate-300 rounded-lg text-xs text-center font-bold text-slate-900 focus:border-[#E11D48] focus:ring-1 focus:ring-[#E11D48]"
+                                            />
+                                        </td>
+                                        <!-- Désignation -->
+                                        <td class="px-3 py-3">
+                                            <input 
+                                                type="text" 
+                                                v-model="ligne.designation" 
+                                                placeholder="Libellé de la prestation..."
+                                                class="w-full bg-white border border-slate-300 rounded-lg text-xs uppercase text-slate-900 focus:border-[#E11D48] focus:ring-1 focus:ring-[#E11D48]"
+                                            />
+                                        </td>
+                                        <!-- Référence -->
+                                        <td class="px-3 py-3">
+                                            <input 
+                                                type="text" 
+                                                v-model="ligne.reference_piece" 
+                                                placeholder="Réf..."
+                                                class="w-full bg-white border border-slate-300 rounded-lg text-xs uppercase text-slate-900 focus:border-[#E11D48] focus:ring-1 focus:ring-[#E11D48]"
+                                            />
+                                        </td>
+                                        <!-- Bouton associer pièce -->
+                                        <td class="px-3 py-3 text-center">
+                                            <button type="button" class="w-7 h-7 bg-white hover:bg-slate-200 text-slate-500 hover:text-slate-900 rounded-lg flex items-center justify-center border border-slate-300 transition mx-auto shadow-sm" title="Rechercher une pièce">
+                                                <i class="fa-solid fa-magnifying-glass text-[11px]"></i>
+                                            </button>
+                                        </td>
+                                        <!-- PU Net -->
+                                        <td class="px-3 py-3">
+                                            <input 
+                                                type="number" 
+                                                v-model="ligne.pu_net" 
+                                                step="0.01"
+                                                class="w-full bg-white border border-slate-300 rounded-lg text-xs text-right text-slate-900 focus:border-[#E11D48] focus:ring-1 focus:ring-[#E11D48]"
+                                            />
+                                        </td>
+                                        <!-- Remise -->
+                                        <td class="px-3 py-3">
+                                            <input 
+                                                type="number" 
+                                                v-model="ligne.remise" 
+                                                step="0.01"
+                                                class="w-full bg-white border border-slate-300 rounded-lg text-xs text-right text-slate-900 focus:border-[#E11D48] focus:ring-1 focus:ring-[#E11D48]"
+                                            />
+                                        </td>
+                                        <!-- Montant HT (Calculé) -->
+                                        <td class="px-3 py-3 text-right">
+                                            <span class="font-mono font-semibold text-slate-700">
+                                                {{ calculerMontantHt(ligne).toLocaleString() }}
+                                            </span>
+                                        </td>
+                                        <!-- Total TTC (Calculé) -->
+                                        <td class="px-3 py-3 text-right">
+                                            <span class="font-mono font-bold text-slate-900">
+                                                {{ calculerTotalTtc(ligne).toLocaleString() }}
+                                            </span>
+                                        </td>
+                                        <!-- Exempt TVA -->
+                                        <td class="px-3 py-3 text-center">
+                                            <input 
+                                                type="checkbox" 
+                                                v-model="ligne.ne_pas_appliquer_tva" 
+                                                class="rounded bg-white border-slate-300 text-[#E11D48] focus:ring-[#E11D48] w-4 h-4 cursor-pointer"
+                                            />
+                                        </td>
+                                        <!-- Supprimer -->
+                                        <td class="px-3 py-3 text-center">
+                                            <button 
+                                                type="button" 
+                                                @click="supprimerLigne(index)"
+                                                class="w-7 h-7 bg-rose-50 hover:bg-rose-500 text-rose-500 hover:text-white rounded-lg flex items-center justify-center transition mx-auto border border-rose-200"
+                                                title="Supprimer la ligne"
+                                            >
+                                                <i class="fa-solid fa-trash-can text-[11px]"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
 
-                        <!-- Bouton Ajout de ligne (+) -->
-                        <div class="mt-4 flex justify-end">
+                        <!-- Barre d'ajout de ligne -->
+                        <div class="p-4 bg-slate-100/70 border-t border-slate-200 flex justify-between items-center">
+                            <span class="text-xs text-slate-500">Ajoutez des lignes de pièces ou de main-d'œuvre selon les besoins de l'intervention.</span>
                             <button 
                                 type="button" 
                                 @click="ajouterLigne"
-                                class="w-10 h-10 bg-sky-500 hover:bg-sky-600 text-white rounded-xl font-bold flex items-center justify-center shadow-sm transition"
-                                title="Ajouter une ligne"
+                                class="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold rounded-lg border border-slate-300 flex items-center gap-2 transition shadow-sm"
                             >
-                                +
+                                <i class="fa-solid fa-plus text-[#E11D48]"></i>
+                                <span>Ajouter une ligne</span>
                             </button>
                         </div>
                     </div>
 
-                    <!-- TOTAUX ET VALIDATION -->
-                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 flex flex-col md:flex-row justify-between items-center gap-6">
-                        <!-- Espace vide ou message informatif pour équilibrer la mise en page -->
-                        <div class="w-full md:w-1/2 text-sm text-gray-500">
-                            Vérifiez les quantités et les prix unitaires avant de valider l'émission du devis.
+                    <!-- TOTAUX ET VALIDATION FINALE -->
+                    <div class="bg-slate-50 p-6 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-center gap-6">
+                        <div class="w-full md:w-1/2 text-xs text-slate-500 flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-[#E11D48] shrink-0 shadow-sm">
+                                <i class="fa-solid fa-circle-info"></i>
+                            </div>
+                            <p>Vérifiez scrupuleusement les quantités, les prix unitaires et l'application ou non de la TVA avant d'émettre officiellement le devis client.</p>
                         </div>
 
                         <div class="w-full md:w-auto flex flex-col items-end gap-2 text-right">
-                            <div class="text-sm text-gray-600">
-                                Total Général HT : <span class="font-bold text-gray-900">{{ totalGeneralHt.toLocaleString() }} FCFA</span>
+                            <div class="text-xs text-slate-500 flex items-center gap-2">
+                                <span>Total Général HT :</span>
+                                <span class="font-mono text-sm font-semibold text-slate-700">{{ totalGeneralHt.toLocaleString() }} FCFA</span>
                             </div>
-                            <div class="text-base font-extrabold text-blue-600">
-                                Total Général TTC : <span>{{ totalGeneralTtc.toLocaleString() }} FCFA</span>
+                            <div class="text-base font-extrabold text-slate-900 flex items-center gap-2">
+                                <span>Total Général TTC :</span>
+                                <span class="font-mono text-lg text-[#E11D48]">{{ totalGeneralTtc.toLocaleString() }} FCFA</span>
                             </div>
 
                             <button 
                                 type="submit" 
                                 :disabled="form.processing"
-                                class="mt-3 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md transition disabled:opacity-50"
+                                class="mt-4 px-6 py-3 bg-[#E11D48] hover:bg-rose-700 text-white text-xs font-bold uppercase tracking-wider rounded-lg shadow-md transition-all disabled:opacity-50 flex items-center gap-2"
                             >
-                                Enregistrer et émettre le devis ✓
+                                <i class="fa-solid fa-check"></i>
+                                <span>Enregistrer et émettre le devis</span>
                             </button>
                         </div>
                     </div>
