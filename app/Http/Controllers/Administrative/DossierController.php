@@ -25,8 +25,9 @@ class DossierController extends Controller
 
     public function facturationIndex()
     {
+        // On ne garde que les dossiers qui sont en attente d'accord client
         $dossiers = Intervention::with(['vehicule.client', 'devis', 'mecanicien'])
-            ->whereIn('statut', ['attente_accord', 'termine']) 
+            ->where('statut', 'attente_accord') 
             ->latest()
             ->get();
 
@@ -43,6 +44,39 @@ class DossierController extends Controller
         return Inertia::render('Administration/FacturationShow', [
             'dossier' => $dossier
         ]);
+    }
+
+    public function updateDevisValidation(Request $request, Intervention $dossier)
+    {
+        $request->validate([
+            'lignes_acceptees' => 'array',
+            'lignes_acceptees.*' => 'exists:lignes_devis,id',
+        ]);
+
+        DB::transaction(function () use ($request, $dossier) {
+            $devis = $dossier->devis;
+
+            if ($devis) {
+                $idsAcceptes = $request->input('lignes_acceptees', []);
+
+                foreach ($devis->lignes as $ligne) {
+                    $ligne->update([
+                        'is_accepted' => in_array($ligne->id, $idsAcceptes)
+                    ]);
+                }
+
+                // Le devis passe en statut accepté
+                $devis->update(['statut' => 'accepte']);
+            }
+
+            // LE DOSSIER QUITTE LA PAGE FACTURATIONINDEX : 
+            // On change son statut pour l'aiguiller vers la vue des devis validés
+            $dossier->update(['statut' => 'accepte']);
+        });
+
+        // Redirection vers la liste d'attente (le dossier n'y apparaîtra plus)
+        return redirect()->route('administration.facturation.index')
+            ->with('success', 'Choix du client enregistré avec succès. Le dossier a basculé dans les devis validés.');
     }
 
     public function show(Intervention $dossier)
@@ -104,5 +138,31 @@ class DossierController extends Controller
 
         return redirect()->route('administration.dossiers.index')
             ->with('success', 'Devis enregistré avec succès.');
+    }
+
+    // NOUVELLE VUE : Devis validés par le client
+    public function devisAcceptesIndex()
+    {
+        $dossiers = Intervention::with(['vehicule.client', 'devis.lignes', 'mecanicien'])
+            ->where('statut', 'accepte')
+            ->latest()
+            ->get();
+
+        return Inertia::render('Administration/DevisAcceptesIndex', [
+            'dossiers' => $dossiers
+        ]);
+    }
+
+    // NOUVELLE VUE : Historique global de tous les devis (acceptés et refusés)
+    public function devisHistoriqueIndex()
+    {
+        $dossiers = Intervention::with(['vehicule.client', 'devis.lignes', 'mecanicien'])
+            ->has('devis')
+            ->latest()
+            ->get();
+
+        return Inertia::render('Administration/DevisHistoriqueIndex', [
+            'dossiers' => $dossiers
+        ]);
     }
 }
