@@ -83,6 +83,13 @@ Route::middleware(['auth'])->prefix('administration')->name('administration.')->
     Route::get('/devis-acceptes', [DossierController::class, 'devisAcceptesIndex'])->name('devis.acceptes');
     Route::get('/devis-historique', [DossierController::class, 'devisHistoriqueIndex'])->name('devis.historique');
 
+    Route::get('/interventions/{intervention}/devis/pdf', [DossierController::class, 'downloadDevisPdf'])->name('devis.pdf');
+    Route::get('/interventions/{intervention}/devis/print', [DossierController::class, 'printDevis'])->name('devis.print');
+
+    // Routes pour les devis directs
+    Route::get('/devis-directs', [DossierController::class, 'devisDirectIndex'])->name('devis.directs.index');
+    Route::get('/devis-directs/create', [DossierController::class, 'devisDirectCreate'])->name('devis.directs.create');
+    Route::post('/devis-directs', [DossierController::class, 'storeDevisDirect'])->name('devis.directs.store');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {

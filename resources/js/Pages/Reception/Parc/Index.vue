@@ -118,13 +118,25 @@ const filteredInterventions = computed(() => {
                     </h2>
                     <p class="text-sm text-[#8A8D8F] font-medium mt-0.5">Suivi en temps réel des véhicules actuellement dans l'enceinte de l'établissement</p>
                 </div>
-                <Link 
-                    :href="route('reception.create')" 
-                    class="px-5 py-2.5 bg-[#E11D48] text-white text-xs font-bold rounded-xl hover:bg-[#BE123C] transition shadow-md shadow-[#E11D48]/20 flex items-center gap-2"
-                >
-                    <i class="fa-solid fa-plus"></i>
-                    <span>Nouvelle Réception</span>
-                </Link>
+                
+                <div class="flex items-center gap-3">
+                    <!-- Bouton Retour au tableau de bord -->
+                    <Link 
+                        :href="route('dashboard')" 
+                        class="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-[#0B0F19] text-xs font-bold rounded-xl transition flex items-center gap-2 shadow-xs"
+                    >
+                        <i class="fa-solid fa-arrow-left"></i>
+                        <span>Tableau de bord</span>
+                    </Link>
+
+                    <Link 
+                        :href="route('reception.create')" 
+                        class="px-5 py-2.5 bg-[#E11D48] text-white text-xs font-bold rounded-xl hover:bg-[#BE123C] transition shadow-md shadow-[#E11D48]/20 flex items-center gap-2"
+                    >
+                        <i class="fa-solid fa-plus"></i>
+                        <span>Nouvelle Réception</span>
+                    </Link>
+                </div>
             </div>
         </template>
 

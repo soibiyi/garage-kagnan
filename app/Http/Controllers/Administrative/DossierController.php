@@ -8,6 +8,7 @@ use App\Models\LigneDevis;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class DossierController extends Controller
 {
@@ -165,4 +166,114 @@ class DossierController extends Controller
             'dossiers' => $dossiers
         ]);
     }
+
+
+  // Affiche la liste des devis directs directement dans la vue principale
+    public function devisDirectIndex()
+    {
+        $devisDirects = Intervention::with(['vehicule.client', 'devis.lignes', 'receptionniste'])
+            ->where('circuit', 'devis_direct')
+            ->latest()
+            ->get();
+
+        return Inertia::render('Administration/DevisDirectIndex', [
+            'devisDirects' => $devisDirects
+        ]);
+    }
+
+    // Affiche le formulaire de création d'un devis direct (avec la liste des véhicules)
+    public function devisDirectCreate()
+    {
+        $vehicules = \App\Models\Vehicule::with('client')->latest()->get();
+
+        return Inertia::render('Administration/DevisDirectCreate', [
+            'vehicules' => $vehicules
+        ]);
+    }
+
+    // (La méthode storeDevisDirect reste identique à votre code fourni)
+    public function storeDevisDirect(Request $request)
+    {
+        $request->validate([
+            'vehicule_id' => 'nullable|exists:vehicules,id',
+            'nouveau_client_nom' => 'required_without:vehicule_id|nullable|string|max:255',
+            'nouveau_client_prenom' => 'nullable|string|max:255', // Ajouté ici
+            'nouvelle_marque' => 'required_without:vehicule_id|nullable|string|max:255',
+            'nouveau_modele' => 'required_without:vehicule_id|nullable|string|max:255',
+            'kilometrage' => 'nullable|numeric|min:0',
+            'lignes' => 'required|array|min:1',
+            'lignes.*.quantite' => 'required|numeric|min:0',
+            'lignes.*.designation' => 'required|string',
+            'lignes.*.pu_net' => 'required|numeric|min:0',
+            'lignes.*.remise' => 'nullable|numeric|min:0',
+            'lignes.*.reference_piece' => 'nullable|string',
+            'lignes.*.ne_pas_appliquer_tva' => 'nullable|boolean',
+        ]);
+
+        DB::transaction(function () use ($request) {
+            $vehiculeId = $request->vehicule_id;
+
+            if (!$vehiculeId) {
+                // Création du client en renseignant 'prenom' pour éviter l'erreur SQL
+                $client = \App\Models\Client::firstOrCreate(
+                    ['nom' => $request->nouveau_client_nom],
+                    [
+                        'prenom' => $request->nouveau_client_prenom ?? '', 
+                        'telephone' => $request->nouveau_client_telephone ?? '00000000'
+                    ]
+                );
+
+                $vehicule = \App\Models\Vehicule::create([
+                    'client_id' => $client->id,
+                    'marque' => $request->nouvelle_marque,
+                    'modele' => $request->nouveau_modele,
+                    'immatriculation' => $request->nouvelle_immatriculation ?? 'COMPTOIR-' . rand(100, 999),
+                ]);
+
+                $vehiculeId = $vehicule->id;
+            }
+
+            $dossier = Intervention::create([
+                'vehicule_id' => $vehiculeId,
+                'circuit' => 'devis_direct',
+                'kilometrage' => $request->kilometrage ?? 0,
+                'date_reception' => now(),
+                'receptionniste_id' => auth()->id(),
+                'statut' => 'attente_accord',
+                'remarques_eventuelles' => $request->remarques ?? 'Devis direct comptoir.',
+            ]);
+
+            $devis = Devis::create([
+                'intervention_id' => $dossier->id,
+                'createur_id' => auth()->id(),
+                'statut' => 'en_attente',
+            ]);
+
+            foreach ($request->lignes as $ligne) {
+                $qte = $ligne['quantite'] ?? 1;
+                $pu = $ligne['pu_net'] ?? 0;
+                $remise = $ligne['remise'] ?? 0;
+                
+                $ht = ($qte * $pu) - $remise;
+                $nePasAppliquerTva = $ligne['ne_pas_appliquer_tva'] ?? false;
+                $ttc = $nePasAppliquerTva ? $ht : $ht * 1.18;
+
+                LigneDevis::create([
+                    'devis_id' => $devis->id,
+                    'quantite' => $qte,
+                    'designation' => $ligne['designation'],
+                    'reference_piece' => $ligne['reference_piece'] ?? null,
+                    'pu_net' => $pu,
+                    'remise' => $remise,
+                    'montant_ht' => $ht,
+                    'montant_ttc' => $ttc,
+                    'ne_pas_appliquer_tva' => $nePasAppliquerTva,
+                    'type' => 'main_d_oeuvre',
+                ]);
+            }
+        });
+
+        return redirect()->route('administration.devis.directs.index')
+            ->with('success', 'Devis direct enregistré avec succès.');
+    } 
 }
