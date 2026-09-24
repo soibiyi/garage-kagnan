@@ -9,7 +9,8 @@ import {
     faArrowRight, 
     faCircleInfo, 
     faCheck, 
-    faTimes 
+    faTimes,
+    faArrowLeft
 } from '@fortawesome/free-solid-svg-icons';
 
 const props = defineProps({
@@ -105,6 +106,17 @@ const filteredInterventions = computed(() => {
                         </span>
                     </h2>
                     <p class="text-sm text-[#8A8D8F] mt-1">Suivi en temps réel des véhicules dans l'enceinte de l'atelier</p>
+                </div>
+
+                <!-- Bouton Retour au tableau de bord -->
+                <div>
+                    <Link 
+                        :href="route('dashboard')" 
+                        class="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-[#8A8D8F]/30 hover:bg-[#8A8D8F]/10 text-[#0B0F19] text-xs font-semibold rounded-xl transition-all shadow-xs"
+                    >
+                        <FontAwesomeIcon :icon="faArrowLeft" />
+                        <span>Tableau de bord</span>
+                    </Link>
                 </div>
             </div>
         </template>

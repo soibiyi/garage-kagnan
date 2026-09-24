@@ -1,9 +1,33 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
 defineProps({
     dossiers: Array,
+});
+
+const page = usePage();
+
+// Propriété calculée pour déterminer si l'utilisateur est un mécanicien
+const isMecanicien = computed(() => {
+    const user = page.props.auth.user;
+    return user?.role === 'mecanicien' || user?.roles?.some(r => r.name === 'mecanicien');
+});
+
+// Lien de retour dynamique vers le tableau de bord
+const backUrl = computed(() => {
+    if (isMecanicien.value) {
+        return route('mecanicien.index'); // Espace mécanicien si besoin
+    }
+    return route('dashboard'); // Tableau de bord général
+});
+
+// Texte du bouton dynamique
+const backText = computed(() => {
+    return isMecanicien.value 
+        ? '← Retour à mon atelier' 
+        : '← Retour au tableau de bord';
 });
 </script>
 
@@ -23,6 +47,14 @@ defineProps({
                         Consultez les dossiers transmis par l'atelier et établissez les devis clients correspondants.
                     </p>
                 </div>
+
+                <!-- Bouton de retour au tableau de bord -->
+                <Link 
+                    :href="backUrl" 
+                    class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition"
+                >
+                    {{ backText }}
+                </Link>
             </div>
         </template>
 

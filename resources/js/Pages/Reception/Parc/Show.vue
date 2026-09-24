@@ -1,9 +1,36 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
 const props = defineProps({
     intervention: Object,
+});
+
+const page = usePage();
+
+// Propriété calculée pour déterminer si l'utilisateur est un mécanicien
+// (Adapte 'mechanicien' ou la structure selon ton système de rôles Laravel/Spatie)
+const isMecanicien = computed(() => {
+    const user = page.props.auth.user;
+    // Si tu utilises un champ 'role' simple sur l'user ou un tableau de rôles
+    return user?.role === 'mecanicien' || user?.roles?.some(r => r.name === 'mecanicien');
+});
+
+// Lien de retour dynamique selon le rôle
+const backUrl = computed(() => {
+    if (isMecanicien.value) {
+        // Remplace 'mecanicien.index' par le nom exact de la route de l'espace mécanicien
+        return route('mecanicien.index'); 
+    }
+    return route('parc.index');
+});
+
+// Texte du bouton dynamique selon le rôle
+const backText = computed(() => {
+    return isMecanicien.value 
+        ? '← Retour à mon atelier' 
+        : '← Retour à la liste du parc';
 });
 
 // Traduction et style des statuts
@@ -23,11 +50,9 @@ const imageUrl = (path) => {
     if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:')) {
         return path;
     }
-    // Si le chemin commence déjà par /storage ou storage/
     if (path.startsWith('/storage/')) return path;
     if (path.startsWith('storage/')) return '/' + path;
     
-    // Par défaut, on pointe vers le lien symbolique public/storage
     return `/storage/${path.replace(/^\/+/, '')}`;
 };
 
@@ -67,11 +92,13 @@ const equipmentsList = [
                         Enregistré le {{ new Date(intervention.date_reception).toLocaleDateString() }} à {{ new Date(intervention.date_reception).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}
                     </p>
                 </div>
+                
+                <!-- Lien de retour dynamique -->
                 <Link 
-                    :href="route('parc.index')" 
+                    :href="backUrl" 
                     class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition"
                 >
-                    ← Retour à la liste du parc
+                    {{ backText }}
                 </Link>
             </div>
         </template>

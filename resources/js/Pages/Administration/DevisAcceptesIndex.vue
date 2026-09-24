@@ -1,9 +1,33 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
+import { computed } from 'vue';
 
 defineProps({
     dossiers: Array,
+});
+
+const page = usePage();
+
+// Propriété calculée pour déterminer si l'utilisateur est un mécanicien
+const isMecanicien = computed(() => {
+    const user = page.props.auth.user;
+    return user?.role === 'mecanicien' || user?.roles?.some(r => r.name === 'mecanicien');
+});
+
+// Lien de retour dynamique vers le tableau de bord ou l'atelier
+const backUrl = computed(() => {
+    if (isMecanicien.value) {
+        return route('mecanicien.index'); 
+    }
+    return route('dashboard'); 
+});
+
+// Texte du bouton dynamique
+const backText = computed(() => {
+    return isMecanicien.value 
+        ? '← Retour à mon atelier' 
+        : '← Retour au tableau de bord';
 });
 </script>
 
@@ -22,6 +46,14 @@ defineProps({
                         Liste des dossiers dont l'accord client a été enregistré et prêts pour la suite de l'intervention ou facturation.
                     </p>
                 </div>
+
+                <!-- Bouton de retour dynamique -->
+                <Link 
+                    :href="backUrl" 
+                    class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition"
+                >
+                    {{ backText }}
+                </Link>
             </div>
         </template>
 
