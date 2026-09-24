@@ -21,6 +21,7 @@ class LigneDevis extends Model
         'ne_pas_appliquer_tva',
         'type',
         'statut_ligne',
+        'is_accepted',
     ];
 
     public function devis()

@@ -189,51 +189,80 @@ const roleInfo = computed(() => {
                         </div>
                     </div>
                 </div>
+<!-- ========================================== -->
+<!-- 3. VUE : ADMINISTRATIF -->
+<!-- ========================================== -->
+<div v-else-if="user?.role === 'administratif'" class="space-y-8">
+    <div class="bg-white p-8 sm:p-10 rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 space-y-8">
+        <div class="flex items-center gap-5 pb-6 border-b border-gray-100">
+            <div class="w-14 h-14 rounded-2xl bg-[#E11D48] flex items-center justify-center text-white shadow-md">
+                <i class="fa-solid fa-file-invoice text-2xl"></i>
+            </div>
+            <div>
+                <h3 class="text-xl font-black text-[#0B0F19]">Devis & Facturation</h3>
+                <p class="text-sm text-[#8A8D8F] font-medium">Gérez l'édition des devis, validez les coûts et éditez les factures clients.</p>
+            </div>
+        </div>
 
-                <!-- ========================================== -->
-                <!-- 3. VUE : ADMINISTRATIF -->
-                <!-- ========================================== -->
-                <div v-else-if="user?.role === 'administratif'" class="space-y-8">
-                    <div class="bg-white p-8 sm:p-10 rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 space-y-8">
-                        <div class="flex items-center gap-5 pb-6 border-b border-gray-100">
-                            <div class="w-14 h-14 rounded-2xl bg-[#E11D48] flex items-center justify-center text-white shadow-md">
-                                <i class="fa-solid fa-file-invoice text-2xl"></i>
-                            </div>
-                            <div>
-                                <h3 class="text-xl font-black text-[#0B0F19]">Devis & Facturation</h3>
-                                <p class="text-sm text-[#8A8D8F] font-medium">Gérez l'édition des devis, validez les coûts et éditez les factures clients.</p>
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <Link :href="route('administration.dossiers.index')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#E11D48] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs">
-                                <div class="space-y-1.5">
-                                    <div class="flex items-center gap-2.5 text-[#E11D48]">
-                                        <i class="fa-solid fa-file-pen text-base"></i>
-                                        <h4 class="font-extrabold text-[#0B0F19] group-hover:text-[#E11D48] transition">Devis en attente de validation</h4>
-                                    </div>
-                                    <p class="text-xs text-[#8A8D8F] font-medium">Chiffrages pièces et main-d'œuvre à transformer.</p>
-                                </div>
-                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs">
-                                    <i class="fa-solid fa-arrow-right text-xs"></i>
-                                </span>
-                            </Link>
-
-                            <Link :href="route('administration.facturation.index')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#E11D48] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs">
-                                <div class="space-y-1.5">
-                                    <div class="flex items-center gap-2.5 text-[#E11D48]">
-                                        <i class="fa-solid fa-receipt text-base"></i>
-                                        <h4 class="font-extrabold text-[#0B0F19] group-hover:text-[#E11D48] transition">Facturation & Règlements</h4>
-                                    </div>
-                                    <p class="text-xs text-[#8A8D8F] font-medium">Suivi des encaissements et factures acquittées.</p>
-                                </div>
-                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs">
-                                    <i class="fa-solid fa-arrow-right text-xs"></i>
-                                </span>
-                            </Link>
-                        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- 1. En attente de devis -->
+            <Link :href="route('administration.dossiers.index')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#E11D48] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs">
+                <div class="space-y-1.5">
+                    <div class="flex items-center gap-2.5 text-[#E11D48]">
+                        <i class="fa-solid fa-file-pen text-base"></i>
+                        <h4 class="font-extrabold text-[#0B0F19] group-hover:text-[#E11D48] transition">En Attente de Devis</h4>
                     </div>
+                    <p class="text-xs text-[#8A8D8F] font-medium">Chiffrages pièces et main-d'œuvre à transformer.</p>
                 </div>
+                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs">
+                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                </span>
+            </Link>
+
+            <!-- 2. Devis en attente de validation -->
+            <Link :href="route('administration.facturation.index')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#E11D48] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs">
+                <div class="space-y-1.5">
+                    <div class="flex items-center gap-2.5 text-[#E11D48]">
+                        <i class="fa-solid fa-receipt text-base"></i>
+                        <h4 class="font-extrabold text-[#0B0F19] group-hover:text-[#E11D48] transition">Devis en Attente de Validation</h4>
+                    </div>
+                    <p class="text-xs text-[#8A8D8F] font-medium">Saisir les choix du client et enregistrer.</p>
+                </div>
+                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs">
+                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                </span>
+            </Link>
+
+            <!-- 3. NOUVEAU : Devis validés par le client -->
+            <Link :href="route('administration.devis.acceptes')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#E11D48] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs">
+                <div class="space-y-1.5">
+                    <div class="flex items-center gap-2.5 text-[#E11D48]">
+                        <i class="fa-solid fa-clipboard-check text-base"></i>
+                        <h4 class="font-extrabold text-[#0B0F19] group-hover:text-[#E11D48] transition">Devis Validés</h4>
+                    </div>
+                    <p class="text-xs text-[#8A8D8F] font-medium">Dossiers dont l'accord client a été enregistré.</p>
+                </div>
+                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs">
+                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                </span>
+            </Link>
+
+            <!-- 4. NOUVEAU : Historique global des devis -->
+            <Link :href="route('administration.devis.historique')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#E11D48] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs">
+                <div class="space-y-1.5">
+                    <div class="flex items-center gap-2.5 text-[#E11D48]">
+                        <i class="fa-solid fa-clock-rotate-left text-base"></i>
+                        <h4 class="font-extrabold text-[#0B0F19] group-hover:text-[#E11D48] transition">Historique Global des Devis</h4>
+                    </div>
+                    <p class="text-xs text-[#8A8D8F] font-medium">Vue d'ensemble de tous les services (acceptés/refusés).</p>
+                </div>
+                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs">
+                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                </span>
+            </Link>
+        </div>
+    </div>
+</div>
 
                 <!-- ========================================== -->
                 <!-- 4. VUE : CHARGÉ DE SUIVI CLIENT -->

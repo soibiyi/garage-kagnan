@@ -76,6 +76,13 @@ Route::middleware(['auth'])->prefix('administration')->name('administration.')->
     // FACTURATION & RÈGLEMENTS (Géré directement dans DossierController)
     Route::get('/facturation', [DossierController::class, 'facturationIndex'])->name('facturation.index');
     Route::get('/facturation/{dossier}', [DossierController::class, 'facturationShow'])->name('facturation.show');
+    // Nouvelle route pour valider/cocher les lignes du devis acceptées par le client
+    Route::post('/facturation/{dossier}/valider-devis', [DossierController::class, 'updateDevisValidation'])->name('facturation.valider-devis');
+
+    // Nouvelles routes
+    Route::get('/devis-acceptes', [DossierController::class, 'devisAcceptesIndex'])->name('devis.acceptes');
+    Route::get('/devis-historique', [DossierController::class, 'devisHistoriqueIndex'])->name('devis.historique');
+
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
