@@ -2,6 +2,17 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, usePage } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
+import {
+    faCar,
+    faUser,
+    faGasPump,
+    faNoteSticky,
+    faScrewdriverWrench,
+    faCamera,
+    faCheck,
+    faXmark,
+} from '@fortawesome/free-solid-svg-icons';
 
 const props = defineProps({
     intervention: Object,
@@ -114,7 +125,8 @@ const equipmentsList = [
                         <!-- 1. INFORMATIONS VÉHICULE -->
                         <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-4">
                             <h3 class="text-base font-bold text-gray-900 border-b pb-3 flex items-center gap-2">
-                                🚗 Véhicule Concerné
+                                <font-awesome-icon :icon="faCar" class="text-indigo-500 text-sm" />
+                                Véhicule Concerné
                             </h3>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                                 <div>
@@ -147,7 +159,8 @@ const equipmentsList = [
                         <!-- 2. INFORMATIONS CLIENT -->
                         <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-4">
                             <h3 class="text-base font-bold text-gray-900 border-b pb-3 flex items-center gap-2">
-                                👤 Client / Propriétaire
+                                <font-awesome-icon :icon="faUser" class="text-indigo-500 text-sm" />
+                                Client / Propriétaire
                             </h3>
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                                 <div>
@@ -172,7 +185,8 @@ const equipmentsList = [
                         <!-- 3. CARBURANT & TRAITEMENT -->
                         <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-4">
                             <h3 class="text-base font-bold text-gray-900 border-b pb-3 flex items-center gap-2">
-                                ⛽ Carburant & Traitement
+                                <font-awesome-icon :icon="faGasPump" class="text-indigo-500 text-sm" />
+                                Carburant & Traitement
                             </h3>
                             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
                                 <div>
@@ -199,7 +213,8 @@ const equipmentsList = [
                         <!-- 4. REMARQUES / OBSERVATIONS -->
                         <div v-if="intervention.remarques_eventuelles" class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-2">
                             <h3 class="text-base font-bold text-gray-900 border-b pb-3 flex items-center gap-2">
-                                📝 Remarques et Observations
+                                <font-awesome-icon :icon="faNoteSticky" class="text-indigo-500 text-sm" />
+                                Remarques et Observations
                             </h3>
                             <p class="text-sm text-gray-700 bg-gray-50 p-4 rounded-xl border border-gray-100 whitespace-pre-line">
                                 {{ intervention.remarques_eventuelles }}
@@ -214,13 +229,15 @@ const equipmentsList = [
                         <!-- ÉQUIPEMENTS PRÉSENTS -->
                         <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-4">
                             <h3 class="text-base font-bold text-gray-900 border-b pb-3 flex items-center gap-2">
-                                🛠️ Équipements & Accessoires
+                                <font-awesome-icon :icon="faScrewdriverWrench" class="text-indigo-500 text-sm" />
+                                Équipements & Accessoires
                             </h3>
                             <div class="space-y-2">
                                 <div v-for="eq in equipmentsList" :key="eq.key" class="flex justify-between items-center text-xs py-1 border-b border-gray-50 last:border-0">
                                     <span class="text-gray-700">{{ eq.label }}</span>
-                                    <span :class="['font-bold px-2 py-0.5 rounded', intervention[eq.key] ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400']">
-                                        {{ intervention[eq.key] ? 'Présent ✓' : 'Absent ✗' }}
+                                    <span :class="['font-bold px-2 py-0.5 rounded inline-flex items-center gap-1', intervention[eq.key] ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-400']">
+                                        <font-awesome-icon :icon="intervention[eq.key] ? faCheck : faXmark" class="text-[10px]" />
+                                        {{ intervention[eq.key] ? 'Présent' : 'Absent' }}
                                     </span>
                                 </div>
 
@@ -237,7 +254,8 @@ const equipmentsList = [
                         <!-- PHOTOS D'ÉTAT INITIAL -->
                         <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200 space-y-4">
                             <h3 class="text-base font-bold text-gray-900 border-b pb-3 flex items-center gap-2">
-                                📸 Photos d'État Initial
+                                <font-awesome-icon :icon="faCamera" class="text-indigo-500 text-sm" />
+                                Photos d'État Initial
                             </h3>
                             <div class="grid grid-cols-2 gap-3 text-xs">
                                 <div v-for="photoField in ['photo_avant', 'photo_arriere', 'photo_gauche', 'photo_droite']" :key="photoField" class="space-y-1">

@@ -8,26 +8,34 @@ defineProps({
 });
 
 const page = usePage();
+const user = page.props.auth.user;
 
 // Propriété calculée pour déterminer si l'utilisateur est un mécanicien
 const isMecanicien = computed(() => {
-    const user = page.props.auth.user;
     return user?.role === 'mecanicien' || user?.roles?.some(r => r.name === 'mecanicien');
 });
 
-// Lien de retour dynamique vers le tableau de bord
+// Propriété calculée pour déterminer si l'utilisateur est un administrateur
+const isAdmin = computed(() => {
+    return user?.role === 'admin' || user?.roles?.some(r => r.name === 'admin');
+});
+
+// Lien de retour dynamique selon le rôle
 const backUrl = computed(() => {
     if (isMecanicien.value) {
-        return route('mecanicien.index'); // Espace mécanicien si besoin
+        return route('mecanicien.index');
     }
-    return route('dashboard'); // Tableau de bord général
+    if (isAdmin.value) {
+        return route('admin.users.index'); // Redirige l'admin vers la gestion des utilisateurs
+    }
+    return route('dashboard'); // Tableau de bord général pour l'administratif
 });
 
 // Texte du bouton dynamique
 const backText = computed(() => {
-    return isMecanicien.value 
-        ? '← Retour à mon atelier' 
-        : '← Retour au tableau de bord';
+    if (isMecanicien.value) return '← Retour à mon atelier';
+    if (isAdmin.value) return '← Retour à l\'administration';
+    return '← Retour au tableau de bord';
 });
 </script>
 
@@ -48,7 +56,7 @@ const backText = computed(() => {
                     </p>
                 </div>
 
-                <!-- Bouton de retour au tableau de bord -->
+                <!-- Bouton de retour dynamique -->
                 <Link 
                     :href="backUrl" 
                     class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition"

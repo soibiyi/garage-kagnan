@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Models\Vehicule;
+use App\Models\Client;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -15,8 +17,17 @@ class UserController extends Controller
     public function index()
     {
         $users = User::latest()->get();
+
+        // Calcul des statistiques pour l'affichage sur le tableau de bord admin
+        $stats = [
+            'chiffre_affaires' => '0 FCFA',
+            'nombre_voitures' => Vehicule::count(),
+            'nombre_clients' => Client::count(),
+        ];
+
         return Inertia::render('Admin/Users/Index', [
-            'users' => $users
+            'users' => $users,
+            'stats' => $stats, // On transmet les stats ici
         ]);
     }
 

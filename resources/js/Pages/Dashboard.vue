@@ -294,49 +294,36 @@ const roleInfo = computed(() => {
                 </div>
 
                 <!-- ========================================== -->
-                <!-- 4. VUE : CHARGÉ DE SUIVI CLIENT -->
-                <!-- ========================================== -->
-                <div v-else-if="user?.role === 'charge_client'" class="space-y-8">
-                    <div class="bg-white p-8 sm:p-10 rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 space-y-8">
-                        <div class="flex items-center gap-5 pb-6 border-b border-gray-100">
-                            <div class="w-14 h-14 rounded-2xl bg-[#8A8D8F] flex items-center justify-center text-white shadow-md">
-                                <i class="fa-solid fa-headset text-2xl"></i>
-                            </div>
-                            <div>
-                                <h3 class="text-xl font-black text-[#0B0F19]">Suivi Client & Relances</h3>
-                                <p class="text-sm text-[#8A8D8F] font-medium">Suivez l'état d'avancement des réparations et gérez la communication client.</p>
-                            </div>
-                        </div>
+<!-- 4. VUE : CHARGÉ DE SUIVI CLIENT -->
+<!-- ========================================== -->
+<div v-else-if="user?.role === 'charge_client'" class="space-y-8">
+    <div class="bg-white p-8 sm:p-10 rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 space-y-8">
+        <div class="flex items-center gap-5 pb-6 border-b border-gray-100">
+            <div class="w-14 h-14 rounded-2xl bg-[#0B0F19] flex items-center justify-center text-white shadow-md">
+                <i class="fa-solid fa-headset text-2xl"></i>
+            </div>
+            <div>
+                <h3 class="text-xl font-black text-[#0B0F19]">Suivi Client & Relances</h3>
+                <p class="text-sm text-[#8A8D8F] font-medium">Consultez l'annuaire des clients, leurs véhicules, les alertes d'assurance/SICTA et les devis refusés.</p>
+            </div>
+        </div>
 
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#0B0F19] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs cursor-pointer">
-                                <div class="space-y-1.5">
-                                    <div class="flex items-center gap-2.5 text-[#0B0F19]">
-                                        <i class="fa-solid fa-timeline text-base"></i>
-                                        <h4 class="font-extrabold text-[#0B0F19]">Suivi des Réparations</h4>
-                                    </div>
-                                    <p class="text-xs text-[#8A8D8F] font-medium">État d'avancement en temps réel pour information client.</p>
-                                </div>
-                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#0B0F19] group-hover:bg-[#0B0F19] group-hover:text-white transition-all shadow-xs">
-                                    <i class="fa-solid fa-arrow-right text-xs"></i>
-                                </span>
-                            </div>
-
-                            <div class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#0B0F19] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs cursor-pointer">
-                                <div class="space-y-1.5">
-                                    <div class="flex items-center gap-2.5 text-[#0B0F19]">
-                                        <i class="fa-solid fa-phone-volume text-base"></i>
-                                        <h4 class="font-extrabold text-[#0B0F19]">Journal des Relances</h4>
-                                    </div>
-                                    <p class="text-xs text-[#8A8D8F] font-medium">Appels de restitution et enquêtes de satisfaction.</p>
-                                </div>
-                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#0B0F19] group-hover:bg-[#0B0F19] group-hover:text-white transition-all shadow-xs">
-                                    <i class="fa-solid fa-arrow-right text-xs"></i>
-                                </span>
-                            </div>
-                        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Link :href="route('charge_client.clients.index')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#E11D48] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs">
+                <div class="space-y-1.5">
+                    <div class="flex items-center gap-2.5 text-[#E11D48]">
+                        <i class="fa-solid fa-users text-base"></i>
+                        <h4 class="font-extrabold text-[#0B0F19] group-hover:text-[#E11D48] transition">Annuaire des Clients & Véhicules</h4>
                     </div>
+                    <p class="text-xs text-[#8A8D8F] font-medium">Accéder aux fiches clients, historique, assurances et lignes refusées.</p>
                 </div>
+                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs">
+                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                </span>
+            </Link>
+        </div>
+    </div>
+</div>
 
             </div>
         </div>
