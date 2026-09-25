@@ -11,7 +11,7 @@ use App\Http\Controllers\Administrative\DossierController;
 use App\Models\Intervention; 
 use App\Http\Controllers\Mecanicien\MecanicienController;
 use App\Http\Controllers\Administrative\StockController;
-
+use App\Http\Controllers\ChargeClientController; // <-- Corrigé ici (sans le sous-dossier)[cite: 5]
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -22,15 +22,30 @@ Route::get('/', function () {
     ]);
 });
 
-// 2. Modifie la route du dashboard pour récupérer et passer les interventions en atelier
+// Route du dashboard avec redirection automatique pour l'admin
 Route::get('/dashboard', function () {
+    // Si l'utilisateur est un admin, on le renvoie directement sur sa gestion des utilisateurs
+    if (auth()->user()->role === 'admin') {
+        return redirect()->route('admin.users.index');
+    }
+
     $interventionsAtelier = Intervention::with(['vehicule.client', 'receptionniste', 'mecanicien'])
         ->whereIn('statut', ['atelier', 'en_cours', 'attente_accord'])
         ->latest('date_reception')
         ->get();
 
+    $users = \App\Models\User::all();
+    
+    $stats = [
+        'chiffre_affaires' => '0 FCFA', 
+        'nombre_voitures' => \App\Models\Vehicule::count(),
+        'nombre_clients' => \App\Models\Client::count(),
+    ];
+
     return Inertia::render('Dashboard', [
         'interventionsAtelier' => $interventionsAtelier,
+        'users' => $users,
+        'stats' => $stats,
     ]);
 })->middleware(['auth', 'verified'])->name('dashboard');
 
@@ -68,17 +83,28 @@ Route::middleware(['auth'])->prefix('parc')->name('parc.')->group(function () {
     Route::patch('/{id}/avancer', [VehiculeParcController::class, 'updateProgress'])->name('progress'); 
 });
 
+// ==========================================
+// Routes Chargé de Suivi Client
+// ==========================================
+Route::middleware(['auth', 'verified'])->prefix('suivi-client')->name('charge_client.')->group(function () {
+    Route::get('/clients', [ChargeClientController::class, 'index'])->name('clients.index');
+    Route::get('/clients/{client}', [ChargeClientController::class, 'showClient'])->name('clients.show');
+    Route::get('/vehicules/{vehicule}', [ChargeClientController::class, 'showVehicule'])->name('vehicules.show');
+});
+
 // Routes Administration (Dossiers & Devis)
 Route::middleware(['auth'])->prefix('administration')->name('administration.')->group(function () {
     Route::get('/dossiers', [DossierController::class, 'index'])->name('dossiers.index');
     Route::get('/dossiers/{dossier}', [DossierController::class, 'show'])->name('dossiers.show');
     Route::post('/dossiers/{dossier}/devis', [DossierController::class, 'storeDevis'])->name('devis.store');
 
-    // FACTURATION & RÈGLEMENTS (Géré directement dans DossierController)
+    // FACTURATION & RÈGLEMENTS
     Route::get('/facturation', [DossierController::class, 'facturationIndex'])->name('facturation.index');
     Route::get('/facturation/{dossier}', [DossierController::class, 'facturationShow'])->name('facturation.show');
-    // Nouvelle route pour valider/cocher les lignes du devis acceptées par le client
     Route::post('/facturation/{dossier}/valider-devis', [DossierController::class, 'updateDevisValidation'])->name('facturation.valider-devis');
+
+    // Route globale pour voir TOUS les devis
+    Route::get('/devis', [DossierController::class, 'devisIndex'])->name('devis.index');
 
     // Nouvelles routes
     Route::get('/devis-acceptes', [DossierController::class, 'devisAcceptesIndex'])->name('devis.acceptes');
@@ -98,16 +124,15 @@ Route::middleware(['auth'])->prefix('administration')->name('administration.')->
     Route::get('/devis-directs/rechercher-pieces', [DossierController::class, 'rechercherPieces'])
     ->name('devis.directs.rechercher-pieces');
 
-     Route::get('/', [StockController::class, 'index'])->name('stocks.index');
-    Route::post('/', [StockController::class, 'store'])->name('stocks.store');
-    Route::put('/{stock}', [StockController::class, 'update'])->name('stocks.update');
-    Route::delete('/{stock}', [StockController::class, 'destroy'])->name('stocks.destroy');
+    Route::get('/stocks', [StockController::class, 'index'])->name('stocks.index');
+    Route::post('/stocks', [StockController::class, 'store'])->name('stocks.store');
+    Route::put('/stocks/{stock}', [StockController::class, 'update'])->name('stocks.update');
+    Route::delete('/stocks/{stock}', [StockController::class, 'destroy'])->name('stocks.destroy');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/mecanicien/interventions', [MecanicienController::class, 'index'])->name('mecanicien.index');
     Route::patch('/mecanicien/interventions/{intervention}/progres', [MecanicienController::class, 'progress'])->name('mecanicien.progress');
 });
-
 
 require __DIR__.'/auth.php';

@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\Administrative;
 
 use App\Http\Controllers\Controller;
@@ -130,7 +131,7 @@ class DossierController extends Controller
                     'montant_ht' => $ht,
                     'montant_ttc' => $ttc,
                     'ne_pas_appliquer_tva' => $nePasAppliquerTva,
-                    'type' => !empty($ligne['reference_piece']) ? 'piece' : 'main_d_oeuvre', // Vous pouvez ajuster dynamiquement si besoin
+                    'type' => !empty($ligne['reference_piece']) ? 'piece' : 'main_d_oeuvre',
                 ]);
             }
 
@@ -140,6 +141,19 @@ class DossierController extends Controller
 
         return redirect()->route('administration.dossiers.index')
             ->with('success', 'Devis enregistré avec succès.');
+    }
+
+    // NOUVELLE MÉTHODE : Vue globale de tous les devis pour l'administration
+    public function devisIndex()
+    {
+        $dossiers = Intervention::with(['vehicule.client', 'devis.lignes', 'mecanicien', 'receptionniste'])
+            ->has('devis')
+            ->latest()
+            ->get();
+
+        return Inertia::render('Administration/DevisIndex', [
+            'dossiers' => $dossiers
+        ]);
     }
 
     // NOUVELLE VUE : Devis validés par le client
@@ -168,8 +182,7 @@ class DossierController extends Controller
         ]);
     }
 
-
-  // Affiche la liste des devis directs directement dans la vue principale
+    // Affiche la liste des devis directs
     public function devisDirectIndex()
     {
         $devisDirects = Intervention::with(['vehicule.client', 'devis.lignes', 'receptionniste'])
@@ -182,7 +195,7 @@ class DossierController extends Controller
         ]);
     }
 
-    // Affiche le formulaire de création d'un devis direct (avec la liste des véhicules)
+    // Affiche le formulaire de création d'un devis direct
     public function devisDirectCreate()
     {
         $vehicules = \App\Models\Vehicule::with('client')->latest()->get();
@@ -192,122 +205,118 @@ class DossierController extends Controller
         ]);
     }
 
-    // (La méthode storeDevisDirect reste identique à votre code fourni)
     public function storeDevisDirect(Request $request)
-{
-    $request->validate([
-        'vehicule_id' => 'nullable|exists:vehicules,id',
-        'nouveau_client_nom' => 'required_without:vehicule_id|nullable|string|max:255',
-        'nouveau_client_prenom' => 'nullable|string|max:255',
-        'nouvelle_marque' => 'required_without:vehicule_id|nullable|string|max:255',
-        'nouveau_modele' => 'required_without:vehicule_id|nullable|string|max:255',
-        'remarques' => 'nullable|string',
-        'lignes' => 'required|array|min:1',
-        'lignes.*.quantite' => 'required|numeric|min:0',
-        'lignes.*.designation' => 'required|string',
-        'lignes.*.pu_net' => 'required|numeric|min:0',
-        'lignes.*.remise' => 'nullable|numeric|min:0',
-        'lignes.*.reference_piece' => 'nullable|string',
-        'lignes.*.ne_pas_appliquer_tva' => 'nullable|boolean',
-    ]);
-
-    DB::transaction(function () use ($request) {
-        $vehiculeId =$request->vehicule_id;
-
-        if (!$vehiculeId) {$client = \App\Models\Client::firstOrCreate(
-                ['nom' => $request->nouveau_client_nom],
-                [
-                    'prenom' => $request->nouveau_client_prenom ?? '', 
-                    'telephone' => $request->nouveau_client_telephone ?? '00000000'
-                ]
-            );
-
-            $vehicule = \App\Models\Vehicule::create([
-                'client_id' => $client->id,
-                'marque' => $request->nouvelle_marque,
-                'modele' => $request->nouveau_modele,
-                'immatriculation' => '', // Chaîne vide pour respecter la contrainte NOT NULL de la BDD
-            ]);
-
-            $vehiculeId =$vehicule->id;
-        }
-
-        $dossier = Intervention::create([
-            'vehicule_id' => $vehiculeId,
-            'circuit' => 'devis_direct',
-            'kilometrage' => 0, // Pré-rempli à 0
-            'date_reception' => now(),
-            'receptionniste_id' => auth()->id(),
-            'statut' => 'attente_accord',
-            'remarques_eventuelles' => $request->remarques ?? 'Devis direct comptoir.',
+    {
+        $request->validate([
+            'vehicule_id' => 'nullable|exists:vehicules,id',
+            'nouveau_client_nom' => 'required_without:vehicule_id|nullable|string|max:255',
+            'nouveau_client_prenom' => 'nullable|string|max:255',
+            'nouvelle_marque' => 'required_without:vehicule_id|nullable|string|max:255',
+            'nouveau_modele' => 'required_without:vehicule_id|nullable|string|max:255',
+            'remarques' => 'nullable|string',
+            'lignes' => 'required|array|min:1',
+            'lignes.*.quantite' => 'required|numeric|min:0',
+            'lignes.*.designation' => 'required|string',
+            'lignes.*.pu_net' => 'required|numeric|min:0',
+            'lignes.*.remise' => 'nullable|numeric|min:0',
+            'lignes.*.reference_piece' => 'nullable|string',
+            'lignes.*.ne_pas_appliquer_tva' => 'nullable|boolean',
         ]);
 
-        $devis = Devis::create([
-            'intervention_id' => $dossier->id,
-            'createur_id' => auth()->id(),
-            'statut' => 'en_attente',
-        ]);
+        DB::transaction(function () use ($request) {
+            $vehiculeId = $request->vehicule_id;
 
-        foreach ($request->lignes as$ligne) {
-            $qte =$ligne['quantite'] ?? 1;
-            $pu =$ligne['pu_net'] ?? 0;
-            $remise =$ligne['remise'] ?? 0;
-            
-            $ht = ($qte * $pu) -$remise;
-            $nePasAppliquerTva =$ligne['ne_pas_appliquer_tva'] ?? false;
-            $ttc =$nePasAppliquerTva ? $ht :$ht * 1.18;
+            if (!$vehiculeId) {
+                $client = \App\Models\Client::firstOrCreate(
+                    ['nom' => $request->nouveau_client_nom],
+                    [
+                        'prenom' => $request->nouveau_client_prenom ?? '', 
+                        'telephone' => $request->nouveau_client_telephone ?? '00000000'
+                    ]
+                );
 
-            LigneDevis::create([
-                'devis_id' => $devis->id,
-                'quantite' => $qte,
-                'designation' => $ligne['designation'],
-                'reference_piece' => $ligne['reference_piece'] ?? null,
-                'pu_net' => $pu,
-                `remise` => $remise,
-                'montant_ht' => $ht,
-                'montant_ttc' => $ttc,
-                'ne_pas_appliquer_tva' => $nePasAppliquerTva,
-                'type' => !empty($ligne['reference_piece']) ? 'piece' : 'main_d_oeuvre',
+                $vehicule = \App\Models\Vehicule::create([
+                    'client_id' => $client->id,
+                    'marque' => $request->nouvelle_marque,
+                    'modele' => $request->nouveau_modele,
+                    'immatriculation' => '', 
+                ]);
+
+                $vehiculeId = $vehicule->id;
+            }
+
+            $dossier = Intervention::create([
+                'vehicule_id' => $vehiculeId,
+                'circuit' => 'devis_direct',
+                'kilometrage' => 0, 
+                'date_reception' => now(),
+                'receptionniste_id' => auth()->id(),
+                'statut' => 'attente_accord',
+                'remarques_eventuelles' => $request->remarques ?? 'Devis direct comptoir.',
             ]);
-        }
-    });
 
-    return redirect()->route('administration.devis.directs.index')
-        ->with('success', 'Devis direct enregistré avec succès.');
-}
+            $devis = Devis::create([
+                'intervention_id' => $dossier->id,
+                'createur_id' => auth()->id(),
+                'statut' => 'en_attente',
+            ]);
 
+            foreach ($request->lignes as $ligne) {
+                $qte = $ligne['quantite'] ?? 1;
+                $pu = $ligne['pu_net'] ?? 0;
+                $remise = $ligne['remise'] ?? 0;
+                
+                $ht = ($qte * $pu) - $remise;
+                $nePasAppliquerTva = $ligne['ne_pas_appliquer_tva'] ?? false;
+                $ttc = $nePasAppliquerTva ? $ht : $ht * 1.18;
 
-   // Méthode pour rechercher des pièces dans le stock selon le véhicule et la désignation
-public function rechercherPieces(Request $request, Intervention $dossier = null)
-{
-    $marque = $request->input('marque');
-    $modele = $request->input('modele');
+                LigneDevis::create([
+                    'devis_id' => $devis->id,
+                    'quantite' => $qte,
+                    'designation' => $ligne['designation'],
+                    'reference_piece' => $ligne['reference_piece'] ?? null,
+                    'pu_net' => $pu,
+                    'remise' => $remise,
+                    'montant_ht' => $ht,
+                    'montant_ttc' => $ttc,
+                    'ne_pas_appliquer_tva' => $nePasAppliquerTva,
+                    'type' => !empty($ligne['reference_piece']) ? 'piece' : 'main_d_oeuvre',
+                ]);
+            }
+        });
 
-    // Si un dossier est passé dans l'URL, on peut aussi récupérer ses infos de véhicule directement
-    if ($dossier && $dossier->vehicule) {
-        $marque = $marque ?: $dossier->vehicule->marque;
-        $modele = $modele ?: $dossier->vehicule->modele;
+        return redirect()->route('administration.devis.directs.index')
+            ->with('success', 'Devis direct enregistré avec succès.');
     }
 
-    $query = $request->input('q', ''); // Texte saisi par l'utilisateur
+    public function rechercherPieces(Request $request, Intervention $dossier = null)
+    {
+        $marque = $request->input('marque');
+        $modele = $request->input('modele');
 
-    $stocks = Stock::query()
-        ->when($marque, function ($q) use ($marque) {
-            $q->where('marque', 'LIKE', "%{$marque}%");
-        })
-        ->when($modele, function ($q) use ($modele) {
-            $q->where('modele', 'LIKE', "%{$modele}%");
-        })
-        ->when($query, function ($q) use ($query) {
-            $q->where(function($sub) use ($query) {
-                $sub->where('designation_piece', 'LIKE', "%{$query}%")
-                    ->orWhere('reference', 'LIKE', "%{$query}%");
-            });
-        })
-        ->limit(15)
-        ->get();
+        if ($dossier && $dossier->vehicule) {
+            $marque = $marque ?: $dossier->vehicule->marque;
+            $modele = $modele ?: $dossier->vehicule->modele;
+        }
 
-    return response()->json($stocks);
-}
+        $query = $request->input('q', ''); 
 
+        $stocks = Stock::query()
+            ->when($marque, function ($q) use ($marque) {
+                $q->where('marque', 'LIKE', "%{$marque}%");
+            })
+            ->when($modele, function ($q) use ($modele) {
+                $q->where('modele', 'LIKE', "%{$modele}%");
+            })
+            ->when($query, function ($q) use ($query) {
+                $q->where(function($sub) use ($query) {
+                    $sub->where('designation_piece', 'LIKE', "%{$query}%")
+                        ->orWhere('reference', 'LIKE', "%{$query}%");
+                });
+            })
+            ->limit(15)
+            ->get();
+
+        return response()->json($stocks);
+    }
 }
