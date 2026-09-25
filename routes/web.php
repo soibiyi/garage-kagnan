@@ -2,14 +2,15 @@
 
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Admin\UserController;
-use App\Http\Controllers\Reception\ReceptionController; // Import du contrôleur Réceptionniste
+use App\Http\Controllers\Reception\ReceptionController; 
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\Reception\VehiculeParcController;
 use App\Http\Controllers\Administrative\DossierController;
-use App\Models\Intervention; // <-- 1. Importe le modèle Intervention ici
+use App\Models\Intervention; 
 use App\Http\Controllers\Mecanicien\MecanicienController;
+use App\Http\Controllers\Administrative\StockController;
 
 
 Route::get('/', function () {
@@ -90,11 +91,23 @@ Route::middleware(['auth'])->prefix('administration')->name('administration.')->
     Route::get('/devis-directs', [DossierController::class, 'devisDirectIndex'])->name('devis.directs.index');
     Route::get('/devis-directs/create', [DossierController::class, 'devisDirectCreate'])->name('devis.directs.create');
     Route::post('/devis-directs', [DossierController::class, 'storeDevisDirect'])->name('devis.directs.store');
+
+    Route::get('/dossiers/{dossier}/rechercher-pieces', [DossierController::class, 'rechercherPieces'])
+    ->name('dossiers.rechercher-pieces');
+
+    Route::get('/devis-directs/rechercher-pieces', [DossierController::class, 'rechercherPieces'])
+    ->name('devis.directs.rechercher-pieces');
+
+     Route::get('/', [StockController::class, 'index'])->name('stocks.index');
+    Route::post('/', [StockController::class, 'store'])->name('stocks.store');
+    Route::put('/{stock}', [StockController::class, 'update'])->name('stocks.update');
+    Route::delete('/{stock}', [StockController::class, 'destroy'])->name('stocks.destroy');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/mecanicien/interventions', [MecanicienController::class, 'index'])->name('mecanicien.index');
     Route::patch('/mecanicien/interventions/{intervention}/progres', [MecanicienController::class, 'progress'])->name('mecanicien.progress');
 });
+
 
 require __DIR__.'/auth.php';

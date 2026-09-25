@@ -1,7 +1,8 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
+import axios from 'axios';
 
 const props = defineProps({
     dossier: Object,
@@ -20,6 +21,56 @@ const form = useForm({
         }
     ],
 });
+
+// États pour la gestion de l'autocomplétion des pièces par ligne
+const activeDropdownIndex = ref(null);
+const searchResults = ref([]);
+const isLoadingPieces = ref(false);
+
+// Rechercher des pièces dans le stock
+const rechercherPiecesStock = async (ligne, index) => {
+    console.log("La fonction est bien appelée !", ligne.designation); // <-- Ajoutez ceci
+    activeDropdownIndex.value = index;
+    const query = ligne.designation || '';
+
+    if (query.length < 1) {
+        searchResults.value = [];
+        return;
+    }
+
+    isLoadingPieces.value = true;
+    try {
+        const marque = props.dossier.vehicule?.marque || '';
+        const modele = props.dossier.vehicule?.modele || '';
+        
+        const response = await axios.get(route('administration.dossiers.rechercher-pieces', props.dossier.id), {
+            params: { marque, modele, q: query }
+        });
+        searchResults.value = response.data;
+    } catch (error) {
+        console.error("Erreur lors de la recherche des pièces:", error);
+        searchResults.value = [];
+    } finally {
+        isLoadingPieces.value = false;
+    }
+};
+
+// Sélectionner une pièce depuis les résultats
+const selectionnerPiece = (ligne, piece) => {
+    ligne.designation = piece.designation_piece || '';
+    ligne.reference_piece = piece.reference || '';
+    // Utilisation du prix kagnan HT ou prix marché selon votre préférence (ici prix_kagnan_ht ou prix_ttc_kagnan)
+    ligne.pu_net = parseFloat(piece.prix_kagnan_ht) || parseFloat(piece.prix_marche_ht) || 0;
+    activeDropdownIndex.value = null;
+    searchResults.value = [];
+};
+
+// Fermer les suggestions si on clique ailleurs
+const fermerSuggestions = () => {
+    setTimeout(() => {
+        activeDropdownIndex.value = null;
+    }, 200);
+};
 
 // Ajouter une nouvelle ligne vide
 const ajouterLigne = () => {
@@ -143,7 +194,6 @@ const submitDevis = () => {
                             <table class="min-w-full divide-y divide-slate-200 text-left text-xs">
                                 <thead class="bg-slate-100 text-slate-500 uppercase tracking-wider text-[10px]">
                                     <tr>
-                                        <!-- Largeur augmentée à w-24 pour éviter que le nombre soit coupé -->
                                         <th class="px-3 py-3 font-semibold w-24 text-center">Qté</th>
                                         <th class="px-3 py-3 font-semibold">Désignation</th>
                                         <th class="px-3 py-3 font-semibold w-32">Réf. Pièce</th>
@@ -168,15 +218,38 @@ const submitDevis = () => {
                                                 class="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs text-center font-bold text-slate-900 focus:border-[#E11D48] focus:ring-1 focus:ring-[#E11D48]"
                                             />
                                         </td>
-                                        <!-- Désignation -->
-                                        <td class="px-3 py-3">
-                                            <input 
-                                                type="text" 
-                                                v-model="ligne.designation" 
-                                                placeholder="Libellé de la prestation..."
-                                                class="w-full bg-white border border-slate-300 rounded-lg text-xs uppercase text-slate-900 focus:border-[#E11D48] focus:ring-1 focus:ring-[#E11D48]"
-                                            />
-                                        </td>
+                                        <!-- Désignation avec autocomplétion -->
+                                        <!-- Désignation avec autocomplétion -->
+<td class="px-3 py-3 overflow-visible"> <!-- Retirez 'relative' et ajoutez 'overflow-visible' si besoin -->
+    <div class="relative w-full"> <!-- Conteneur dédié en relative -->
+        <input 
+            type="text" 
+            v-model="ligne.designation" 
+            @input="rechercherPiecesStock(ligne, index)"
+            @focus="rechercherPiecesStock(ligne, index)"
+            @blur="fermerSuggestions"
+            placeholder="Libellé de la prestation ou pièce..."
+            autocomplete="off"
+            class="w-full bg-white border border-slate-300 rounded-lg text-xs uppercase text-slate-900 focus:border-[#E11D48] focus:ring-1 focus:ring-[#E11D48]"
+        />
+        
+        <!-- Liste déroulante des suggestions de stock -->
+        <div v-if="activeDropdownIndex === index && searchResults.length > 0" class="absolute left-0 right-0 z-[999] mt-1 bg-white border border-slate-200 rounded-lg shadow-2xl max-h-48 overflow-y-auto">
+            <div 
+                v-for="piece in searchResults" 
+                :key="piece.id"
+                @mousedown.prevent="selectionnerPiece(ligne, piece)"
+                class="px-3 py-2 hover:bg-slate-100 cursor-pointer text-xs border-b border-slate-100 last:border-none flex justify-between items-center"
+            >
+                <div>
+                    <span class="font-bold text-slate-800 uppercase">{{ piece.designation_piece }}</span>
+                    <span class="text-[10px] text-slate-400 block" v-if="piece.reference">Réf: {{ piece.reference }}</span>
+                </div>
+                <span class="font-mono text-[#E11D48] font-semibold">{{ piece.prix_kagnan_ht || piece.prix_marche_ht || 0 }} F</span>
+            </div>
+        </div>
+    </div>
+</td>
                                         <!-- Référence -->
                                         <td class="px-3 py-3">
                                             <input 
@@ -188,7 +261,7 @@ const submitDevis = () => {
                                         </td>
                                         <!-- Bouton associer pièce -->
                                         <td class="px-3 py-3 text-center">
-                                            <button type="button" class="w-7 h-7 bg-white hover:bg-slate-200 text-slate-500 hover:text-slate-900 rounded-lg flex items-center justify-center border border-slate-300 transition mx-auto shadow-sm" title="Rechercher une pièce">
+                                            <button type="button" @click="rechercherPiecesStock(ligne, index)" class="w-7 h-7 bg-white hover:bg-slate-200 text-slate-500 hover:text-slate-900 rounded-lg flex items-center justify-center border border-slate-300 transition mx-auto shadow-sm" title="Rechercher une pièce dans le stock">
                                                 <i class="fa-solid fa-magnifying-glass text-[11px]"></i>
                                             </button>
                                         </td>

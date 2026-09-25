@@ -2,22 +2,22 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
+import axios from 'axios'; // Import d'Axios pour la recherche de pièces
 
 const props = defineProps({
-    vehicules: Array,
+    vehicules: Array, // Gardé au cas où, mais non utilisé vu qu'on est en mode manuel direct
 });
 
-// Mode de sélection : 'existant' ou 'manuel'
-const modeClient = ref('existant');
+// Variables d'état pour l'autocomplétion des pièces
+const activeDropdownIndex = ref(null);
+const searchResults = ref([]);
 
 const form = useForm({
     vehicule_id: '',
     nouveau_client_nom: '',
-    nouveau_client_prenom: '', // Ajout du prénom
+    nouveau_client_prenom: '', 
     nouvelle_marque: '',
     nouveau_modele: '',
-    nouvelle_immatriculation: '',
-    kilometrage: 0,
     remarques: '',
     lignes: [
         {
@@ -30,6 +30,47 @@ const form = useForm({
         }
     ],
 });
+
+// --- LOGIQUE D'AUTOCOMPLÉTION DES PIÈCES ---
+const rechercherPiecesStock = (ligne, index) => {
+    activeDropdownIndex.value = index;
+    const query = ligne.designation;
+
+    if (!query || query.trim().length === 0) {
+        searchResults.value = [];
+        return;
+    }
+
+    // Appel de la route spécifique aux devis directs
+    axios.get(route('administration.devis.directs.rechercher-pieces'), { 
+        params: { 
+            q: query,
+            marque: form.nouvelle_marque,
+            modele: form.nouveau_modele
+        } 
+    })
+    .then(response => {
+        searchResults.value = response.data;
+    })
+    .catch(error => {
+        console.error("Erreur lors de la recherche de pièces :", error);
+        searchResults.value = [];
+    });
+};
+
+const selectionnerPiece = (ligne, piece) => {
+    ligne.designation = piece.designation_piece || '';
+    ligne.reference_piece = piece.reference || '';
+    ligne.pu_net = piece.prix_kagnan_ht || piece.prix_marche_ht || 0;
+    activeDropdownIndex.value = null;
+    searchResults.value = [];
+};
+
+const fermerSuggestions = () => {
+    setTimeout(() => {
+        activeDropdownIndex.value = null;
+    }, 200);
+};
 
 // Ajouter une nouvelle ligne vide
 const ajouterLigne = () => {
@@ -111,74 +152,36 @@ const submitDevis = () => {
                 
                 <form @submit.prevent="submitDevis" class="space-y-6">
                     
-                    <!-- SECTION CHOIX CLIENT / VÉHICULE -->
-                    <div class="bg-slate-50 p-5 rounded-xl shadow-sm border border-slate-200 space-y-4">
-                        <div class="flex items-center justify-between border-b border-slate-200 pb-3">
-                            <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-                                <i class="fa-solid fa-car text-[#E11D48]"></i>
-                                <span>Informations du Véhicule & Propriétaire</span>
-                            </h3>
-                            <div class="flex gap-2">
-                                <button 
-                                    type="button" 
-                                    @click="modeClient = 'existant'" 
-                                    :class="modeClient === 'existant' ? 'bg-[#E11D48] text-white' : 'bg-white text-slate-700 border border-slate-300'"
-                                    class="px-3 py-1 rounded-lg text-xs font-semibold transition"
-                                >
-                                    Client Existant
-                                </button>
-                                <button 
-                                    type="button" 
-                                    @click="modeClient = 'manuel'; form.vehicule_id = ''" 
-                                    :class="modeClient === 'manuel' ? 'bg-[#E11D48] text-white' : 'bg-white text-slate-700 border border-slate-300'"
-                                    class="px-3 py-1 rounded-lg text-xs font-semibold transition"
-                                >
-                                    Nouveau Client / Manuel
-                                </button>
-                            </div>
-                        </div>
+                    <!-- SECTION CLIENT & VÉHICULE (Saisie Manuelle Directe) -->
+                    <!-- SECTION CLIENT & VÉHICULE (Saisie Manuelle Directe allégée) -->
+<div class="bg-slate-50 p-5 rounded-xl shadow-sm border border-slate-200 space-y-4">
+    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+        <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+            <i class="fa-solid fa-car text-[#E11D48]"></i>
+            <span>Informations du Client & Véhicule</span>
+        </h3>
+    </div>
 
-                        <!-- Si Client Existant -->
-                        <div v-if="modeClient === 'existant'" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Sélectionner le Véhicule / Client</label>
-                                <select v-model="form.vehicule_id" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48] focus:ring-1 focus:ring-[#E11D48]">
-                                    <option value="">-- Choisir un véhicule --</option>
-                                    <option v-for="vehicule in vehicules" :key="vehicule.id" :value="vehicule.id">
-                                        {{ vehicule.client?.name || vehicule.client?.nom || 'Client inconnu' }} - {{ vehicule.marque }} {{ vehicule.modele }} [{{ vehicule.immatriculation }}]
-                                    </option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Kilométrage</label>
-                                <input type="number" v-model="form.kilometrage" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" placeholder="Ex: 45000" />
-                            </div>
-                        </div>
-
-                        <!-- Si Nouveau Client / Saisie Manuelle -->
-                        <div v-else class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Nom du Client</label>
-                                <input type="text" v-model="form.nouveau_client_nom" placeholder="Ex: Kouassi" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Prénom du Client</label>
-                                <input type="text" v-model="form.nouveau_client_prenom" placeholder="Ex: Jean" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Marque du Véhicule</label>
-                                <input type="text" v-model="form.nouvelle_marque" placeholder="Ex: Toyota" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Modèle du Véhicule</label>
-                                <input type="text" v-model="form.nouveau_modele" placeholder="Ex: Corolla" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Immatriculation</label>
-                                <input type="text" v-model="form.nouvelle_immatriculation" placeholder="Ex: AB-123-CD" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
-                            </div>
-                        </div>
-                    </div>
+    <!-- Formulaire direct allégé (4 colonnes) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Nom du Client</label>
+            <input type="text" v-model="form.nouveau_client_nom" placeholder="Ex: Kouassi" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+        </div>
+        <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Prénom du Client</label>
+            <input type="text" v-model="form.nouveau_client_prenom" placeholder="Ex: Jean" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+        </div>
+        <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Marque du Véhicule</label>
+            <input type="text" v-model="form.nouvelle_marque" placeholder="Ex: Toyota" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+        </div>
+        <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">Modèle du Véhicule</label>
+            <input type="text" v-model="form.nouveau_modele" placeholder="Ex: Corolla" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+        </div>
+    </div>
+</div>
 
                     <!-- TABLEAU DE SAISIE DU DEVIS -->
                     <div class="bg-slate-50 rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -187,9 +190,8 @@ const submitDevis = () => {
                                 <thead class="bg-slate-100 text-slate-500 uppercase tracking-wider text-[10px]">
                                     <tr>
                                         <th class="px-3 py-3 font-semibold w-24 text-center">Qté</th>
-                                        <th class="px-3 py-3 font-semibold">Désignation</th>
+                                        <th class="px-3 py-3 font-semibold">Désignation (Autocomplétion)</th>
                                         <th class="px-3 py-3 font-semibold w-32">Réf. Pièce</th>
-                                        <th class="px-3 py-3 font-semibold w-12 text-center">Stock</th>
                                         <th class="px-3 py-3 font-semibold w-28 text-right">PU Net</th>
                                         <th class="px-3 py-3 font-semibold w-24 text-right">Remise</th>
                                         <th class="px-3 py-3 font-semibold w-28 text-right">Total HT</th>
@@ -204,40 +206,69 @@ const submitDevis = () => {
                                         <td class="px-3 py-3 text-center">
                                             <input type="number" v-model="ligne.quantite" min="0" step="any" class="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs text-center font-bold text-slate-900 focus:border-[#E11D48]" />
                                         </td>
-                                        <!-- Désignation -->
-                                        <td class="px-3 py-3">
-                                            <input type="text" v-model="ligne.designation" placeholder="Libellé de la prestation..." class="w-full bg-white border border-slate-300 rounded-lg text-xs uppercase text-slate-900 focus:border-[#E11D48]" />
+                                        
+                                        <!-- Désignation avec Autocomplétion intégrée -->
+                                        <td class="px-3 py-3 overflow-visible">
+                                            <div class="relative w-full">
+                                                <input 
+                                                    type="text" 
+                                                    v-model="ligne.designation" 
+                                                    @input="rechercherPiecesStock(ligne, index)"
+                                                    @focus="rechercherPiecesStock(ligne, index)"
+                                                    @blur="fermerSuggestions"
+                                                    placeholder="Libellé de la prestation ou pièce..." 
+                                                    autocomplete="off"
+                                                    class="w-full bg-white border border-slate-300 rounded-lg text-xs uppercase text-slate-900 focus:border-[#E11D48] focus:ring-1 focus:ring-[#E11D48]" 
+                                                />
+                                                
+                                                <!-- Dropdown de résultats -->
+                                                <div v-if="activeDropdownIndex === index && searchResults.length > 0" class="absolute left-0 right-0 z-[999] mt-1 bg-white border border-slate-200 rounded-lg shadow-2xl max-h-48 overflow-y-auto">
+                                                    <div 
+                                                        v-for="piece in searchResults" 
+                                                        :key="piece.id"
+                                                        @mousedown.prevent="selectionnerPiece(ligne, piece)"
+                                                        class="px-3 py-2 hover:bg-slate-100 cursor-pointer text-xs border-b border-slate-100 last:border-none flex justify-between items-center"
+                                                    >
+                                                        <div>
+                                                            <span class="font-bold text-slate-800 uppercase">{{ piece.designation_piece }}</span>
+                                                            <span class="text-[10px] text-slate-400 block" v-if="piece.reference">Réf: {{ piece.reference }}</span>
+                                                        </div>
+                                                        <span class="font-mono text-[#E11D48] font-semibold">{{ piece.prix_kagnan_ht || piece.prix_marche_ht || 0 }} F</span>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </td>
+
                                         <!-- Référence -->
                                         <td class="px-3 py-3">
                                             <input type="text" v-model="ligne.reference_piece" placeholder="Réf..." class="w-full bg-white border border-slate-300 rounded-lg text-xs uppercase text-slate-900 focus:border-[#E11D48]" />
                                         </td>
-                                        <!-- Bouton associer pièce -->
-                                        <td class="px-3 py-3 text-center">
-                                            <button type="button" class="w-7 h-7 bg-white hover:bg-slate-200 text-slate-500 rounded-lg flex items-center justify-center border border-slate-300 transition mx-auto shadow-sm" title="Rechercher une pièce">
-                                                <i class="fa-solid fa-magnifying-glass text-[11px]"></i>
-                                            </button>
-                                        </td>
+                                        
                                         <!-- PU Net -->
                                         <td class="px-3 py-3">
                                             <input type="number" v-model="ligne.pu_net" step="0.01" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-right text-slate-900 focus:border-[#E11D48]" />
                                         </td>
+                                        
                                         <!-- Remise -->
                                         <td class="px-3 py-3">
                                             <input type="number" v-model="ligne.remise" step="0.01" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-right text-slate-900 focus:border-[#E11D48]" />
                                         </td>
+                                        
                                         <!-- Montant HT -->
                                         <td class="px-3 py-3 text-right">
                                             <span class="font-mono font-semibold text-slate-700">{{ calculerMontantHt(ligne).toLocaleString() }}</span>
                                         </td>
+                                        
                                         <!-- Total TTC -->
                                         <td class="px-3 py-3 text-right">
                                             <span class="font-mono font-bold text-slate-900">{{ calculerTotalTtc(ligne).toLocaleString() }}</span>
                                         </td>
+                                        
                                         <!-- Exempt TVA -->
                                         <td class="px-3 py-3 text-center">
                                             <input type="checkbox" v-model="ligne.ne_pas_appliquer_tva" class="rounded bg-white border-slate-300 text-[#E11D48] w-4 h-4 cursor-pointer" />
                                         </td>
+                                        
                                         <!-- Supprimer -->
                                         <td class="px-3 py-3 text-center">
                                             <button type="button" @click="supprimerLigne(index)" class="w-7 h-7 bg-rose-50 hover:bg-rose-500 text-rose-500 hover:text-white rounded-lg flex items-center justify-center transition mx-auto border border-rose-200">
@@ -265,7 +296,7 @@ const submitDevis = () => {
                             <div class="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-[#E11D48] shrink-0 shadow-sm">
                                 <i class="fa-solid fa-circle-info"></i>
                             </div>
-                            <p>Vérifiez scrupuleusement les quantités, les prix unitaires et l'application ou non de la TVA avant d'émettre officiellement le devis direct.</p>
+                            <p>Vérifiez scrupuleusement les informations client, les quantités, les prix unitaires et l'application ou non de la TVA avant d'émettre officiellement le devis direct.</p>
                         </div>
 
                         <div class="w-full md:w-auto flex flex-col items-end gap-2 text-right">
@@ -289,4 +320,4 @@ const submitDevis = () => {
             </div>
         </div>
     </AuthenticatedLayout>
-</template> 
+</template>
