@@ -215,7 +215,7 @@ const roleInfo = computed(() => {
                                     </div>
                                     <p class="text-xs text-[#8A8D8F] font-medium">Chiffrages pièces et main-d'œuvre à transformer.</p>
                                 </div>
-                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs">
+                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs shrink-0">
                                     <i class="fa-solid fa-arrow-right text-xs"></i>
                                 </span>
                             </Link>
@@ -229,7 +229,7 @@ const roleInfo = computed(() => {
                                     </div>
                                     <p class="text-xs text-[#8A8D8F] font-medium">Saisir les choix du client et enregistrer.</p>
                                 </div>
-                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs">
+                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs shrink-0">
                                     <i class="fa-solid fa-arrow-right text-xs"></i>
                                 </span>
                             </Link>
@@ -243,7 +243,7 @@ const roleInfo = computed(() => {
                                     </div>
                                     <p class="text-xs text-[#8A8D8F] font-medium">Dossiers dont l'accord client a été enregistré.</p>
                                 </div>
-                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs">
+                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs shrink-0">
                                     <i class="fa-solid fa-arrow-right text-xs"></i>
                                 </span>
                             </Link>
@@ -257,13 +257,13 @@ const roleInfo = computed(() => {
                                     </div>
                                     <p class="text-xs text-[#8A8D8F] font-medium">Vue d'ensemble de tous les services (acceptés/refusés).</p>
                                 </div>
-                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs">
+                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs shrink-0">
                                     <i class="fa-solid fa-arrow-right text-xs"></i>
                                 </span>
                             </Link>
 
                             <!-- 5. Devis Direct -->
-                            <Link :href="route('administration.devis.directs.index')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#E11D48] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs md:col-span-2">
+                            <Link :href="route('administration.devis.directs.index')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#E11D48] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs">
                                 <div class="space-y-1.5">
                                     <div class="flex items-center gap-2.5 text-[#E11D48]">
                                         <i class="fa-solid fa-file-invoice-dollar text-base"></i>
@@ -271,12 +271,26 @@ const roleInfo = computed(() => {
                                     </div>
                                     <p class="text-xs text-[#8A8D8F] font-medium">Création et gestion des devis directs (Comptoir).</p>
                                 </div>
-                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs">
+                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs shrink-0">
                                     <i class="fa-solid fa-arrow-right text-xs"></i>
                                 </span>
                             </Link>
 
-                            <!-- 6. Gestion des Stocks -->
+                            <!-- 6. Facture et Encaissement -->
+                            <Link :href="route('administration.factures.index')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#E11D48] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs">
+                                <div class="space-y-1.5">
+                                    <div class="flex items-center gap-2.5 text-[#E11D48]">
+                                        <i class="fa-solid fa-cash-register text-base"></i>
+                                        <h4 class="font-extrabold text-[#0B0F19] group-hover:text-[#E11D48] transition">Facture & Encaissement</h4>
+                                    </div>
+                                    <p class="text-xs text-[#8A8D8F] font-medium">Gérez la facturation finale et le suivi des règlements.</p>
+                                </div>
+                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs shrink-0">
+                                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                                </span>
+                            </Link>
+
+                            <!-- 7. Gestion des Stocks -->
                             <Link :href="route('administration.stocks.index')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#E11D48] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs md:col-span-2">
                                 <div class="space-y-1.5">
                                     <div class="flex items-center gap-2.5 text-[#E11D48]">
@@ -285,7 +299,7 @@ const roleInfo = computed(() => {
                                     </div>
                                     <p class="text-xs text-[#8A8D8F] font-medium">Consultez, ajoutez, modifiez ou supprimez les pièces et composants du stock.</p>
                                 </div>
-                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs">
+                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs shrink-0">
                                     <i class="fa-solid fa-arrow-right text-xs"></i>
                                 </span>
                             </Link>
@@ -294,36 +308,36 @@ const roleInfo = computed(() => {
                 </div>
 
                 <!-- ========================================== -->
-<!-- 4. VUE : CHARGÉ DE SUIVI CLIENT -->
-<!-- ========================================== -->
-<div v-else-if="user?.role === 'charge_client'" class="space-y-8">
-    <div class="bg-white p-8 sm:p-10 rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 space-y-8">
-        <div class="flex items-center gap-5 pb-6 border-b border-gray-100">
-            <div class="w-14 h-14 rounded-2xl bg-[#0B0F19] flex items-center justify-center text-white shadow-md">
-                <i class="fa-solid fa-headset text-2xl"></i>
-            </div>
-            <div>
-                <h3 class="text-xl font-black text-[#0B0F19]">Suivi Client & Relances</h3>
-                <p class="text-sm text-[#8A8D8F] font-medium">Consultez l'annuaire des clients, leurs véhicules, les alertes d'assurance/SICTA et les devis refusés.</p>
-            </div>
-        </div>
+                <!-- 4. VUE : CHARGÉ DE SUIVI CLIENT -->
+                <!-- ========================================== -->
+                <div v-else-if="user?.role === 'charge_client'" class="space-y-8">
+                    <div class="bg-white p-8 sm:p-10 rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 space-y-8">
+                        <div class="flex items-center gap-5 pb-6 border-b border-gray-100">
+                            <div class="w-14 h-14 rounded-2xl bg-[#0B0F19] flex items-center justify-center text-white shadow-md">
+                                <i class="fa-solid fa-headset text-2xl"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-xl font-black text-[#0B0F19]">Suivi Client & Relances</h3>
+                                <p class="text-sm text-[#8A8D8F] font-medium">Consultez l'annuaire des clients, leurs véhicules, les alertes d'assurance/SICTA et les devis refusés.</p>
+                            </div>
+                        </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Link :href="route('charge_client.clients.index')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#E11D48] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs">
-                <div class="space-y-1.5">
-                    <div class="flex items-center gap-2.5 text-[#E11D48]">
-                        <i class="fa-solid fa-users text-base"></i>
-                        <h4 class="font-extrabold text-[#0B0F19] group-hover:text-[#E11D48] transition">Annuaire des Clients & Véhicules</h4>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <Link :href="route('charge_client.clients.index')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#E11D48] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs">
+                                <div class="space-y-1.5">
+                                    <div class="flex items-center gap-2.5 text-[#E11D48]">
+                                        <i class="fa-solid fa-users text-base"></i>
+                                        <h4 class="font-extrabold text-[#0B0F19] group-hover:text-[#E11D48] transition">Annuaire des Clients & Véhicules</h4>
+                                    </div>
+                                    <p class="text-xs text-[#8A8D8F] font-medium">Accéder aux fiches clients, historique, assurances et lignes refusées.</p>
+                                </div>
+                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs">
+                                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                                </span>
+                            </Link>
+                        </div>
                     </div>
-                    <p class="text-xs text-[#8A8D8F] font-medium">Accéder aux fiches clients, historique, assurances et lignes refusées.</p>
                 </div>
-                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs">
-                    <i class="fa-solid fa-arrow-right text-xs"></i>
-                </span>
-            </Link>
-        </div>
-    </div>
-</div>
 
             </div>
         </div>

@@ -156,19 +156,33 @@ class DossierController extends Controller
         ]);
     }
 
-    // NOUVELLE VUE : Devis validés par le client
-    public function devisAcceptesIndex()
+    // NOUVELLE VUE : Devis validés par le client (filtrés par circuit normal et recherche)
+    public function devisAcceptesIndex(Request $request)
     {
+        $search = $request->input('search');
+
         $dossiers = Intervention::with(['vehicule.client', 'devis.lignes', 'mecanicien'])
             ->where('statut', 'accepte')
+            ->where('circuit', 'normal') // On filtre par circuit normal
+            ->when($search, function ($query, $search) {
+                $query->where(function ($q) use ($search) {
+                    // Recherche par numéro d'OT
+                    $q->where('numero_ot', 'like', "%{$search}%")
+                      // Ou recherche par nom/prénom du client via la relation vehicule.client
+                      ->orWhereHas('vehicule.client', function ($subQuery) use ($search) {
+                          $subQuery->where('nom', 'like', "%{$search}%")
+                                   ->orWhere('prenom', 'like', "%{$search}%");
+                      });
+                });
+            })
             ->latest()
             ->get();
 
         return Inertia::render('Administration/DevisAcceptesIndex', [
-            'dossiers' => $dossiers
+            'dossiers' => $dossiers,
+            'filters' => $request->only(['search']),
         ]);
     }
-
     // NOUVELLE VUE : Historique global de tous les devis (acceptés et refusés)
     public function devisHistoriqueIndex()
     {
@@ -239,7 +253,7 @@ class DossierController extends Controller
                     'client_id' => $client->id,
                     'marque' => $request->nouvelle_marque,
                     'modele' => $request->nouveau_modele,
-                    'immatriculation' => '', 
+                    'immatriculation' => 'TEMP-' . uniqid(), // Valeur unique temporaire pour contourner le NOT NULL
                 ]);
 
                 $vehiculeId = $vehicule->id;

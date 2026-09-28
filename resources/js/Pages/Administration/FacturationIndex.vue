@@ -41,10 +41,10 @@ const backText = computed(() => {
                 <div>
                     <h2 class="text-xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
                         <i class="fa-solid fa-file-invoice-dollar text-[#E11D48]"></i>
-                        <span>Facturation & Règlements</span>
+                        <span>Devis & Validation</span>
                     </h2>
                     <p class="text-xs text-gray-500 mt-1">
-                        Gérez les dossiers en attente de facturation et suivez les encaissements clients.
+                        Gérez les devis et valider les choix clients.
                     </p>
                 </div>
 
@@ -65,7 +65,7 @@ const backText = computed(() => {
                     <div class="flex items-center justify-between mb-6">
                         <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center gap-2">
                             <i class="fa-solid fa-clock text-gray-400 text-xs"></i>
-                            <span>Dossiers en attente de facturation / encaissement</span>
+                            <span>Devis en attente de validation </span>
                         </h3>
                     </div>
 
@@ -74,7 +74,7 @@ const backText = computed(() => {
                         <div class="w-12 h-12 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-400 mx-auto mb-3">
                             <i class="fa-solid fa-folder-closed text-xl"></i>
                         </div>
-                        <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wider">Aucun dossier à facturer</h3>
+                        <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wider">Aucun dossier</h3>
                         <p class="text-xs text-gray-500 mt-1">Il n'y a pas de dossier en attente pour le moment.</p>
                     </div>
 
