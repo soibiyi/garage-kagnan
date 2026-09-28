@@ -134,16 +134,21 @@ const submitDevis = () => {
         <template #header>
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <div class="flex items-center gap-3 text-xs text-slate-500">
-                        <Link :href="route('administration.devis.directs.index')" class="hover:text-slate-900 transition flex items-center gap-1.5">
-                            <i class="fa-solid fa-arrow-left"></i><span>Retour aux devis directs</span>
-                        </Link>
-                    </div>
-                    <h2 class="text-xl font-bold tracking-tight text-slate-900 mt-2 flex items-center gap-2">
+                    <h2 class="text-xl font-bold tracking-tight text-slate-900 flex items-center gap-2">
                         <i class="fa-solid fa-file-invoice-dollar text-[#E11D48]"></i>
                         <span>Nouveau Devis Direct (Comptoir)</span>
                     </h2>
+                    <p class="text-xs text-slate-500 mt-1">Établissez un devis direct avec saisie libre ou choix sur pièces.</p>
                 </div>
+
+                <!-- Bouton Retour positionné en haut à droite -->
+                <Link 
+                    :href="route('administration.devis.directs.index')" 
+                    class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition flex items-center gap-1.5"
+                >
+                    <i class="fa-solid fa-arrow-left"></i>
+                    <span>Retour aux devis directs</span>
+                </Link>
             </div>
         </template>
 
@@ -152,36 +157,35 @@ const submitDevis = () => {
                 
                 <form @submit.prevent="submitDevis" class="space-y-6">
                     
-                    <!-- SECTION CLIENT & VÉHICULE (Saisie Manuelle Directe) -->
                     <!-- SECTION CLIENT & VÉHICULE (Saisie Manuelle Directe allégée) -->
-<div class="bg-slate-50 p-5 rounded-xl shadow-sm border border-slate-200 space-y-4">
-    <div class="flex items-center justify-between border-b border-slate-200 pb-3">
-        <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
-            <i class="fa-solid fa-car text-[#E11D48]"></i>
-            <span>Informations du Client & Véhicule</span>
-        </h3>
-    </div>
+                    <div class="bg-slate-50 p-5 rounded-xl shadow-sm border border-slate-200 space-y-4">
+                        <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+                            <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                                <i class="fa-solid fa-car text-[#E11D48]"></i>
+                                <span>Informations du Client & Véhicule</span>
+                            </h3>
+                        </div>
 
-    <!-- Formulaire direct allégé (4 colonnes) -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-        <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">Nom du Client</label>
-            <input type="text" v-model="form.nouveau_client_nom" placeholder="Ex: Kouassi" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
-        </div>
-        <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">Prénom du Client</label>
-            <input type="text" v-model="form.nouveau_client_prenom" placeholder="Ex: Jean" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
-        </div>
-        <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">Marque du Véhicule</label>
-            <input type="text" v-model="form.nouvelle_marque" placeholder="Ex: Toyota" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
-        </div>
-        <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">Modèle du Véhicule</label>
-            <input type="text" v-model="form.nouveau_modele" placeholder="Ex: Corolla" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
-        </div>
-    </div>
-</div>
+                        <!-- Formulaire direct allégé (4 colonnes) -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Nom du Client</label>
+                                <input type="text" v-model="form.nouveau_client_nom" placeholder="Ex: Kouassi" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Prénom du Client</label>
+                                <input type="text" v-model="form.nouveau_client_prenom" placeholder="Ex: Jean" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Marque du Véhicule</label>
+                                <input type="text" v-model="form.nouvelle_marque" placeholder="Ex: Toyota" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Modèle du Véhicule</label>
+                                <input type="text" v-model="form.nouveau_modele" placeholder="Ex: Corolla" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+                            </div>
+                        </div>
+                    </div>
 
                     <!-- TABLEAU DE SAISIE DU DEVIS -->
                     <div class="bg-slate-50 rounded-xl shadow-sm border border-slate-200 overflow-hidden">

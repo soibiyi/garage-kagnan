@@ -11,7 +11,8 @@ use App\Http\Controllers\Administrative\DossierController;
 use App\Models\Intervention; 
 use App\Http\Controllers\Mecanicien\MecanicienController;
 use App\Http\Controllers\Administrative\StockController;
-use App\Http\Controllers\ChargeClientController; // <-- Corrigé ici (sans le sous-dossier)[cite: 5]
+use App\Http\Controllers\ChargeClientController; 
+use App\Http\Controllers\Administrative\FactureController;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -128,6 +129,10 @@ Route::middleware(['auth'])->prefix('administration')->name('administration.')->
     Route::post('/stocks', [StockController::class, 'store'])->name('stocks.store');
     Route::put('/stocks/{stock}', [StockController::class, 'update'])->name('stocks.update');
     Route::delete('/stocks/{stock}', [StockController::class, 'destroy'])->name('stocks.destroy');
+
+   Route::get('/factures', [FactureController::class, 'index'])->name('factures.index');
+    Route::get('/factures/{id}', [FactureController::class, 'show'])->name('factures.show');
+    Route::post('/factures/{id}/encaisser', [FactureController::class, 'storeEncaissement'])->name('factures.encaisser');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {

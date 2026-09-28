@@ -15,7 +15,7 @@ const search = ref(props.filters?.search || '');
 
 watch(search, (value) => {
     router.get(
-        route('administration.devis.acceptes.index'), // Assurez-vous que c'est bien le nom de votre route
+        route('administration.factures.index'),
         { search: value },
         { preserveState: true, replace: true }
     );
@@ -30,38 +30,46 @@ const isMecanicien = computed(() => {
 // Lien de retour dynamique vers le tableau de bord ou l'atelier
 const backUrl = computed(() => {
     if (isMecanicien.value) {
-        return route('mecanicien.index'); 
+        return route('mecanicien.index');
     }
-    return route('dashboard'); 
+    return route('dashboard');
 });
 
 // Texte du bouton dynamique
 const backText = computed(() => {
-    return isMecanicien.value 
-        ? '← Retour à mon atelier' 
+    return isMecanicien.value
+        ? '← Retour à mon atelier'
         : '← Retour au tableau de bord';
 });
+
+// Total TTC des lignes acceptées d'un dossier
+const totalTtcAccepte = (dossier) => {
+    const lignes = dossier.devis?.lignes || [];
+    return lignes
+        .filter(l => l.is_accepted)
+        .reduce((acc, l) => acc + Number(l.montant_ttc), 0);
+};
 </script>
 
 <template>
-    <Head title="Devis Validés" />
+    <Head title="Facturation & Encaissements" />
 
     <AuthenticatedLayout>
         <template #header>
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h2 class="text-xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
-                        <i class="fa-solid fa-clipboard-check text-[#E11D48]"></i>
-                        <span>Devis Validés par le Client (Circuit Normal)</span>
+                        <i class="fa-solid fa-file-invoice-dollar text-[#E11D48]"></i>
+                        <span>Facturation & Encaissements</span>
                     </h2>
                     <p class="text-xs text-gray-500 mt-1">
-                        Liste des dossiers (circuit normal) dont l'accord client a été enregistré et prêts pour la suite.
+                        Liste des dossiers dont le devis a été accepté par le client, prêts pour facturation et encaissement.
                     </p>
                 </div>
 
                 <!-- Bouton de retour dynamique -->
-                <Link 
-                    :href="backUrl" 
+                <Link
+                    :href="backUrl"
                     class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition"
                 >
                     {{ backText }}
@@ -71,30 +79,30 @@ const backText = computed(() => {
 
         <div class="py-8 bg-white min-h-screen text-gray-900">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-                
+
                 <!-- BARRE DE RECHERCHE -->
                 <div class="flex justify-between items-center">
                     <div class="relative w-full md:w-96">
                         <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-gray-400">
                             <i class="fa-solid fa-magnifying-glass text-xs"></i>
                         </span>
-                        <input 
-                            type="text" 
-                            v-model="search" 
-                            placeholder="Rechercher par nom ou numéro d'OT..." 
+                        <input
+                            type="text"
+                            v-model="search"
+                            placeholder="Rechercher par nom ou numéro d'OT..."
                             class="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 focus:outline-none focus:border-[#E11D48] transition shadow-xs"
                         />
                     </div>
                 </div>
 
                 <div class="bg-white shadow-xl shadow-gray-200/50 rounded-2xl overflow-hidden border border-gray-100 p-6">
-                    
+
                     <div v-if="dossiers.length === 0" class="text-center py-16">
                         <div class="w-12 h-12 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-400 mx-auto mb-3">
                             <i class="fa-solid fa-folder-closed text-xl"></i>
                         </div>
-                        <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wider">Aucun devis validé</h3>
-                        <p class="text-xs text-gray-500 mt-1">Il n'y a pas de dossier en circuit normal correspondant à votre recherche.</p>
+                        <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wider">Aucun dossier à facturer</h3>
+                        <p class="text-xs text-gray-500 mt-1">Il n'y a pas de dossier correspondant à votre recherche.</p>
                     </div>
 
                     <div v-else class="overflow-x-auto">
@@ -104,6 +112,7 @@ const backText = computed(() => {
                                     <th class="px-6 py-3 font-semibold">N° Dossier / Véhicule</th>
                                     <th class="px-6 py-3 font-semibold">Client</th>
                                     <th class="px-6 py-3 font-semibold">Statut Devis</th>
+                                    <th class="px-6 py-3 font-semibold text-right">Total TTC accepté</th>
                                     <th class="px-6 py-3 font-semibold text-right">Actions</th>
                                 </tr>
                             </thead>
@@ -126,12 +135,15 @@ const backText = computed(() => {
                                             Accepté
                                         </span>
                                     </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-right font-bold text-gray-900">
+                                        {{ totalTtcAccepte(dossier).toLocaleString() }} F
+                                    </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right">
-                                        <Link 
-                                            :href="route('administration.facturation.show', dossier.id)" 
+                                        <Link
+                                            :href="route('administration.factures.show', dossier.id)"
                                             class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#E11D48] hover:bg-rose-700 text-white font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-[11px]"
                                         >
-                                            <span>Traiter / Facturer</span>
+                                            <span>Facturer / Encaisser</span>
                                             <i class="fa-solid fa-arrow-right text-[10px]"></i>
                                         </Link>
                                     </td>

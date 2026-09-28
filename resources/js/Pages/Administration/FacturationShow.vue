@@ -1,6 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, useForm, router } from '@inertiajs/vue3';
 
 const props = defineProps({
     dossier: Object,
@@ -31,6 +31,15 @@ const formatDate = (dateString) => {
 const imprimer = () => {
     window.print();
 };
+
+// Retour à la page précédente (repli vers la liste si aucun historique)
+const retour = () => {
+    if (window.history.length > 1) {
+        window.history.back();
+    } else {
+        router.visit(route('administration.facturation.index'));
+    }
+};
 </script>
 
 <template>
@@ -54,13 +63,14 @@ const imprimer = () => {
                         <i class="fa-solid fa-print text-[11px]"></i>
                         <span>Imprimer</span>
                     </button>
-                    <Link 
-                        :href="route('administration.facturation.index')" 
+                    <button 
+                        type="button"
+                        @click="retour"
                         class="inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900 font-medium"
                     >
                         <i class="fa-solid fa-arrow-left text-[10px]"></i>
-                        <span>Retour à la liste</span>
-                    </Link>
+                        <span>Retour</span>
+                    </button>
                 </div>
             </div>
         </template>
