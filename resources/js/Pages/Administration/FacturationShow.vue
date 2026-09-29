@@ -97,10 +97,7 @@ const retour = () => {
                             <!-- En-tête du Devis -->
                             <div class="flex justify-between items-start border-b-2 border-gray-900 pb-3 mb-3">
                                 <div>
-                                    <h1 class="text-2xl font-black tracking-wider text-[#E11D48] italic flex items-center gap-2">
-                                         <i class="fa-solid fa-wrench text-lg"></i>
-                                         <span>GARAGE KAGNAN</span>
-                                    </h1>
+                                    <img src="/images/logo-kagnan.png" alt="Garage Kagnan" class="h-16 w-auto object-contain" />
                                     <p class="text-xs font-medium text-gray-500 mt-0.5">Service Entretien & Réparation Automobile</p>
                                 </div>
                                 <div class="border-2 border-gray-900 p-2 text-right rounded-xl min-w-[220px] bg-gray-50/50">
@@ -137,7 +134,7 @@ const retour = () => {
                             </div>
                             
                             <div class="border-x border-b border-gray-900 px-3 py-1 text-xs mb-3 -mt-3 rounded-b-lg bg-gray-50/30">
-                                <span class="font-semibold">N° Chassis :</span> <span class="font-mono">{{ dossier.vehicule?.chassis || 'N/A' }}</span>
+                                <span class="font-semibold">N° Chassis :</span> <span class="font-mono">{{ dossier.vehicule?.vin || 'N/A' }}</span>
                             </div>
 
                             <!-- Tableau des lignes avec cases à cocher -->
@@ -264,10 +261,7 @@ const retour = () => {
                         <!-- En-tête du Devis -->
                         <div class="flex justify-between items-start border-b-2 border-gray-900 pb-3 mb-3">
                             <div>
-                                <h1 class="text-2xl font-black tracking-wider text-[#E11D48] italic flex items-center gap-2">
-                                     <i class="fa-solid fa-wrench text-lg"></i>
-                                     <span>GARAGE KAGNAN</span>
-                                </h1>
+                                <img src="/images/logo-kagnan.png" alt="Garage Kagnan" class="h-16 w-auto object-contain" />
                                 <p class="text-xs font-medium text-gray-500 mt-0.5">Service Entretien & Réparation Automobile</p>
                             </div>
                             <div class="border-2 border-gray-900 p-2 text-right rounded-xl min-w-[220px] bg-gray-50/50">
@@ -304,7 +298,7 @@ const retour = () => {
                         </div>
                         
                         <div class="border-x border-b border-gray-900 px-3 py-1 text-xs mb-3 -mt-3 rounded-b-lg bg-gray-50/30">
-                            <span class="font-semibold">N° Chassis :</span> <span class="font-mono">{{ dossier.vehicule?.chassis || 'N/A' }}</span>
+                            <span class="font-semibold">N° Chassis :</span> <span class="font-mono">{{ dossier.vehicule?.vin || 'N/A' }}</span>
                         </div>
 
                         <!-- Tableau des lignes (Consultation simple, sans cases à cocher) -->

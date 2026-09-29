@@ -42,13 +42,11 @@ const backText = computed(() => {
         : '← Retour au tableau de bord';
 });
 
-// Total TTC des lignes acceptées d'un dossier
-const totalTtcAccepte = (dossier) => {
-    const lignes = dossier.devis?.lignes || [];
-    return lignes
-        .filter(l => l.is_accepted)
-        .reduce((acc, l) => acc + Number(l.montant_ttc), 0);
-};
+// Le contrôleur fournit `resume_paiement` pour chaque dossier
+// (total_ttc, montant_paye, reste, pourcentage, soldee)
+const resteAPayer = (dossier) => Number(dossier.resume_paiement?.reste ?? 0);
+
+const estSolde = (dossier) => Boolean(dossier.resume_paiement?.soldee);
 </script>
 
 <template>
@@ -112,7 +110,7 @@ const totalTtcAccepte = (dossier) => {
                                     <th class="px-6 py-3 font-semibold">N° Dossier / Véhicule</th>
                                     <th class="px-6 py-3 font-semibold">Client</th>
                                     <th class="px-6 py-3 font-semibold">Statut Devis</th>
-                                    <th class="px-6 py-3 font-semibold text-right">Total TTC accepté</th>
+                                    <th class="px-6 py-3 font-semibold text-right">Reste à payer</th>
                                     <th class="px-6 py-3 font-semibold text-right">Actions</th>
                                 </tr>
                             </thead>
@@ -135,8 +133,17 @@ const totalTtcAccepte = (dossier) => {
                                             Accepté
                                         </span>
                                     </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-right font-bold text-gray-900">
-                                        {{ totalTtcAccepte(dossier).toLocaleString() }} F
+                                    <td class="px-6 py-4 whitespace-nowrap text-right">
+                                        <span
+                                            v-if="estSolde(dossier)"
+                                            class="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-black uppercase tracking-wider rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                        >
+                                            <i class="fa-solid fa-circle-check text-[10px]"></i>
+                                            Soldé
+                                        </span>
+                                        <span v-else class="font-bold text-[#E11D48]">
+                                            {{ resteAPayer(dossier).toLocaleString() }} F
+                                        </span>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right">
                                         <Link

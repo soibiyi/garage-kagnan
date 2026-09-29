@@ -123,10 +123,7 @@ const retour = () => {
                     <!-- En-tête de la facture -->
                     <div class="flex justify-between items-start border-b-2 border-gray-900 pb-3 mb-3">
                         <div>
-                            <h1 class="text-2xl font-black tracking-wider text-[#E11D48] italic flex items-center gap-2">
-                                <i class="fa-solid fa-wrench text-lg"></i>
-                                <span>GARAGE KAGNAN</span>
-                            </h1>
+                            <img src="/images/logo-kagnan.png" alt="Garage Kagnan" class="h-16 w-auto object-contain" />
                             <p class="text-xs font-medium text-gray-500 mt-0.5">Service Entretien & Réparation Automobile</p>
                         </div>
                         <div class="border-2 border-gray-900 p-2 text-right rounded-xl min-w-[220px] bg-gray-50/50">
@@ -163,7 +160,7 @@ const retour = () => {
                     </div>
 
                     <div class="border-x border-b border-gray-900 px-3 py-1 text-xs mb-3 -mt-3 rounded-b-lg bg-gray-50/30">
-                        <span class="font-semibold">N° Chassis :</span> <span class="font-mono">{{ dossier.vehicule?.chassis || 'N/A' }}</span>
+                        <span class="font-semibold">N° Chassis :</span> <span class="font-mono">{{ dossier.vehicule?.vin || 'N/A' }}</span>
                     </div>
 
                     <!-- Tableau des lignes facturées (acceptées uniquement) -->
@@ -237,8 +234,8 @@ const retour = () => {
                         </div>
                     </div>
 
-                    <!-- SUIVI DES PAIEMENTS -->
-                    <div class="mb-3 border border-gray-900 rounded-lg overflow-hidden text-xs">
+                    <!-- SUIVI DES PAIEMENTS (masqué à l'impression / PDF) -->
+                    <div class="print:hidden mb-3 border border-gray-900 rounded-lg overflow-hidden text-xs">
                         <div class="flex justify-between items-center bg-gray-900 text-white px-3 py-1">
                             <p class="font-bold uppercase tracking-wider flex items-center gap-2">
                                 <i class="fa-solid fa-money-bill-wave text-gray-400 text-[11px]"></i>

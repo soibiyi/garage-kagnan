@@ -12,7 +12,9 @@
 
         <!-- Font Awesome CDN (Indispensable pour les balises <i>) -->
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-
+        <link rel="icon" href="/favicon.ico" sizes="any">
+        <link rel="icon" type="image/png" href="/favicon.png">
+        <link rel="apple-touch-icon" href="/favicon.png">
         <!-- Scripts -->
         @routes
         @vite(['resources/js/app.js', "resources/js/Pages/{$page['component']}.vue"])
