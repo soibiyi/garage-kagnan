@@ -11,8 +11,8 @@ class Intervention extends Model
 
     protected $table = 'interventions';
 
-    protected $guarded = []; // Ou listez vos champs de remplissage
-    
+    protected $guarded = [];
+
     protected $casts = [
         'date_reception' => 'datetime',
     ];
@@ -27,7 +27,6 @@ class Intervention extends Model
         return $this->belongsTo(User::class, 'receptionniste_id');
     }
 
-    // Relation avec le mécanicien (table users)
     public function mecanicien()
     {
         return $this->belongsTo(User::class, 'mecanicien_id');
@@ -38,11 +37,16 @@ class Intervention extends Model
         return $this->hasOneThrough(Client::class, Vehicule::class, 'id', 'id', 'vehicule_id', 'client_id');
     }
 
+    public function devis()
+    {
+        return $this->hasOne(Devis::class, 'intervention_id');
+    }
+
     /**
-     * Relation avec le ou les devis liés à cette intervention
+     * Relation avec la facture liée à l'intervention
      */
-   public function devis()
-{
-    return $this->hasOne(Devis::class, 'intervention_id');
-}
+    public function facture()
+    {
+        return $this->hasOne(Facture::class, 'intervention_id');
+    }
 }

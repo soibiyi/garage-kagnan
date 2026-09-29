@@ -22,6 +22,14 @@ defineProps({
                         Retrouvez l'intégralité des services proposés, acceptés et refusés par les clients.
                     </p>
                 </div>
+
+                <!-- Bouton de retour au tableau de bord -->
+                <Link
+                    :href="route('dashboard')"
+                    class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition"
+                >
+                    ← Retour au tableau de bord
+                </Link>
             </div>
         </template>
 

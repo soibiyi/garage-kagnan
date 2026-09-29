@@ -18,18 +18,16 @@ defineProps({
         <header class="fixed top-0 left-0 right-0 z-50 backdrop-blur-md border-b border-gray-700/40" style="background-color: rgba(138, 141, 143, 0.9);">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
                 
-                <!-- Logo & Nom de l'entreprise -->
-                <a href="#" class="flex items-center gap-3 group">
-                    <div class="w-10 h-10 rounded-xl bg-white/25 border border-white/40 flex items-center justify-center text-red-600 group-hover:bg-red-600 group-hover:text-white transition duration-300 shadow-sm">
-                        <i class="fa-solid fa-wrench text-lg"></i>
-                    </div>
-                    <div class="flex flex-col">
-                        <span class="text-lg font-extrabold tracking-tight leading-none">
-                            <span class="text-white">GARAGE</span> <span class="text-red-600">KAGNAN</span>
-                        </span>
-                        <span class="text-[10px] tracking-widest text-gray-200 uppercase mt-0.5 font-medium">Automotive Center</span>
-                    </div>
-                </a>
+                <!-- Logo -->                   
+                <a href="#" class="flex items-center">
+                    <div class="rounded-xl bg-white px-3 py-1 shadow-md shadow-black/10 transition duration-300 hover:shadow-lg">
+                        <img
+                            src="/images/logo-kagnan.png"
+                            alt="Garage Kagnan"
+                            class="h-12 w-auto object-contain"
+                        />
+                </div>
+            </a>
 
                 <!-- Liens de navigation ancrés -->
                 <nav class="hidden md:flex items-center gap-8 text-sm font-semibold text-gray-100">
@@ -231,13 +229,12 @@ defineProps({
         <footer id="contact" class="border-t border-white/40 py-12 text-sm text-gray-100" style="background-color: #8A8D8F;">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-6">
                 
-                <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 rounded-lg bg-white/30 border border-white/50 flex items-center justify-center text-red-600 shadow-sm">
-                        <i class="fa-solid fa-wrench text-sm"></i>
-                    </div>
-                    <span class="font-extrabold text-white">
-                        <span class="text-white">GARAGE</span> <span class="text-red-700">KAGNAN</span>
-                    </span>
+                <div class="rounded-xl bg-white px-3 py-1 shadow-md shadow-black/10">
+                    <img
+                        src="/images/logo-kagnan.png"
+                        alt="Garage Kagnan"
+                        class="h-10 w-auto object-contain"
+                    />
                 </div>
 
                 <div class="text-center md:text-right text-xs space-y-1 font-medium">
