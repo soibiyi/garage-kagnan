@@ -13,14 +13,20 @@ use Inertia\Inertia;
 
 class FactureController extends Controller
 {
-    /** Total TTC (arrondi au FCFA) des lignes acceptées du devis. */
+    /** Total TTC (avec les 3% de petite fourniture, arrondi au FCFA) des lignes acceptées du devis. */
     private function totalAccepte(Intervention $dossier): int
     {
         if (!$dossier->devis) {
             return 0;
         }
 
-        return (int) round($dossier->devis->lignes->where('is_accepted', true)->sum('montant_ttc'));
+        // Total TTC brut des lignes acceptées
+        $totalBrut = (float) $dossier->devis->lignes->where('is_accepted', true)->sum('montant_ttc');
+
+        // Total TTC final incluant les 3% de petite fourniture
+        $totalFinal = $totalBrut * 1.03;
+
+        return (int) round($totalFinal);
     }
 
     /** Numéro de facture, même format que celui affiché sur la vue. */

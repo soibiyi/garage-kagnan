@@ -101,6 +101,8 @@ class DossierController extends Controller
             'lignes.*.remise' => 'nullable|numeric|min:0',
             'lignes.*.reference_piece' => 'nullable|string',
             'lignes.*.ne_pas_appliquer_tva' => 'nullable|boolean',
+            'lignes.*.famille' => 'nullable|string|max:100',
+            'lignes.*.sous_famille' => 'nullable|string|max:100',
         ]);
 
         DB::transaction(function () use ($request, $dossier) {
@@ -112,28 +114,7 @@ class DossierController extends Controller
             ]);
 
             // Enregistrement des lignes du devis
-            foreach ($request->lignes as $ligne) {
-                $qte = $ligne['quantite'] ?? 1;
-                $pu = $ligne['pu_net'] ?? 0;
-                $remise = $ligne['remise'] ?? 0;
-                
-                $ht = ($qte * $pu) - $remise;
-                $nePasAppliquerTva = $ligne['ne_pas_appliquer_tva'] ?? false;
-                $ttc = $nePasAppliquerTva ? $ht : $ht * 1.18;
-
-                LigneDevis::create([
-                    'devis_id' => $devis->id,
-                    'quantite' => $qte,
-                    'designation' => $ligne['designation'],
-                    'reference_piece' => $ligne['reference_piece'] ?? null,
-                    'pu_net' => $pu,
-                    'remise' => $remise,
-                    'montant_ht' => $ht,
-                    'montant_ttc' => $ttc,
-                    'ne_pas_appliquer_tva' => $nePasAppliquerTva,
-                    'type' => !empty($ligne['reference_piece']) ? 'piece' : 'main_d_oeuvre',
-                ]);
-            }
+            $this->creerLignesDevis($devis, $request->lignes);
 
             // Mise à jour du statut du dossier
             $dossier->update(['statut' => 'attente_accord']);
@@ -235,6 +216,8 @@ class DossierController extends Controller
             'lignes.*.remise' => 'nullable|numeric|min:0',
             'lignes.*.reference_piece' => 'nullable|string',
             'lignes.*.ne_pas_appliquer_tva' => 'nullable|boolean',
+            'lignes.*.famille' => 'nullable|string|max:100',
+            'lignes.*.sous_famille' => 'nullable|string|max:100',
         ]);
 
         DB::transaction(function () use ($request) {
@@ -275,35 +258,14 @@ class DossierController extends Controller
                 'statut' => 'en_attente',
             ]);
 
-            foreach ($request->lignes as $ligne) {
-                $qte = $ligne['quantite'] ?? 1;
-                $pu = $ligne['pu_net'] ?? 0;
-                $remise = $ligne['remise'] ?? 0;
-                
-                $ht = ($qte * $pu) - $remise;
-                $nePasAppliquerTva = $ligne['ne_pas_appliquer_tva'] ?? false;
-                $ttc = $nePasAppliquerTva ? $ht : $ht * 1.18;
-
-                LigneDevis::create([
-                    'devis_id' => $devis->id,
-                    'quantite' => $qte,
-                    'designation' => $ligne['designation'],
-                    'reference_piece' => $ligne['reference_piece'] ?? null,
-                    'pu_net' => $pu,
-                    'remise' => $remise,
-                    'montant_ht' => $ht,
-                    'montant_ttc' => $ttc,
-                    'ne_pas_appliquer_tva' => $nePasAppliquerTva,
-                    'type' => !empty($ligne['reference_piece']) ? 'piece' : 'main_d_oeuvre',
-                ]);
-            }
+            $this->creerLignesDevis($devis, $request->lignes);
         });
 
         return redirect()->route('administration.devis.directs.index')
             ->with('success', 'Devis direct enregistré avec succès.');
     }
 
-    public function rechercherPieces(Request $request, Intervention $dossier = null)
+    public function rechercherPieces(Request $request, ?Intervention $dossier = null)
     {
         $marque = $request->input('marque');
         $modele = $request->input('modele');
@@ -315,6 +277,7 @@ class DossierController extends Controller
 
         $query = $request->input('q', ''); 
 
+        // Toutes les colonnes de stocks sont renvoyées, y compris famille et sous_famille
         $stocks = Stock::query()
             ->when($marque, function ($q) use ($marque) {
                 $q->where('marque', 'LIKE', "%{$marque}%");
@@ -332,5 +295,40 @@ class DossierController extends Controller
             ->get();
 
         return response()->json($stocks);
+    }
+
+    /**
+     * Crée les lignes d'un devis (utilisé par storeDevis et storeDevisDirect).
+     */
+    private function creerLignesDevis(Devis $devis, array $lignes): void
+    {
+        foreach ($lignes as $ligne) {
+            $qte = $ligne['quantite'] ?? 1;
+            $pu = $ligne['pu_net'] ?? 0;
+            $remise = $ligne['remise'] ?? 0;
+
+            $ht = ($qte * $pu) - $remise;
+            $nePasAppliquerTva = $ligne['ne_pas_appliquer_tva'] ?? false;
+            $ttc = $nePasAppliquerTva ? $ht : $ht * 1.18;
+
+            // Pas de sous-famille sans famille
+            $famille = !empty($ligne['famille']) ? $ligne['famille'] : null;
+            $sousFamille = ($famille && !empty($ligne['sous_famille'])) ? $ligne['sous_famille'] : null;
+
+            LigneDevis::create([
+                'devis_id' => $devis->id,
+                'quantite' => $qte,
+                'designation' => $ligne['designation'],
+                'reference_piece' => $ligne['reference_piece'] ?? null,
+                'pu_net' => $pu,
+                'remise' => $remise,
+                'montant_ht' => $ht,
+                'montant_ttc' => $ttc,
+                'ne_pas_appliquer_tva' => $nePasAppliquerTva,
+                'type' => !empty($ligne['reference_piece']) ? 'piece' : 'main_d_oeuvre',
+                'famille' => $famille,
+                'sous_famille' => $sousFamille,
+            ]);
+        }
     }
 }
