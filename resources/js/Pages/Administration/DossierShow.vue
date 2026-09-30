@@ -3,10 +3,36 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import axios from 'axios';
-
+import { FAMILLES, FAMILLE_PAR_DEFAUT } from '@/constants/familles.js';
 const props = defineProps({
     dossier: Object,
 });
+
+// Détection automatique de la Famille & Sous-famille selon les mots-clés
+const detecterFamilleEtSousFamille = (designation) => {
+    if (!designation || designation.trim().length === 0) {
+        return { famille: FAMILLE_PAR_DEFAUT, sousFamille: '' };
+    }
+
+    const texte = designation.toLowerCase();
+
+    for (const [familleNom, sousFamillesList] of Object.entries(FAMILLES)) {
+        for (const sousFamille of sousFamillesList) {
+            const sousFamilleLower = sousFamille.toLowerCase();
+            if (texte.includes(sousFamilleLower) || texte.includes(familleNom.toLowerCase())) {
+                return {
+                    famille: familleNom,
+                    sousFamille: sousFamille
+                };
+            }
+        }
+    }
+
+    return {
+        famille: FAMILLE_PAR_DEFAUT,
+        sousFamille: ''
+    };
+};
 
 // Formulaire Inertia pour les lignes de devis
 const form = useForm({
@@ -15,6 +41,8 @@ const form = useForm({
             quantite: 1,
             designation: 'DIAGNOSTIC TECHNIQUE',
             reference_piece: '',
+            famille: FAMILLE_PAR_DEFAUT,
+            sous_famille: '',
             pu_net: 10000,
             remise: 0,
             ne_pas_appliquer_tva: true,
@@ -27,9 +55,17 @@ const activeDropdownIndex = ref(null);
 const searchResults = ref([]);
 const isLoadingPieces = ref(false);
 
+// Saisie dans le champ désignation avec autocomplétion & détection auto
+const surSaisieDesignation = (ligne, index) => {
+    rechercherPiecesStock(ligne, index);
+    
+    const res = detecterFamilleEtSousFamille(ligne.designation);
+    ligne.famille = res.famille;
+    ligne.sous_famille = res.sousFamille;
+};
+
 // Rechercher des pièces dans le stock
 const rechercherPiecesStock = async (ligne, index) => {
-    console.log("La fonction est bien appelée !", ligne.designation); // <-- Ajoutez ceci
     activeDropdownIndex.value = index;
     const query = ligne.designation || '';
 
@@ -59,8 +95,12 @@ const rechercherPiecesStock = async (ligne, index) => {
 const selectionnerPiece = (ligne, piece) => {
     ligne.designation = piece.designation_piece || '';
     ligne.reference_piece = piece.reference || '';
-    // Utilisation du prix kagnan HT ou prix marché selon votre préférence (ici prix_kagnan_ht ou prix_ttc_kagnan)
     ligne.pu_net = parseFloat(piece.prix_kagnan_ht) || parseFloat(piece.prix_marche_ht) || 0;
+
+    const res = detecterFamilleEtSousFamille(ligne.designation);
+    ligne.famille = piece.famille || res.famille;
+    ligne.sous_famille = piece.sous_famille || res.sousFamille;
+
     activeDropdownIndex.value = null;
     searchResults.value = [];
 };
@@ -78,6 +118,8 @@ const ajouterLigne = () => {
         quantite: 1,
         designation: '',
         reference_piece: '',
+        famille: FAMILLE_PAR_DEFAUT,
+        sous_famille: '',
         pu_net: 0,
         remise: 0,
         ne_pas_appliquer_tva: true,
@@ -194,16 +236,17 @@ const submitDevis = () => {
                             <table class="min-w-full divide-y divide-slate-200 text-left text-xs">
                                 <thead class="bg-slate-100 text-slate-500 uppercase tracking-wider text-[10px]">
                                     <tr>
-                                        <th class="px-3 py-3 font-semibold w-24 text-center">Qté</th>
+                                        <th class="px-3 py-3 font-semibold w-20 text-center">Qté</th>
                                         <th class="px-3 py-3 font-semibold">Désignation</th>
-                                        <th class="px-3 py-3 font-semibold w-32">Réf. Pièce</th>
-                                        <th class="px-3 py-3 font-semibold w-12 text-center">Stock</th>
-                                        <th class="px-3 py-3 font-semibold w-28 text-right">PU Net</th>
-                                        <th class="px-3 py-3 font-semibold w-24 text-right">Remise</th>
-                                        <th class="px-3 py-3 font-semibold w-28 text-right">Total HT</th>
-                                        <th class="px-3 py-3 font-semibold w-28 text-right">Total TTC</th>
-                                        <th class="px-3 py-3 font-semibold text-center w-20">Exempt TVA</th>
-                                        <th class="px-3 py-3 font-semibold text-center w-12">Action</th>
+                                        <th class="px-3 py-3 font-semibold w-36">Famille / Sous-famille</th>
+                                        <th class="px-3 py-3 font-semibold w-28">Réf. Pièce</th>
+                                        <th class="px-3 py-3 font-semibold w-10 text-center">Stock</th>
+                                        <th class="px-3 py-3 font-semibold w-24 text-right">PU Net</th>
+                                        <th class="px-3 py-3 font-semibold w-20 text-right">Remise</th>
+                                        <th class="px-3 py-3 font-semibold w-24 text-right">Total HT</th>
+                                        <th class="px-3 py-3 font-semibold w-24 text-right">Total TTC</th>
+                                        <th class="px-3 py-3 font-semibold text-center w-16">Exempt TVA</th>
+                                        <th class="px-3 py-3 font-semibold text-center w-10">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-slate-200">
@@ -218,38 +261,63 @@ const submitDevis = () => {
                                                 class="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs text-center font-bold text-slate-900 focus:border-[#E11D48] focus:ring-1 focus:ring-[#E11D48]"
                                             />
                                         </td>
-                                        <!-- Désignation avec autocomplétion -->
-                                        <!-- Désignation avec autocomplétion -->
-<td class="px-3 py-3 overflow-visible"> <!-- Retirez 'relative' et ajoutez 'overflow-visible' si besoin -->
-    <div class="relative w-full"> <!-- Conteneur dédié en relative -->
-        <input 
-            type="text" 
-            v-model="ligne.designation" 
-            @input="rechercherPiecesStock(ligne, index)"
-            @focus="rechercherPiecesStock(ligne, index)"
-            @blur="fermerSuggestions"
-            placeholder="Libellé de la prestation ou pièce..."
-            autocomplete="off"
-            class="w-full bg-white border border-slate-300 rounded-lg text-xs uppercase text-slate-900 focus:border-[#E11D48] focus:ring-1 focus:ring-[#E11D48]"
-        />
-        
-        <!-- Liste déroulante des suggestions de stock -->
-        <div v-if="activeDropdownIndex === index && searchResults.length > 0" class="absolute left-0 right-0 z-[999] mt-1 bg-white border border-slate-200 rounded-lg shadow-2xl max-h-48 overflow-y-auto">
-            <div 
-                v-for="piece in searchResults" 
-                :key="piece.id"
-                @mousedown.prevent="selectionnerPiece(ligne, piece)"
-                class="px-3 py-2 hover:bg-slate-100 cursor-pointer text-xs border-b border-slate-100 last:border-none flex justify-between items-center"
-            >
-                <div>
-                    <span class="font-bold text-slate-800 uppercase">{{ piece.designation_piece }}</span>
-                    <span class="text-[10px] text-slate-400 block" v-if="piece.reference">Réf: {{ piece.reference }}</span>
-                </div>
-                <span class="font-mono text-[#E11D48] font-semibold">{{ piece.prix_kagnan_ht || piece.prix_marche_ht || 0 }} F</span>
-            </div>
-        </div>
-    </div>
-</td>
+
+                                        <!-- Désignation avec autocomplétion & détection auto -->
+                                        <td class="px-3 py-3 overflow-visible">
+                                            <div class="relative w-full">
+                                                <input 
+                                                    type="text" 
+                                                    v-model="ligne.designation" 
+                                                    @input="surSaisieDesignation(ligne, index)"
+                                                    @focus="rechercherPiecesStock(ligne, index)"
+                                                    @blur="fermerSuggestions"
+                                                    placeholder="Libellé de la prestation ou pièce..."
+                                                    autocomplete="off"
+                                                    class="w-full bg-white border border-slate-300 rounded-lg text-xs uppercase text-slate-900 focus:border-[#E11D48] focus:ring-1 focus:ring-[#E11D48]"
+                                                />
+                                                
+                                                <!-- Liste déroulante des suggestions de stock -->
+                                                <div v-if="activeDropdownIndex === index && searchResults.length > 0" class="absolute left-0 right-0 z-[999] mt-1 bg-white border border-slate-200 rounded-lg shadow-2xl max-h-48 overflow-y-auto">
+                                                    <div 
+                                                        v-for="piece in searchResults" 
+                                                        :key="piece.id"
+                                                        @mousedown.prevent="selectionnerPiece(ligne, piece)"
+                                                        class="px-3 py-2 hover:bg-slate-100 cursor-pointer text-xs border-b border-slate-100 last:border-none flex justify-between items-center"
+                                                    >
+                                                        <div>
+                                                            <span class="font-bold text-slate-800 uppercase">{{ piece.designation_piece }}</span>
+                                                            <span class="text-[10px] text-slate-400 block" v-if="piece.reference">Réf: {{ piece.reference }}</span>
+                                                        </div>
+                                                        <span class="font-mono text-[#E11D48] font-semibold">{{ piece.prix_kagnan_ht || piece.prix_marche_ht || 0 }} F</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+
+                                        <!-- Famille et Sous-Famille -->
+                                        <td class="px-3 py-3 space-y-1">
+                                            <select 
+                                                v-model="ligne.famille" 
+                                                class="w-full bg-white border border-slate-300 rounded-lg text-[11px] font-semibold text-slate-800 focus:border-[#E11D48]"
+                                            >
+                                                <option :value="FAMILLE_PAR_DEFAUT">{{ FAMILLE_PAR_DEFAUT }}</option>
+                                                <option v-for="(sousFamilles, nomFamille) in FAMILLES" :key="nomFamille" :value="nomFamille">
+                                                    {{ nomFamille }}
+                                                </option>
+                                            </select>
+
+                                            <select 
+                                                v-if="FAMILLES[ligne.famille]" 
+                                                v-model="ligne.sous_famille" 
+                                                class="w-full bg-slate-50 border border-slate-200 rounded-md text-[10px] text-slate-600"
+                                            >
+                                                <option value="">-- Sous-famille --</option>
+                                                <option v-for="sf in FAMILLES[ligne.famille]" :key="sf" :value="sf">
+                                                    {{ sf }}
+                                                </option>
+                                            </select>
+                                        </td>
+
                                         <!-- Référence -->
                                         <td class="px-3 py-3">
                                             <input 
@@ -259,12 +327,14 @@ const submitDevis = () => {
                                                 class="w-full bg-white border border-slate-300 rounded-lg text-xs uppercase text-slate-900 focus:border-[#E11D48] focus:ring-1 focus:ring-[#E11D48]"
                                             />
                                         </td>
+
                                         <!-- Bouton associer pièce -->
                                         <td class="px-3 py-3 text-center">
                                             <button type="button" @click="rechercherPiecesStock(ligne, index)" class="w-7 h-7 bg-white hover:bg-slate-200 text-slate-500 hover:text-slate-900 rounded-lg flex items-center justify-center border border-slate-300 transition mx-auto shadow-sm" title="Rechercher une pièce dans le stock">
                                                 <i class="fa-solid fa-magnifying-glass text-[11px]"></i>
                                             </button>
                                         </td>
+
                                         <!-- PU Net -->
                                         <td class="px-3 py-3">
                                             <input 
@@ -274,6 +344,7 @@ const submitDevis = () => {
                                                 class="w-full bg-white border border-slate-300 rounded-lg text-xs text-right text-slate-900 focus:border-[#E11D48] focus:ring-1 focus:ring-[#E11D48]"
                                             />
                                         </td>
+
                                         <!-- Remise -->
                                         <td class="px-3 py-3">
                                             <input 
@@ -283,18 +354,21 @@ const submitDevis = () => {
                                                 class="w-full bg-white border border-slate-300 rounded-lg text-xs text-right text-slate-900 focus:border-[#E11D48] focus:ring-1 focus:ring-[#E11D48]"
                                             />
                                         </td>
-                                        <!-- Montant HT (Calculé) -->
+
+                                        <!-- Montant HT -->
                                         <td class="px-3 py-3 text-right">
                                             <span class="font-mono font-semibold text-slate-700">
                                                 {{ calculerMontantHt(ligne).toLocaleString() }}
                                             </span>
                                         </td>
-                                        <!-- Total TTC (Calculé) -->
+
+                                        <!-- Total TTC -->
                                         <td class="px-3 py-3 text-right">
                                             <span class="font-mono font-bold text-slate-900">
                                                 {{ calculerTotalTtc(ligne).toLocaleString() }}
                                             </span>
                                         </td>
+
                                         <!-- Exempt TVA -->
                                         <td class="px-3 py-3 text-center">
                                             <input 
@@ -303,6 +377,7 @@ const submitDevis = () => {
                                                 class="rounded bg-white border-slate-300 text-[#E11D48] focus:ring-[#E11D48] w-4 h-4 cursor-pointer"
                                             />
                                         </td>
+
                                         <!-- Supprimer -->
                                         <td class="px-3 py-3 text-center">
                                             <button 

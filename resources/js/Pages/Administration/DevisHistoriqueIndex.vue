@@ -1,10 +1,48 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link } from '@inertiajs/vue3';
+import { FAMILLES, FAMILLE_PAR_DEFAUT } from '@/constants/familles.js';
 
 defineProps({
     dossiers: Array,
 });
+
+// Helper pour grouper les lignes d'un devis par famille
+const grouperLignesParFamille = (lignes) => {
+    if (!lignes || lignes.length === 0) return [];
+
+    const groupes = {};
+    lignes.forEach(ligne => {
+        const familleNom = ligne.famille || FAMILLE_PAR_DEFAUT;
+        if (!groupes[familleNom]) {
+            groupes[familleNom] = [];
+        }
+        groupes[familleNom].push(ligne);
+    });
+
+    const ordreFamilles = [...Object.keys(FAMILLES), FAMILLE_PAR_DEFAUT];
+    const resultat = [];
+
+    ordreFamilles.forEach(familleNom => {
+        if (groupes[familleNom] && groupes[familleNom].length > 0) {
+            resultat.push({
+                famille: familleNom,
+                lignes: groupes[familleNom]
+            });
+        }
+    });
+
+    Object.keys(groupes).forEach(familleNom => {
+        if (!ordreFamilles.includes(familleNom) && groupes[familleNom].length > 0) {
+            resultat.push({
+                famille: familleNom,
+                lignes: groupes[familleNom]
+            });
+        }
+    });
+
+    return resultat;
+};
 </script>
 
 <template>
@@ -23,7 +61,6 @@ defineProps({
                     </p>
                 </div>
 
-                <!-- Bouton de retour au tableau de bord -->
                 <Link
                     :href="route('dashboard')"
                     class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition"
@@ -59,7 +96,7 @@ defineProps({
                         </span>
                     </div>
 
-                    <!-- Tableau récapitulatif des lignes du devis -->
+                    <!-- Tableau récapitulatif regroupe par famille -->
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200 text-left text-xs">
                             <thead class="bg-gray-50/70 text-gray-500 uppercase tracking-wider text-[10px]">
@@ -72,20 +109,34 @@ defineProps({
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-200/60">
-                                <tr v-for="ligne in dossier.devis?.lignes" :key="ligne.id">
-                                    <td class="px-4 py-3 text-gray-800 font-medium">{{ ligne.designation }}</td>
-                                    <td class="px-4 py-3 text-center text-gray-600">{{ ligne.quantite }}</td>
-                                    <td class="px-4 py-3 text-right text-gray-600">{{ Number(ligne.pu_net).toLocaleString() }} F</td>
-                                    <td class="px-4 py-3 text-right font-bold text-gray-900">{{ Number(ligne.montant_ht).toLocaleString() }} F</td>
-                                    <td class="px-4 py-3 text-center">
-                                        <span v-if="ligne.is_accepted" class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                                            <i class="fa-solid fa-check"></i> Accepté
-                                        </span>
-                                        <span v-else class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">
-                                            <i class="fa-solid fa-xmark"></i> Refusé
-                                        </span>
-                                    </td>
-                                </tr>
+                                <template v-for="groupe in grouperLignesParFamille(dossier.devis?.lignes)" :key="groupe.famille">
+                                    <!-- EN-TÊTE FAMILLE -->
+                                    <tr class="bg-slate-100/80 font-bold border-y border-slate-200">
+                                        <td colspan="5" class="px-4 py-1.5 text-slate-800 uppercase tracking-wider text-[10px]">
+                                            <i class="fa-solid fa-layer-group text-slate-500 mr-1.5"></i>
+                                            <span>{{ groupe.famille }}</span>
+                                        </td>
+                                    </tr>
+
+                                    <!-- LIGNES -->
+                                    <tr v-for="ligne in groupe.lignes" :key="ligne.id" class="hover:bg-gray-50/50">
+                                        <td class="px-4 py-3 text-gray-800 font-medium">
+                                            <span>{{ ligne.designation }}</span>
+                                            <span v-if="ligne.sous_famille" class="text-[10px] text-gray-500 font-normal ml-1">({{ ligne.sous_famille }})</span>
+                                        </td>
+                                        <td class="px-4 py-3 text-center text-gray-600">{{ ligne.quantite }}</td>
+                                        <td class="px-4 py-3 text-right text-gray-600">{{ Number(ligne.pu_net).toLocaleString() }} F</td>
+                                        <td class="px-4 py-3 text-right font-bold text-gray-900">{{ Number(ligne.montant_ht).toLocaleString() }} F</td>
+                                        <td class="px-4 py-3 text-center">
+                                            <span v-if="ligne.is_accepted" class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                                <i class="fa-solid fa-check"></i> Accepté
+                                            </span>
+                                            <span v-else class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">
+                                                <i class="fa-solid fa-xmark"></i> Refusé
+                                            </span>
+                                        </td>
+                                    </tr>
+                                </template>
                             </tbody>
                         </table>
                     </div>

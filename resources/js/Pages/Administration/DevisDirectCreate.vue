@@ -2,11 +2,37 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
-import axios from 'axios'; // Import d'Axios pour la recherche de pièces
-
+import axios from 'axios';
+import { FAMILLES, FAMILLE_PAR_DEFAUT } from '@/constants/familles.js';
 const props = defineProps({
-    vehicules: Array, // Gardé au cas où, mais non utilisé vu qu'on est en mode manuel direct
+    vehicules: Array,
 });
+
+// Détection automatique de la Famille & Sous-famille selon les mots-clés
+const detecterFamilleEtSousFamille = (designation) => {
+    if (!designation || designation.trim().length === 0) {
+        return { famille: FAMILLE_PAR_DEFAUT, sousFamille: '' };
+    }
+
+    const texte = designation.toLowerCase();
+
+    for (const [familleNom, sousFamillesList] of Object.entries(FAMILLES)) {
+        for (const sousFamille of sousFamillesList) {
+            const sousFamilleLower = sousFamille.toLowerCase();
+            if (texte.includes(sousFamilleLower) || texte.includes(familleNom.toLowerCase())) {
+                return {
+                    famille: familleNom,
+                    sousFamille: sousFamille
+                };
+            }
+        }
+    }
+
+    return {
+        famille: FAMILLE_PAR_DEFAUT,
+        sousFamille: ''
+    };
+};
 
 // Variables d'état pour l'autocomplétion des pièces
 const activeDropdownIndex = ref(null);
@@ -24,12 +50,23 @@ const form = useForm({
             quantite: 1,
             designation: 'DIAGNOSTIC TECHNIQUE',
             reference_piece: '',
+            famille: FAMILLE_PAR_DEFAUT,
+            sous_famille: '',
             pu_net: 10000,
             remise: 0,
             ne_pas_appliquer_tva: true,
         }
     ],
 });
+
+// Saisie dans le champ désignation avec autocomplétion & détection auto
+const surSaisieDesignation = (ligne, index) => {
+    rechercherPiecesStock(ligne, index);
+
+    const res = detecterFamilleEtSousFamille(ligne.designation);
+    ligne.famille = res.famille;
+    ligne.sous_famille = res.sousFamille;
+};
 
 // --- LOGIQUE D'AUTOCOMPLÉTION DES PIÈCES ---
 const rechercherPiecesStock = (ligne, index) => {
@@ -41,7 +78,6 @@ const rechercherPiecesStock = (ligne, index) => {
         return;
     }
 
-    // Appel de la route spécifique aux devis directs
     axios.get(route('administration.devis.directs.rechercher-pieces'), { 
         params: { 
             q: query,
@@ -62,6 +98,11 @@ const selectionnerPiece = (ligne, piece) => {
     ligne.designation = piece.designation_piece || '';
     ligne.reference_piece = piece.reference || '';
     ligne.pu_net = piece.prix_kagnan_ht || piece.prix_marche_ht || 0;
+
+    const res = detecterFamilleEtSousFamille(ligne.designation);
+    ligne.famille = piece.famille || res.famille;
+    ligne.sous_famille = piece.sous_famille || res.sousFamille;
+
     activeDropdownIndex.value = null;
     searchResults.value = [];
 };
@@ -78,6 +119,8 @@ const ajouterLigne = () => {
         quantite: 1,
         designation: '',
         reference_piece: '',
+        famille: FAMILLE_PAR_DEFAUT,
+        sous_famille: '',
         pu_net: 0,
         remise: 0,
         ne_pas_appliquer_tva: true,
@@ -141,7 +184,6 @@ const submitDevis = () => {
                     <p class="text-xs text-slate-500 mt-1">Établissez un devis direct avec saisie libre ou choix sur pièces.</p>
                 </div>
 
-                <!-- Bouton Retour positionné en haut à droite -->
                 <Link 
                     :href="route('administration.devis.directs.index')" 
                     class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition flex items-center gap-1.5"
@@ -157,7 +199,7 @@ const submitDevis = () => {
                 
                 <form @submit.prevent="submitDevis" class="space-y-6">
                     
-                    <!-- SECTION CLIENT & VÉHICULE (Saisie Manuelle Directe allégée) -->
+                    <!-- SECTION CLIENT & VÉHICULE -->
                     <div class="bg-slate-50 p-5 rounded-xl shadow-sm border border-slate-200 space-y-4">
                         <div class="flex items-center justify-between border-b border-slate-200 pb-3">
                             <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
@@ -166,7 +208,6 @@ const submitDevis = () => {
                             </h3>
                         </div>
 
-                        <!-- Formulaire direct allégé (4 colonnes) -->
                         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                             <div>
                                 <label class="block text-xs font-semibold text-slate-600 mb-1">Nom du Client</label>
@@ -193,15 +234,16 @@ const submitDevis = () => {
                             <table class="min-w-full divide-y divide-slate-200 text-left text-xs">
                                 <thead class="bg-slate-100 text-slate-500 uppercase tracking-wider text-[10px]">
                                     <tr>
-                                        <th class="px-3 py-3 font-semibold w-24 text-center">Qté</th>
+                                        <th class="px-3 py-3 font-semibold w-20 text-center">Qté</th>
                                         <th class="px-3 py-3 font-semibold">Désignation (Autocomplétion)</th>
-                                        <th class="px-3 py-3 font-semibold w-32">Réf. Pièce</th>
-                                        <th class="px-3 py-3 font-semibold w-28 text-right">PU Net</th>
-                                        <th class="px-3 py-3 font-semibold w-24 text-right">Remise</th>
-                                        <th class="px-3 py-3 font-semibold w-28 text-right">Total HT</th>
-                                        <th class="px-3 py-3 font-semibold w-28 text-right">Total TTC</th>
-                                        <th class="px-3 py-3 font-semibold text-center w-20">Exempt TVA</th>
-                                        <th class="px-3 py-3 font-semibold text-center w-12">Action</th>
+                                        <th class="px-3 py-3 font-semibold w-36">Famille / Sous-famille</th>
+                                        <th class="px-3 py-3 font-semibold w-28">Réf. Pièce</th>
+                                        <th class="px-3 py-3 font-semibold w-24 text-right">PU Net</th>
+                                        <th class="px-3 py-3 font-semibold w-20 text-right">Remise</th>
+                                        <th class="px-3 py-3 font-semibold w-24 text-right">Total HT</th>
+                                        <th class="px-3 py-3 font-semibold w-24 text-right">Total TTC</th>
+                                        <th class="px-3 py-3 font-semibold text-center w-16">Exempt TVA</th>
+                                        <th class="px-3 py-3 font-semibold text-center w-10">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-slate-200">
@@ -211,13 +253,13 @@ const submitDevis = () => {
                                             <input type="number" v-model="ligne.quantite" min="0" step="any" class="w-full px-2 py-1.5 bg-white border border-slate-300 rounded-lg text-xs text-center font-bold text-slate-900 focus:border-[#E11D48]" />
                                         </td>
                                         
-                                        <!-- Désignation avec Autocomplétion intégrée -->
+                                        <!-- Désignation avec Autocomplétion & Détection auto -->
                                         <td class="px-3 py-3 overflow-visible">
                                             <div class="relative w-full">
                                                 <input 
                                                     type="text" 
                                                     v-model="ligne.designation" 
-                                                    @input="rechercherPiecesStock(ligne, index)"
+                                                    @input="surSaisieDesignation(ligne, index)"
                                                     @focus="rechercherPiecesStock(ligne, index)"
                                                     @blur="fermerSuggestions"
                                                     placeholder="Libellé de la prestation ou pièce..." 
@@ -241,6 +283,30 @@ const submitDevis = () => {
                                                     </div>
                                                 </div>
                                             </div>
+                                        </td>
+
+                                        <!-- Famille et Sous-Famille -->
+                                        <td class="px-3 py-3 space-y-1">
+                                            <select 
+                                                v-model="ligne.famille" 
+                                                class="w-full bg-white border border-slate-300 rounded-lg text-[11px] font-semibold text-slate-800 focus:border-[#E11D48]"
+                                            >
+                                                <option :value="FAMILLE_PAR_DEFAUT">{{ FAMILLE_PAR_DEFAUT }}</option>
+                                                <option v-for="(sousFamilles, nomFamille) in FAMILLES" :key="nomFamille" :value="nomFamille">
+                                                    {{ nomFamille }}
+                                                </option>
+                                            </select>
+
+                                            <select 
+                                                v-if="FAMILLES[ligne.famille]" 
+                                                v-model="ligne.sous_famille" 
+                                                class="w-full bg-slate-50 border border-slate-200 rounded-md text-[10px] text-slate-600"
+                                            >
+                                                <option value="">-- Sous-famille --</option>
+                                                <option v-for="sf in FAMILLES[ligne.famille]" :key="sf" :value="sf">
+                                                    {{ sf }}
+                                                </option>
+                                            </select>
                                         </td>
 
                                         <!-- Référence -->

@@ -24,4 +24,10 @@ class Vehicule extends Model
     {
         return $this->hasMany(Intervention::class);
     }
+
+    // Suivi des interactions avec le client au sujet de ce véhicule
+    public function interactions()
+    {
+        return $this->hasMany(InteractionClient::class);
+    }
 }

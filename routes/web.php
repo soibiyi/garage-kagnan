@@ -25,7 +25,6 @@ Route::get('/', function () {
 
 // Route du dashboard avec redirection automatique pour l'admin
 Route::get('/dashboard', function () {
-    // Si l'utilisateur est un admin, on le renvoie directement sur sa gestion des utilisateurs
     if (auth()->user()->role === 'admin') {
         return redirect()->route('admin.users.index');
     }
@@ -67,6 +66,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/users/{user}/edit', [UserController::class, 'edit'])->name('users.edit');
     Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
     Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy'); 
+    Route::get('/charge-clients/{user}/activites', [UserController::class, 'chargeClientActivities'])->name('charge_clients.activities');
 });
 
 // ==========================================
@@ -90,7 +90,18 @@ Route::middleware(['auth'])->prefix('parc')->name('parc.')->group(function () {
 Route::middleware(['auth', 'verified'])->prefix('suivi-client')->name('charge_client.')->group(function () {
     Route::get('/clients', [ChargeClientController::class, 'index'])->name('clients.index');
     Route::get('/clients/{client}', [ChargeClientController::class, 'showClient'])->name('clients.show');
+
+    // Fiche véhicule (accueil : 3 cartes + échéances)
     Route::get('/vehicules/{vehicule}', [ChargeClientController::class, 'showVehicule'])->name('vehicules.show');
+
+    // Pages dédiées du véhicule
+    Route::get('/vehicules/{vehicule}/infos', [ChargeClientController::class, 'infosVehicule'])->name('vehicules.infos');
+    Route::get('/vehicules/{vehicule}/relances', [ChargeClientController::class, 'relancesVehicule'])->name('vehicules.relances');
+    Route::get('/vehicules/{vehicule}/interventions', [ChargeClientController::class, 'interventionsVehicule'])->name('vehicules.interventions');
+
+    // Enregistrement d'une interaction liée à un véhicule
+    Route::post('/vehicules/{vehicule}/interactions', [ChargeClientController::class, 'storeInteraction'])
+        ->name('vehicules.interactions.store');
 });
 
 // Routes Administration (Dossiers & Devis)
@@ -120,17 +131,17 @@ Route::middleware(['auth'])->prefix('administration')->name('administration.')->
     Route::post('/devis-directs', [DossierController::class, 'storeDevisDirect'])->name('devis.directs.store');
 
     Route::get('/dossiers/{dossier}/rechercher-pieces', [DossierController::class, 'rechercherPieces'])
-    ->name('dossiers.rechercher-pieces');
+        ->name('dossiers.rechercher-pieces');
 
     Route::get('/devis-directs/rechercher-pieces', [DossierController::class, 'rechercherPieces'])
-    ->name('devis.directs.rechercher-pieces');
+        ->name('devis.directs.rechercher-pieces');
 
     Route::get('/stocks', [StockController::class, 'index'])->name('stocks.index');
     Route::post('/stocks', [StockController::class, 'store'])->name('stocks.store');
     Route::put('/stocks/{stock}', [StockController::class, 'update'])->name('stocks.update');
     Route::delete('/stocks/{stock}', [StockController::class, 'destroy'])->name('stocks.destroy');
 
-   Route::get('/factures', [FactureController::class, 'index'])->name('factures.index');
+    Route::get('/factures', [FactureController::class, 'index'])->name('factures.index');
     Route::get('/factures/{id}', [FactureController::class, 'show'])->name('factures.show');
     Route::post('/factures/{id}/encaisser', [FactureController::class, 'storeEncaissement'])->name('factures.encaisser');
 });

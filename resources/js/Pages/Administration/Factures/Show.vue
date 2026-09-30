@@ -2,6 +2,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { computed } from 'vue';
+import { FAMILLES, FAMILLE_PAR_DEFAUT } from '@/constants/familles.js';
 
 const props = defineProps({
     dossier: Object,
@@ -14,13 +15,64 @@ const lignesFacturees = computed(() =>
     (props.dossier?.devis?.lignes || []).filter(l => l.is_accepted)
 );
 
+// Organiser et grouper les lignes facturées par famille avec calcul du sous-total HT par famille
+const lignesGroupesParFamille = computed(() => {
+    if (!lignesFacturees.value || lignesFacturees.value.length === 0) return [];
+
+    const groupes = {};
+    
+    lignesFacturees.value.forEach(ligne => {
+        const familleNom = ligne.famille || FAMILLE_PAR_DEFAUT;
+        if (!groupes[familleNom]) {
+            groupes[familleNom] = [];
+        }
+        groupes[familleNom].push(ligne);
+    });
+
+    const ordreFamilles = [...Object.keys(FAMILLES), FAMILLE_PAR_DEFAUT];
+    const resultat = [];
+
+    const ajouterGroupe = (familleNom) => {
+        if (groupes[familleNom] && groupes[familleNom].length > 0) {
+            const sousTotalHt = groupes[familleNom].reduce((acc, l) => acc + Number(l.montant_ht || 0), 0);
+            resultat.push({
+                famille: familleNom,
+                lignes: groupes[familleNom],
+                sousTotalHt: sousTotalHt
+            });
+        }
+    };
+
+    ordreFamilles.forEach(ajouterGroupe);
+
+    Object.keys(groupes).forEach(familleNom => {
+        if (!ordreFamilles.includes(familleNom)) {
+            ajouterGroupe(familleNom);
+        }
+    });
+
+    return resultat;
+});
+
 const somme = (champ) =>
     lignesFacturees.value.reduce((acc, l) => acc + Number(l[champ] || 0), 0);
 
 const totalHt = computed(() => somme('montant_ht'));
 const totalRemises = computed(() => somme('remise'));
-const totalTtc = computed(() => somme('montant_ttc'));
-const totalTva = computed(() => totalTtc.value - totalHt.value);
+const totalTtcBrut = computed(() => somme('montant_ttc'));
+const totalTva = computed(() => totalTtcBrut.value - totalHt.value);
+
+// Petite fourniture (3% du total TTC brut)
+const petiteFourniture = computed(() => Math.round(totalTtcBrut.value * 0.03));
+
+// Total TTC Final
+const totalTtcFinal = computed(() => totalTtcBrut.value + petiteFourniture.value);
+
+// Calcul dynamique du reste à payer côté front
+const resteAPayerCalcul = computed(() => {
+    const paye = Number(props.resume?.montant_paye || 0);
+    return Math.max(totalTtcFinal.value - paye, 0);
+});
 
 const formatDate = (dateString) => {
     if (!dateString) return '';
@@ -32,7 +84,6 @@ const formatDate = (dateString) => {
 };
 
 const aujourdhui = new Date().toISOString().slice(0, 10);
-
 const modesPaiement = ['Especes', 'Carte Bancaire', 'Virement', 'Orange Money', 'MTN Money', 'Moov Money'];
 
 const form = useForm({
@@ -44,12 +95,11 @@ const form = useForm({
 
 const fmt = (n) => Number(n || 0).toLocaleString('fr-FR');
 
-// Pourcentage que représente un versement par rapport au total facturé
 const pctVersement = (montant) =>
-    props.resume.total_ttc > 0 ? Math.round((Number(montant) * 100) / props.resume.total_ttc) : 0;
+    totalTtcFinal.value > 0 ? Math.round((Number(montant) * 100) / totalTtcFinal.value) : 0;
 
 const solderReste = () => {
-    form.montant = props.resume.reste;
+    form.montant = resteAPayerCalcul.value;
 };
 
 const submitEncaissement = () => {
@@ -63,7 +113,6 @@ const imprimer = () => {
     window.print();
 };
 
-// Retour à la page précédente (repli vers la liste si aucun historique)
 const retour = () => {
     if (window.history.length > 1) {
         window.history.back();
@@ -77,7 +126,6 @@ const retour = () => {
     <Head :title="`Facture - Dossier #${dossier.numero_ot || dossier.id}`" />
 
     <AuthenticatedLayout>
-        <!-- En-tête de page (masqué à l'impression) -->
         <template #header>
             <div class="flex justify-between items-center print:hidden">
                 <div class="flex items-center gap-2">
@@ -87,18 +135,11 @@ const retour = () => {
                     </h2>
                 </div>
                 <div class="flex items-center space-x-3">
-                    <button
-                        @click="imprimer"
-                        class="inline-flex items-center gap-1.5 px-4 py-2 bg-gray-800 hover:bg-gray-900 text-white font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-xs"
-                    >
+                    <button @click="imprimer" class="inline-flex items-center gap-1.5 px-4 py-2 bg-gray-800 hover:bg-gray-900 text-white font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-xs">
                         <i class="fa-solid fa-print text-[11px]"></i>
                         <span>Imprimer</span>
                     </button>
-                    <button
-                        type="button"
-                        @click="retour"
-                        class="inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900 font-medium"
-                    >
+                    <button type="button" @click="retour" class="inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900 font-medium">
                         <i class="fa-solid fa-arrow-left text-[10px]"></i>
                         <span>Retour</span>
                     </button>
@@ -109,7 +150,6 @@ const retour = () => {
         <div class="py-8 bg-white min-h-screen text-gray-900 print:py-0 print:bg-white">
             <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 print:max-w-none print:px-0 print:mx-0">
 
-                <!-- Si aucun devis n'est lié au dossier -->
                 <div v-if="!dossier.devis" class="bg-white shadow-xl shadow-gray-200/50 rounded-2xl p-12 border border-gray-100 text-center print:hidden">
                     <div class="w-12 h-12 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-400 mx-auto mb-3">
                         <i class="fa-solid fa-triangle-exclamation text-xl"></i>
@@ -120,7 +160,7 @@ const retour = () => {
 
                 <div v-else class="invoice-sheet bg-white shadow-2xl shadow-gray-200/50 sm:rounded-2xl p-8 border border-gray-100 print:shadow-none print:border-none print:p-2 text-gray-800">
 
-                    <!-- En-tête de la facture -->
+                    <!-- En-tête -->
                     <div class="flex justify-between items-start border-b-2 border-gray-900 pb-3 mb-3">
                         <div>
                             <img src="/images/logo-kagnan.png" alt="Garage Kagnan" class="h-16 w-auto object-contain" />
@@ -163,14 +203,15 @@ const retour = () => {
                         <span class="font-semibold">N° Chassis :</span> <span class="font-mono">{{ dossier.vehicule?.vin || 'N/A' }}</span>
                     </div>
 
-                    <!-- Tableau des lignes facturées (acceptées uniquement) -->
+                    <!-- Tableau par famille avec sous-totaux -->
                     <div class="mb-3">
-                        <div class="flex justify-between items-center bg-gray-900 text-white px-3 py-1 rounded-t-lg">
+                        <div class="bg-gray-900 text-white px-3 py-1 rounded-t-lg">
                             <p class="text-xs font-bold uppercase tracking-wider flex items-center gap-2">
                                 <i class="fa-solid fa-list-check text-gray-400 text-[11px]"></i>
-                                <span>Prestations & Pièces facturées</span>
+                                <span>Prestations & Pièces facturées par famille</span>
                             </p>
                         </div>
+
                         <table class="min-w-full border-collapse border border-gray-900 text-xs">
                             <thead>
                                 <tr class="bg-gray-100 border-b border-gray-900 text-center font-semibold">
@@ -186,20 +227,42 @@ const retour = () => {
                                 <tr v-if="lignesFacturees.length === 0">
                                     <td colspan="6" class="p-3 text-center text-gray-500 italic">Aucune ligne acceptée par le client.</td>
                                 </tr>
-                                <tr v-for="ligne in lignesFacturees" :key="ligne.id" class="border-b border-gray-300 text-center hover:bg-gray-50/50">
-                                    <td class="border-r border-gray-900 p-1 font-medium">{{ ligne.quantite }}</td>
-                                    <td class="border-r border-gray-900 p-1 text-left">
-                                        <span class="font-medium text-gray-900">{{ ligne.designation }}</span>
-                                        <span v-if="ligne.reference_piece" class="block text-[10px] text-gray-500 font-mono mt-0.5">Réf : {{ ligne.reference_piece }}</span>
-                                    </td>
-                                    <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.pu_net).toLocaleString() }} F</td>
-                                    <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.remise || 0).toLocaleString() }} F</td>
-                                    <td class="border-r border-gray-900 p-1 text-center">
-                                        <span v-if="ligne.ne_pas_appliquer_tva" class="text-amber-600 font-semibold bg-amber-50 px-1 py-0.5 rounded border border-amber-200 text-[10px]">Exonéré</span>
-                                        <span v-else class="text-gray-600">18%</span>
-                                    </td>
-                                    <td class="p-1 text-right font-bold text-gray-900">{{ Number(ligne.montant_ht).toLocaleString() }} F</td>
-                                </tr>
+                                <template v-else v-for="groupe in lignesGroupesParFamille" :key="groupe.famille">
+                                    <!-- EN-TÊTE DE LA FAMILLE -->
+                                    <tr class="bg-gray-200/80 border-y border-gray-900 font-bold">
+                                        <td colspan="6" class="px-3 py-1 text-gray-900 uppercase tracking-wider text-[11px]">
+                                            <i class="fa-solid fa-layer-group text-slate-600 mr-1.5"></i>
+                                            <span>{{ groupe.famille }}</span>
+                                        </td>
+                                    </tr>
+
+                                    <!-- LIGNES DE LA FAMILLE -->
+                                    <tr v-for="ligne in groupe.lignes" :key="ligne.id" class="border-b border-gray-300 text-center hover:bg-gray-50/50">
+                                        <td class="border-r border-gray-900 p-1 font-medium">{{ ligne.quantite }}</td>
+                                        <td class="border-r border-gray-900 p-1 text-left">
+                                            <span class="font-medium text-gray-900">{{ ligne.designation }}</span>
+                                            <span v-if="ligne.sous_famille" class="text-[10px] text-gray-500 font-semibold ml-1">({{ ligne.sous_famille }})</span>
+                                            <span v-if="ligne.reference_piece" class="block text-[10px] text-gray-500 font-mono mt-0.5">Réf : {{ ligne.reference_piece }}</span>
+                                        </td>
+                                        <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.pu_net).toLocaleString() }} F</td>
+                                        <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.remise || 0).toLocaleString() }} F</td>
+                                        <td class="border-r border-gray-900 p-1 text-center">
+                                            <span v-if="ligne.ne_pas_appliquer_tva" class="text-amber-600 font-semibold bg-amber-50 px-1 py-0.5 rounded border border-amber-200 text-[10px]">Exonéré</span>
+                                            <span v-else class="text-gray-600">18%</span>
+                                        </td>
+                                        <td class="p-1 text-right font-bold text-gray-900">{{ Number(ligne.montant_ht).toLocaleString() }} F</td>
+                                    </tr>
+
+                                    <!-- SOUS-TOTAL DE LA FAMILLE -->
+                                    <tr class="bg-gray-50 border-b-2 border-gray-900 font-bold text-xs">
+                                        <td colspan="5" class="px-3 py-1 text-right italic text-gray-700">
+                                            Sous-total HT {{ groupe.famille }} :
+                                        </td>
+                                        <td class="p-1 text-right text-gray-900 border-t border-gray-400">
+                                            {{ groupe.sousTotalHt.toLocaleString() }} F
+                                        </td>
+                                    </tr>
+                                </template>
                             </tbody>
                         </table>
                     </div>
@@ -219,9 +282,13 @@ const retour = () => {
                                 <span class="font-semibold text-gray-700">TVA Totale</span>
                                 <span class="font-medium">{{ totalTva.toLocaleString() }} F</span>
                             </div>
+                            <div class="flex justify-between border-b border-gray-900 px-3 py-1 bg-gray-50">
+                                <span class="font-semibold text-gray-700">Petite fourniture </span>
+                                <span class="font-medium">{{ petiteFourniture.toLocaleString() }} F</span>
+                            </div>
                             <div class="flex justify-between px-3 py-1.5 font-black bg-gray-200 text-sm text-gray-900">
                                 <span>Total TTC à Payer</span>
-                                <span class="text-[#E11D48]">{{ totalTtc.toLocaleString() }} F</span>
+                                <span class="text-[#E11D48]">{{ totalTtcFinal.toLocaleString() }} F</span>
                             </div>
                             <div class="flex justify-between border-t border-gray-900 px-3 py-1 bg-white">
                                 <span class="font-semibold text-gray-700">Déjà payé</span>
@@ -229,38 +296,38 @@ const retour = () => {
                             </div>
                             <div class="flex justify-between border-t border-gray-900 px-3 py-1.5 font-black bg-gray-50 text-sm">
                                 <span>Reste à payer</span>
-                                <span :class="resume.soldee ? 'text-emerald-700' : 'text-[#E11D48]'">{{ fmt(resume.reste) }} F</span>
+                                <span :class="resteAPayerCalcul === 0 ? 'text-emerald-700' : 'text-[#E11D48]'">{{ fmt(resteAPayerCalcul) }} F</span>
                             </div>
                         </div>
                     </div>
 
-                    <!-- SUIVI DES PAIEMENTS (masqué à l'impression / PDF) -->
+                    <!-- SUIVI DES PAIEMENTS -->
                     <div class="print:hidden mb-3 border border-gray-900 rounded-lg overflow-hidden text-xs">
                         <div class="flex justify-between items-center bg-gray-900 text-white px-3 py-1">
                             <p class="font-bold uppercase tracking-wider flex items-center gap-2">
                                 <i class="fa-solid fa-money-bill-wave text-gray-400 text-[11px]"></i>
                                 <span>Suivi des paiements</span>
                             </p>
-                            <span v-if="resume.soldee" class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-[10px] uppercase">Facture soldée</span>
+                            <span v-if="resteAPayerCalcul === 0" class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-[10px] uppercase">Facture soldée</span>
                             <span v-else class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-[10px] uppercase">En cours de paiement</span>
                         </div>
 
                         <!-- Barre de progression -->
                         <div class="px-3 py-2 border-b border-gray-300">
                             <div class="flex justify-between mb-1 font-semibold text-gray-700">
-                                <span>{{ fmt(resume.montant_paye) }} F payés sur {{ fmt(resume.total_ttc) }} F</span>
-                                <span :class="resume.soldee ? 'text-emerald-700' : 'text-[#E11D48]'">{{ resume.pourcentage }} %</span>
+                                <span>{{ fmt(resume.montant_paye) }} F payés sur {{ fmt(totalTtcFinal) }} F</span>
+                                <span :class="resteAPayerCalcul === 0 ? 'text-emerald-700' : 'text-[#E11D48]'">{{ pctVersement(resume.montant_paye) }} %</span>
                             </div>
                             <div class="h-2.5 w-full bg-gray-200 rounded-full overflow-hidden">
                                 <div
                                     class="h-full rounded-full transition-all"
-                                    :class="resume.soldee ? 'bg-emerald-500' : 'bg-[#E11D48]'"
-                                    :style="{ width: resume.pourcentage + '%' }"
+                                    :class="resteAPayerCalcul === 0 ? 'bg-emerald-500' : 'bg-[#E11D48]'"
+                                    :style="{ width: pctVersement(resume.montant_paye) + '%' }"
                                 ></div>
                             </div>
                         </div>
 
-                        <!-- Historique des versements -->
+                        <!-- Historique -->
                         <table class="min-w-full border-collapse">
                             <thead>
                                 <tr class="bg-gray-100 border-b border-gray-900 text-center font-semibold">
@@ -290,16 +357,16 @@ const retour = () => {
                             </tbody>
                         </table>
 
-                        <!-- Formulaire d'encaissement (masqué à l'impression) -->
-                        <form v-if="!resume.soldee && resume.total_ttc > 0" @submit.prevent="submitEncaissement" class="print:hidden bg-gray-50 border-t border-gray-900 p-3">
+                        <!-- Formulaire d'encaissement -->
+                        <form v-if="resteAPayerCalcul > 0" @submit.prevent="submitEncaissement" class="print:hidden bg-gray-50 border-t border-gray-900 p-3">
                             <p class="font-bold uppercase tracking-wider text-gray-900 mb-2">Enregistrer un versement</p>
                             <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
                                 <div>
                                     <label class="block font-semibold text-gray-700 mb-1">Montant (F)</label>
-                                    <input v-model="form.montant" type="number" min="1" :max="resume.reste" step="1" required
+                                    <input v-model="form.montant" type="number" min="1" :max="resteAPayerCalcul" step="1" required
                                         class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:border-[#E11D48]" />
                                     <button type="button" @click="solderReste" class="mt-1 text-[10px] text-[#E11D48] font-bold hover:underline">
-                                        Solder le reste ({{ fmt(resume.reste) }} F)
+                                        Solder le reste ({{ fmt(resteAPayerCalcul) }} F)
                                     </button>
                                 </div>
                                 <div>
@@ -343,7 +410,7 @@ const retour = () => {
                         </div>
                     </div>
 
-                    <!-- Pied de page légal -->
+                    <!-- Pied de page -->
                     <div class="mt-2 pt-2 border-t border-gray-300 text-[9px] text-center text-gray-500 space-y-0.5">
                         <p>Siège : Yopougon Zone Industrielle & Terminus 27 NCC : 1113876 J - RCCM : CI- ABJ-2012-B-5126</p>
                         <p>Régime d'imposition : Taxe d'Etat de l'Entreprenant (TEE)</p>

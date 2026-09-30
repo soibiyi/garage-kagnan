@@ -1,16 +1,58 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
+import { computed } from 'vue';
+import { FAMILLES, FAMILLE_PAR_DEFAUT } from '@/constants/familles.js';
 
 const props = defineProps({
     dossier: Object,
 });
 
-// Initialiser le formulaire avec les IDs des lignes qui sont déjà acceptées (ou toutes par défaut)
+// Formulaire pour la sélection des lignes acceptées
 const form = useForm({
     lignes_acceptees: props.dossier?.devis?.lignes
         ? props.dossier.devis.lignes.filter(l => l.is_accepted).map(l => l.id)
         : []
+});
+
+// Organiser et grouper les lignes par famille selon l'ordre prédéfini dans familles.js
+const lignesGroupesParFamille = computed(() => {
+    if (!props.dossier?.devis?.lignes) return [];
+
+    const groupes = {};
+    
+    props.dossier.devis.lignes.forEach(ligne => {
+        const familleNom = ligne.famille || FAMILLE_PAR_DEFAUT;
+        if (!groupes[familleNom]) {
+            groupes[familleNom] = [];
+        }
+        groupes[familleNom].push(ligne);
+    });
+
+    // Ordre d'affichage basé sur les clés de FAMILLES, puis FAMILLE_PAR_DEFAUT à la fin
+    const ordreFamilles = [...Object.keys(FAMILLES), FAMILLE_PAR_DEFAUT];
+
+    const resultat = [];
+    ordreFamilles.forEach(familleNom => {
+        if (groupes[familleNom] && groupes[familleNom].length > 0) {
+            resultat.push({
+                famille: familleNom,
+                lignes: groupes[familleNom]
+            });
+        }
+    });
+
+    // Récupérer les familles non listées s'il y en a
+    Object.keys(groupes).forEach(familleNom => {
+        if (!ordreFamilles.includes(familleNom) && groupes[familleNom].length > 0) {
+            resultat.push({
+                famille: familleNom,
+                lignes: groupes[familleNom]
+            });
+        }
+    });
+
+    return resultat;
 });
 
 const submitValidation = () => {
@@ -32,7 +74,6 @@ const imprimer = () => {
     window.print();
 };
 
-// Retour à la page précédente (repli vers la liste si aucun historique)
 const retour = () => {
     if (window.history.length > 1) {
         window.history.back();
@@ -43,7 +84,7 @@ const retour = () => {
 </script>
 
 <template>
-    <Head :title="`Devis - Dossier #${dossier.numero_ot || dossier.id}`" />
+    <Head :title="`Devis / Facture - Dossier #${dossier.numero_ot || dossier.id}`" />
 
     <AuthenticatedLayout>
         <!-- En-tête de page (masqué à l'impression) -->
@@ -78,7 +119,6 @@ const retour = () => {
         <div class="py-8 bg-white min-h-screen text-gray-900 print:py-0 print:bg-white">
             <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 print:max-w-none print:px-0 print:mx-0">
                 
-                <!-- Si aucun devis n'est lié au dossier -->
                 <div v-if="!dossier.devis" class="bg-white shadow-xl shadow-gray-200/50 rounded-2xl p-12 border border-gray-100 text-center print:hidden">
                     <div class="w-12 h-12 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-400 mx-auto mb-3">
                         <i class="fa-solid fa-triangle-exclamation text-xl"></i>
@@ -87,14 +127,13 @@ const retour = () => {
                     <p class="text-xs text-gray-500 mt-1">Aucun devis n'a encore été généré pour ce dossier.</p>
                 </div>
 
-                <!-- FORMULAIRE (Si devis en attente) / VUE SIMPLE (Si devis déjà validé) -->
                 <div v-else>
                     
-                    <!-- CAS 1 : DEVIS EN ATTENTE -> Formulaire interactif avec cases à cocher et bouton -->
+                    <!-- MODE 1 : DEVIS EN ATTENTE (Saisie du choix client) -->
                     <form v-if="dossier.devis.statut === 'en_attente'" @submit.prevent="submitValidation">
                         <div class="invoice-sheet bg-white shadow-2xl shadow-gray-200/50 sm:rounded-2xl p-8 border border-gray-100 print:shadow-none print:border-none print:p-2 text-gray-800">
                             
-                            <!-- En-tête du Devis -->
+                            <!-- En-tête -->
                             <div class="flex justify-between items-start border-b-2 border-gray-900 pb-3 mb-3">
                                 <div>
                                     <img src="/images/logo-kagnan.png" alt="Garage Kagnan" class="h-16 w-auto object-contain" />
@@ -137,14 +176,15 @@ const retour = () => {
                                 <span class="font-semibold">N° Chassis :</span> <span class="font-mono">{{ dossier.vehicule?.vin || 'N/A' }}</span>
                             </div>
 
-                            <!-- Tableau des lignes avec cases à cocher -->
+                            <!-- Tableau REGROUPÉ PAR FAMILLE -->
                             <div class="mb-3">
-                                <div class="flex justify-between items-center bg-gray-900 text-white px-3 py-1 rounded-t-lg">
+                                <div class="bg-gray-900 text-white px-3 py-1 rounded-t-lg">
                                     <p class="text-xs font-bold uppercase tracking-wider flex items-center gap-2">
                                         <i class="fa-solid fa-list-check text-gray-400 text-[11px]"></i>
-                                        <span>Prestations & Pièces proposées (Cochez les lignes acceptées)</span>
+                                        <span>Prestations & Pièces proposées par famille</span>
                                     </p>
                                 </div>
+
                                 <table class="min-w-full border-collapse border border-gray-900 text-xs">
                                     <thead>
                                         <tr class="bg-gray-100 border-b border-gray-900 text-center font-semibold">
@@ -158,34 +198,46 @@ const retour = () => {
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        <tr v-for="ligne in dossier.devis.lignes" :key="ligne.id" :class="{'bg-gray-50 opacity-60 print:opacity-100': !form.lignes_acceptees.includes(ligne.id)}" class="border-b border-gray-300 text-center hover:bg-gray-50/50">
-                                            <td class="border-r border-gray-900 p-1 print:hidden">
-                                                <input 
-                                                    type="checkbox" 
-                                                    :value="ligne.id" 
-                                                    v-model="form.lignes_acceptees"
-                                                    class="rounded border-gray-300 text-[#E11D48] focus:ring-[#E11D48]"
-                                                />
-                                            </td>
-                                            <td class="border-r border-gray-900 p-1 font-medium">{{ ligne.quantite }}</td>
-                                            <td class="border-r border-gray-900 p-1 text-left">
-                                                <span class="font-medium text-gray-900">{{ ligne.designation }}</span>
-                                                <span v-if="ligne.reference_piece" class="block text-[10px] text-gray-500 font-mono mt-0.5">Réf : {{ ligne.reference_piece }}</span>
-                                                <span v-if="!form.lignes_acceptees.includes(ligne.id)" class="hidden print:inline-block text-[10px] italic text-red-600 ml-1">(Refusé par le client)</span>
-                                            </td>
-                                            <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.pu_net).toLocaleString() }} F</td>
-                                            <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.remise || 0).toLocaleString() }} F</td>
-                                            <td class="border-r border-gray-900 p-1 text-center">
-                                                <span v-if="ligne.ne_pas_appliquer_tva" class="text-amber-600 font-semibold bg-amber-50 px-1 py-0.5 rounded border border-amber-200 text-[10px]">Exonéré</span>
-                                                <span v-else class="text-gray-600">18%</span>
-                                            </td>
-                                            <td class="p-1 text-right font-bold text-gray-900">{{ Number(ligne.montant_ht).toLocaleString() }} F</td>
-                                        </tr>
+                                        <template v-for="groupe in lignesGroupesParFamille" :key="groupe.famille">
+                                            <!-- EN-TÊTE DE LA FAMILLE -->
+                                            <tr class="bg-gray-200/80 border-y border-gray-900 font-bold">
+                                                <td colspan="7" class="px-3 py-1 text-gray-900 uppercase tracking-wider text-[11px]">
+                                                    <i class="fa-solid fa-layer-group text-slate-600 mr-1.5"></i>
+                                                    <span>{{ groupe.famille }}</span>
+                                                </td>
+                                            </tr>
+
+                                            <!-- LIGNES DE LA FAMILLE -->
+                                            <tr v-for="ligne in groupe.lignes" :key="ligne.id" :class="{'bg-gray-50 opacity-60 print:opacity-100': !form.lignes_acceptees.includes(ligne.id)}" class="border-b border-gray-300 text-center hover:bg-gray-50/50">
+                                                <td class="border-r border-gray-900 p-1 print:hidden">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        :value="ligne.id" 
+                                                        v-model="form.lignes_acceptees"
+                                                        class="rounded border-gray-300 text-[#E11D48] focus:ring-[#E11D48]"
+                                                    />
+                                                </td>
+                                                <td class="border-r border-gray-900 p-1 font-medium">{{ ligne.quantite }}</td>
+                                                <td class="border-r border-gray-900 p-1 text-left">
+                                                    <span class="font-medium text-gray-900">{{ ligne.designation }}</span>
+                                                    <span v-if="ligne.sous_famille" class="text-[10px] text-gray-500 font-semibold ml-1">({{ ligne.sous_famille }})</span>
+                                                    <span v-if="ligne.reference_piece" class="block text-[10px] text-gray-500 font-mono">Réf : {{ ligne.reference_piece }}</span>
+                                                    <span v-if="!form.lignes_acceptees.includes(ligne.id)" class="hidden print:inline-block text-[10px] italic text-red-600 ml-1">(Refusé par le client)</span>
+                                                </td>
+                                                <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.pu_net).toLocaleString() }} F</td>
+                                                <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.remise || 0).toLocaleString() }} F</td>
+                                                <td class="border-r border-gray-900 p-1 text-center">
+                                                    <span v-if="ligne.ne_pas_appliquer_tva" class="text-amber-600 font-semibold bg-amber-50 px-1 py-0.5 rounded border border-amber-200 text-[10px]">Exonéré</span>
+                                                    <span v-else class="text-gray-600">18%</span>
+                                                </td>
+                                                <td class="p-1 text-right font-bold text-gray-900">{{ Number(ligne.montant_ht).toLocaleString() }} F</td>
+                                            </tr>
+                                        </template>
                                     </tbody>
                                 </table>
                             </div>
 
-                            <!-- Bouton de sauvegarde de la sélection (interactif) -->
+                            <!-- Actions -->
                             <div class="mb-4 flex justify-between items-center print:hidden bg-gray-50 p-3 rounded-lg border border-gray-200">
                                 <span class="text-xs text-gray-600 font-medium">Cochez les lignes acceptées par le client puis enregistrez pour valider la facture définitive.</span>
                                 <button 
@@ -197,7 +249,7 @@ const retour = () => {
                                 </button>
                             </div>
 
-                            <!-- Totaux (Calculés uniquement sur les lignes acceptées) -->
+                            <!-- Totaux -->
                             <div class="flex justify-end mb-3" v-if="dossier.devis.lignes && dossier.devis.lignes.length > 0">
                                 <div class="w-72 border border-gray-900 text-xs rounded-lg overflow-hidden shadow-sm">
                                     <div class="flex justify-between border-b border-gray-900 px-3 py-1 bg-gray-50">
@@ -255,10 +307,10 @@ const retour = () => {
                         </div>
                     </form>
 
-                    <!-- CAS 2 : DEVIS DÉJÀ VALIDÉ -> Vue récapitulative propre sans cases à cocher ni bouton -->
+                    <!-- MODE 2 : DEVIS DÉJÀ VALIDÉ -->
                     <div v-else class="invoice-sheet bg-white shadow-2xl shadow-gray-200/50 sm:rounded-2xl p-8 border border-gray-100 print:shadow-none print:border-none print:p-2 text-gray-800">
                         
-                        <!-- En-tête du Devis -->
+                        <!-- En-tête -->
                         <div class="flex justify-between items-start border-b-2 border-gray-900 pb-3 mb-3">
                             <div>
                                 <img src="/images/logo-kagnan.png" alt="Garage Kagnan" class="h-16 w-auto object-contain" />
@@ -301,14 +353,15 @@ const retour = () => {
                             <span class="font-semibold">N° Chassis :</span> <span class="font-mono">{{ dossier.vehicule?.vin || 'N/A' }}</span>
                         </div>
 
-                        <!-- Tableau des lignes (Consultation simple, sans cases à cocher) -->
+                        <!-- Tableau REGROUPÉ PAR FAMILLE (Consultation) -->
                         <div class="mb-3">
-                            <div class="flex justify-between items-center bg-gray-900 text-white px-3 py-1 rounded-t-lg">
+                            <div class="bg-gray-900 text-white px-3 py-1 rounded-t-lg">
                                 <p class="text-xs font-bold uppercase tracking-wider flex items-center gap-2">
                                     <i class="fa-solid fa-list-check text-gray-400 text-[11px]"></i>
-                                    <span>Prestations & Pièces validées</span>
+                                    <span>Prestations & Pièces validées par famille</span>
                                 </p>
                             </div>
+
                             <table class="min-w-full border-collapse border border-gray-900 text-xs">
                                 <thead>
                                     <tr class="bg-gray-100 border-b border-gray-900 text-center font-semibold">
@@ -322,33 +375,45 @@ const retour = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr v-for="ligne in dossier.devis.lignes" :key="ligne.id" :class="{'bg-gray-50 opacity-50 print:opacity-150': !ligne.is_accepted}" class="border-b border-gray-300 text-center hover:bg-gray-50/50">
-                                        <td class="border-r border-gray-900 p-1 font-medium">{{ ligne.quantite }}</td>
-                                        <td class="border-r border-gray-900 p-1 text-left">
-                                            <span class="font-medium text-gray-900">{{ ligne.designation }}</span>
-                                            <span v-if="ligne.reference_piece" class="block text-[10px] text-gray-500 font-mono mt-0.5">Réf : {{ ligne.reference_piece }}</span>
-                                        </td>
-                                        <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.pu_net).toLocaleString() }} F</td>
-                                        <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.remise || 0).toLocaleString() }} F</td>
-                                        <td class="border-r border-gray-900 p-1 text-center">
-                                            <span v-if="ligne.ne_pas_appliquer_tva" class="text-amber-600 font-semibold bg-amber-50 px-1 py-0.5 rounded border border-amber-200 text-[10px]">Exonéré</span>
-                                            <span v-else class="text-gray-600">18%</span>
-                                        </td>
-                                        <td class="border-r border-gray-900 p-1 text-right font-bold text-gray-900">{{ Number(ligne.montant_ht).toLocaleString() }} F</td>
-                                        <td class="p-1 text-center">
-                                            <span v-if="ligne.is_accepted" class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-[10px]">
-                                                Accepté
-                                            </span>
-                                            <span v-else class="px-2 py-0.5 bg-rose-100 text-rose-800 rounded font-bold text-[10px]">
-                                                Refusé
-                                            </span>
-                                        </td>
-                                    </tr>
+                                    <template v-for="groupe in lignesGroupesParFamille" :key="groupe.famille">
+                                        <!-- EN-TÊTE DE LA FAMILLE -->
+                                        <tr class="bg-gray-200/80 border-y border-gray-900 font-bold">
+                                            <td colspan="7" class="px-3 py-1 text-gray-900 uppercase tracking-wider text-[11px]">
+                                                <i class="fa-solid fa-layer-group text-slate-600 mr-1.5"></i>
+                                                <span>{{ groupe.famille }}</span>
+                                            </td>
+                                        </tr>
+
+                                        <!-- LIGNES DE LA FAMILLE -->
+                                        <tr v-for="ligne in groupe.lignes" :key="ligne.id" :class="{'bg-gray-50 opacity-50 print:opacity-100': !ligne.is_accepted}" class="border-b border-gray-300 text-center hover:bg-gray-50/50">
+                                            <td class="border-r border-gray-900 p-1 font-medium">{{ ligne.quantite }}</td>
+                                            <td class="border-r border-gray-900 p-1 text-left">
+                                                <span class="font-medium text-gray-900">{{ ligne.designation }}</span>
+                                                <span v-if="ligne.sous_famille" class="text-[10px] text-gray-500 font-semibold ml-1">({{ ligne.sous_famille }})</span>
+                                                <span v-if="ligne.reference_piece" class="block text-[10px] text-gray-500 font-mono">Réf : {{ ligne.reference_piece }}</span>
+                                            </td>
+                                            <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.pu_net).toLocaleString() }} F</td>
+                                            <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.remise || 0).toLocaleString() }} F</td>
+                                            <td class="border-r border-gray-900 p-1 text-center">
+                                                <span v-if="ligne.ne_pas_appliquer_tva" class="text-amber-600 font-semibold bg-amber-50 px-1 py-0.5 rounded border border-amber-200 text-[10px]">Exonéré</span>
+                                                <span v-else class="text-gray-600">18%</span>
+                                            </td>
+                                            <td class="border-r border-gray-900 p-1 text-right font-bold text-gray-900">{{ Number(ligne.montant_ht).toLocaleString() }} F</td>
+                                            <td class="p-1 text-center">
+                                                <span v-if="ligne.is_accepted" class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-[10px]">
+                                                    Accepté
+                                                </span>
+                                                <span v-else class="px-2 py-0.5 bg-rose-100 text-rose-800 rounded font-bold text-[10px]">
+                                                    Refusé
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    </template>
                                 </tbody>
                             </table>
                         </div>
 
-                        <!-- Totaux (Calculés sur les lignes acceptées en base) -->
+                        <!-- Totaux -->
                         <div class="flex justify-end mb-3" v-if="dossier.devis.lignes && dossier.devis.lignes.length > 0">
                             <div class="w-72 border border-gray-900 text-xs rounded-lg overflow-hidden shadow-sm">
                                 <div class="flex justify-between border-b border-gray-900 px-3 py-1 bg-gray-50">
@@ -396,7 +461,7 @@ const retour = () => {
                             </div>
                         </div>
 
-                        <!-- Pied de page légal -->
+                        <!-- Pied de page -->
                         <div class="mt-2 pt-2 border-t border-gray-300 text-[9px] text-center text-gray-500 space-y-0.5">
                             <p>Siège : Yopougon Zone Industrielle & Terminus 27 NCC : 1113876 J - RCCM : CI- ABJ-2012-B-5126</p>
                             <p>Régime d'imposition : Taxe d'Etat de l'Entreprenant (TEE)</p>
