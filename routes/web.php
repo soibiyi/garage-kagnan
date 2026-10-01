@@ -67,6 +67,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
     Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy'); 
     Route::get('/charge-clients/{user}/activites', [UserController::class, 'chargeClientActivities'])->name('charge_clients.activities');
+    // Route pour le suivi de toutes les interactions
+    Route::get('/users/interactions', [UserController::class, 'interactionIndex'])->name('users.interactionindex');
 });
 
 // ==========================================
