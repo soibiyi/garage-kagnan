@@ -10,7 +10,8 @@ import {
     faCircleInfo, 
     faCheck, 
     faTimes,
-    faArrowLeft
+    faArrowLeft,
+    faComments // Icône ajoutée pour les interactions
 } from '@fortawesome/free-solid-svg-icons';
 
 const props = defineProps({
@@ -124,6 +125,31 @@ const filteredInterventions = computed(() => {
         <div class="py-8 bg-[#0B0F19]/[0.02] min-h-screen">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
                 
+                <!-- CARD : SUIVI DES INTERACTIONS (Cliquable) -->
+                <Link 
+                    :href="route('interactions.index')" 
+                    class="block bg-white p-5 rounded-2xl shadow-sm border border-[#8A8D8F]/20 hover:border-[#E11D48]/50 hover:shadow-md transition-all group cursor-pointer"
+                >
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-4">
+                            <div class="w-12 h-12 bg-[#E11D48]/10 text-[#E11D48] rounded-xl flex items-center justify-center group-hover:bg-[#E11D48] group-hover:text-white transition-all">
+                                <FontAwesomeIcon :icon="faComments" class="w-5 h-5" />
+                            </div>
+                            <div>
+                                <h3 class="font-bold text-[#0B0F19] text-base group-hover:text-[#E11D48] transition-colors">
+                                    Suivi des Interactions
+                                </h3>
+                                <p class="text-xs text-[#8A8D8F] mt-0.5">
+                                    Consultez l'historique et le détail des échanges avec les clients
+                                </p>
+                            </div>
+                        </div>
+                        <div class="text-[#8A8D8F] group-hover:text-[#E11D48] group-hover:translate-x-1 transition-all">
+                            <FontAwesomeIcon :icon="faArrowRight" class="w-4 h-4" />
+                        </div>
+                    </div>
+                </Link>
+
                 <!-- BARRE DE RECHERCHE -->
                 <div class="bg-white p-4 sm:p-5 rounded-2xl shadow-sm border border-[#8A8D8F]/20 flex items-center gap-3">
                     <div class="relative flex-1">

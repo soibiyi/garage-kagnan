@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\Vehicule;
 use App\Models\Client;
+use App\Models\InteractionClient;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -27,7 +28,7 @@ class UserController extends Controller
 
         return Inertia::render('Admin/Users/Index', [
             'users' => $users,
-            'stats' => $stats, // On transmet les stats ici
+            'stats' => $stats,
         ]);
     }
 
@@ -61,7 +62,7 @@ class UserController extends Controller
     public function edit(User $user)
     {
         return Inertia::render('Admin/Users/Edit', [
-            'user' => $user
+            'user' => $user,
         ]);
     }
 
@@ -72,14 +73,13 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'email' => ['required', 'string', 'email', 'max:191', Rule::unique('users')->ignore($user->id)],
             'role' => 'required|string|in:admin,receptionniste,mecanicien,administratif,charge_client',
-            'password' => 'nullable|string|min:6', // Le mot de passe est optionnel en modification
+            'password' => 'nullable|string|min:6',
         ]);
 
         $user->update([
             'name' => $request->name,
             'email' => $request->email,
             'role' => $request->role,
-            // On ne met à jour le mot de passe que s'il a été renseigné
             'password' => $request->filled('password') ? Hash::make($request->password) : $user->password,
         ]);
 
@@ -96,5 +96,51 @@ class UserController extends Controller
         $user->delete();
 
         return redirect()->route('admin.users.index')->with('success', 'Collaborateur supprimé avec succès.');
+    }
+
+    /**
+     * Affiche le suivi des interactions regroupées par Chargé Client et par Client
+     */
+    public function interactionIndex()
+    {
+        // Récupère toutes les interactions avec leurs relations
+        $interactions = InteractionClient::with(['user', 'client', 'vehicule'])
+            ->latest()
+            ->get();
+
+        // Regroupement d'abord par Chargé Client (user_id), puis par Client (client_id)
+        $chargesClients = $interactions->groupBy('user_id')->map(function ($userInteractions) {
+            $user = $userInteractions->first()->user;
+
+            $clientsGroups = $userInteractions->groupBy(function ($interaction) {
+                return $interaction->client_id ?? 'sans_client';
+            })->map(function ($group) {
+                $premierClient = $group->first()->client;
+                return [
+                    'client' => $premierClient ? [
+                        'id' => $premierClient->id,
+                        'nom' => $premierClient->nom_complet ?? $premierClient->nom ?? 'Client non spécifié',
+                        'telephone' => $premierClient->telephone ?? null,
+                        'email' => $premierClient->email ?? null,
+                    ] : [
+                        'id' => null,
+                        'nom' => 'Client non spécifié',
+                    ],
+                    'interactions' => $group->values(),
+                ];
+            })->values();
+
+            return [
+                'id' => $user->id ?? null,
+                'name' => $user->name ?? 'Chargé client non spécifié',
+                'email' => $user->email ?? '',
+                'clients_groups' => $clientsGroups,
+                'total_interactions' => $userInteractions->count(),
+            ];
+        })->values();
+
+        return Inertia::render('Admin/Users/InteractionIndex', [
+            'chargesClients' => $chargesClients,
+        ]);
     }
 }

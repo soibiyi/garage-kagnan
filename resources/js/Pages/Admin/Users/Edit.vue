@@ -1,5 +1,15 @@
 <script setup>
 import { useForm, Link } from '@inertiajs/vue3';
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
+import { 
+    faUserPen, 
+    faArrowLeft, 
+    faUser, 
+    faEnvelope, 
+    faUserShield, 
+    faLock,
+    faCircleNotch
+} from '@fortawesome/free-solid-svg-icons';
 
 // Récupération de l'utilisateur passé par le contrôleur
 const props = defineProps({
@@ -10,7 +20,7 @@ const props = defineProps({
 const form = useForm({
     name: props.user.name,
     email: props.user.email,
-    password: '', // Vide par défaut (si vide, on ne le change pas)
+    password: '',
     role: props.user.role,
 });
 
@@ -22,60 +32,147 @@ const submit = () => {
 </script>
 
 <template>
-  <div class="max-w-3xl mx-auto mt-12 bg-white p-8 rounded-xl shadow-lg border-t-4" style="border-color: #C8102E;">
-    
-    <div class="flex justify-between items-center mb-6">
-      <h1 class="text-2xl font-bold" style="color: #1A1A1A;">Modifier le Collaborateur : {{ user.name }}</h1>
-      <Link :href="route('admin.users.index')" class="text-sm font-medium" style="color: #8A8D8F;">← Retour à la liste</Link>
+  <div class="min-h-screen bg-gray-50 py-10 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-3xl mx-auto">
+      
+      <!-- Lien retour -->
+      <div class="mb-6">
+        <Link :href="route('admin.users.index')" 
+              class="inline-flex items-center gap-2 text-xs font-semibold text-gray-500 hover:text-gray-900 transition">
+          <font-awesome-icon :icon="faArrowLeft" />
+          <span>Retour à la liste des collaborateurs</span>
+        </Link>
+      </div>
+
+      <!-- Carte du formulaire -->
+      <div class="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+        
+        <!-- En-tête de la carte -->
+        <div class="p-6 sm:p-8 bg-white border-b border-gray-100 flex items-center gap-4">
+          <span class="w-12 h-12 flex items-center justify-center rounded-xl text-white shadow-sm shrink-0" style="background-color: #1A1A1A;">
+            <font-awesome-icon :icon="faUserPen" class="text-xl" />
+          </span>
+          <div>
+            <h1 class="text-2xl font-bold" style="color: #1A1A1A;">Modifier le Collaborateur</h1>
+            <p class="text-xs text-gray-500 mt-1">Mise à jour des informations de <strong class="text-gray-800">{{ user.name }}</strong></p>
+          </div>
+        </div>
+
+        <!-- Formulaire -->
+        <form @submit.prevent="submit" class="p-6 sm:p-8 space-y-6">
+          
+          <!-- Nom complet -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-700">
+              Nom complet <span class="text-red-500">*</span>
+            </label>
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                <font-awesome-icon :icon="faUser" />
+              </span>
+              <input 
+                type="text" 
+                v-model="form.name" 
+                required 
+                placeholder="ex: Jean Dupont"
+                class="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/20 focus:border-[#C8102E] transition"
+                :class="{ 'border-red-500 focus:ring-red-200': form.errors.name }"
+              />
+            </div>
+            <p v-if="form.errors.name" class="mt-1 text-xs text-red-600 font-medium">{{ form.errors.name }}</p>
+          </div>
+
+          <!-- Adresse Email -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-700">
+              Adresse Email <span class="text-red-500">*</span>
+            </label>
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                <font-awesome-icon :icon="faEnvelope" />
+              </span>
+              <input 
+                type="email" 
+                v-model="form.email" 
+                required 
+                placeholder="jean.dupont@garage.com"
+                class="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/20 focus:border-[#C8102E] transition"
+                :class="{ 'border-red-500 focus:ring-red-200': form.errors.email }"
+              />
+            </div>
+            <p v-if="form.errors.email" class="mt-1 text-xs text-red-600 font-medium">{{ form.errors.email }}</p>
+          </div>
+
+          <!-- Rôle -->
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-700">
+              Rôle dans le Garage <span class="text-red-500">*</span>
+            </label>
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                <font-awesome-icon :icon="faUserShield" />
+              </span>
+              <select 
+                v-model="form.role" 
+                required 
+                class="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/20 focus:border-[#C8102E] transition"
+                :class="{ 'border-red-500 focus:ring-red-200': form.errors.role }"
+              >
+                <option value="receptionniste">Réceptionniste (Accueil, état initial, photos)</option>
+                <option value="mecanicien">Mécanicien (Essais, diagnostic, réparations)</option>
+                <option value="administratif">Administratif (Devis, facturation)</option>
+                <option value="charge_client">Chargé de Suivi Client & Relances</option>
+                <option value="admin">Administrateur (Accès total)</option>
+              </select>
+            </div>
+            <p v-if="form.errors.role" class="mt-1 text-xs text-red-600 font-medium">{{ form.errors.role }}</p>
+          </div>
+
+          <!-- Mot de passe facultatif -->
+          <div>
+            <div class="flex justify-between items-center mb-2">
+              <label class="block text-xs font-bold uppercase tracking-wider text-gray-700">
+                Nouveau mot de passe
+              </label>
+              <span class="text-[11px] text-gray-400 font-medium">Laissez vide si vous ne souhaitez pas le modifier</span>
+            </div>
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-400">
+                <font-awesome-icon :icon="faLock" />
+              </span>
+              <input 
+                type="password" 
+                v-model="form.password" 
+                placeholder="••••••••"
+                class="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 placeholder-gray-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/20 focus:border-[#C8102E] transition"
+                :class="{ 'border-red-500 focus:ring-red-200': form.errors.password }"
+              />
+            </div>
+            <p v-if="form.errors.password" class="mt-1 text-xs text-red-600 font-medium">{{ form.errors.password }}</p>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex items-center justify-end gap-3 pt-6 border-t border-gray-100">
+            <Link 
+              :href="route('admin.users.index')" 
+              class="px-5 py-2.5 rounded-xl text-xs font-semibold text-gray-600 hover:bg-gray-100 transition"
+            >
+              Annuler
+            </Link>
+            <button 
+              type="submit" 
+              :disabled="form.processing" 
+              class="text-white px-6 py-2.5 rounded-xl text-xs font-semibold transition duration-200 shadow-md hover:shadow-lg disabled:opacity-50 flex items-center gap-2"
+              style="background-color: #C8102E;"
+            >
+              <font-awesome-icon v-if="form.processing" :icon="faCircleNotch" class="animate-spin" />
+              <span>{{ form.processing ? 'Mise à jour...' : 'Mettre à jour' }}</span>
+            </button>
+          </div>
+
+        </form>
+      </div>
+
     </div>
-
-    <!-- Erreurs -->
-    <div v-if="Object.keys(form.errors).length > 0" class="mb-4 p-4 bg-red-100 border-l-4 rounded" style="border-color: #C8102E; color: #C8102E;">
-      <ul>
-        <li v-for="(error, key) in form.errors" :key="key">• {{ error }}</li>
-      </ul>
-    </div>
-
-    <form @submit.prevent="submit" class="space-y-6">
-      <!-- Nom -->
-      <div>
-        <label class="block text-sm font-semibold mb-2" style="color: #1A1A1A;">Nom complet</label>
-        <input type="text" v-model="form.name" required 
-          class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color: #8A8D8F;">
-      </div>
-
-      <!-- Email -->
-      <div>
-        <label class="block text-sm font-semibold mb-2" style="color: #1A1A1A;">Adresse Email</label>
-        <input type="email" v-model="form.email" required 
-          class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color: #8A8D8F;">
-      </div>
-
-      <!-- Rôle -->
-      <div>
-        <label class="block text-sm font-semibold mb-2" style="color: #1A1A1A;">Rôle dans le Garage</label>
-        <select v-model="form.role" required class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 bg-white" style="border-color: #8A8D8F;">
-          <option value="receptionniste">Réceptionniste (Accueil, état initial, photos)</option>
-          <option value="mecanicien">Mécanicien (Essais, diagnostic, réparations)</option>
-          <option value="administratif">Administratif (Devis, facturation)</option>
-          <option value="charge_client">Chargé de Suivi Client & Relances</option>
-          <option value="admin">Administrateur (Accès total)</option>
-        </select>
-      </div>
-
-      <!-- Mot de passe -->
-      <div>
-        <label class="block text-sm font-semibold mb-2" style="color: #1A1A1A;">Nouveau mot de passe <span class="text-xs font-normal text-gray-500">(Laisser vide pour ne pas modifier)</span></label>
-        <input type="password" v-model="form.password" 
-          class="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2" style="border-color: #8A8D8F;">
-      </div>
-
-      <!-- Bouton de validation -->
-      <div class="flex justify-end pt-4">
-        <button type="submit" :disabled="form.processing" class="text-white px-6 py-3 rounded-lg font-semibold transition duration-200 shadow-md disabled:opacity-50" style="background-color: #C8102E;">
-          Mettre à jour
-        </button>
-      </div>
-    </form>
   </div>
 </template>

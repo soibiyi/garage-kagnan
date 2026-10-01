@@ -1,22 +1,78 @@
 <script setup>
+import { ref, computed } from 'vue';
 import { Link, usePage, router } from '@inertiajs/vue3';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
-import { faBoxesStacked, faFileLines } from '@fortawesome/free-solid-svg-icons';
+import { 
+    faBoxesStacked, 
+    faFileLines, 
+    faUserShield, 
+    faUserGear, 
+    faScrewdriverWrench, 
+    faClipboardUser, 
+    faHeadset, 
+    faUserGroup,
+    faChevronDown,
+    faUsers
+} from '@fortawesome/free-solid-svg-icons';
 
-defineProps({
+const props = defineProps({
     users: Array,
     stats: Object,
 });
 
+// Définition des rôles avec labels et icônes
+const ROLES_CONFIG = {
+    admin: { label: 'Administrateurs', icone: faUserShield, badgeColor: 'bg-gray-900 text-white' },
+    receptionniste: { label: 'Réceptionnistes', icone: faClipboardUser, badgeColor: 'bg-blue-50 text-blue-700 border border-blue-200' },
+    mecanicien: { label: 'Mécaniciens', icone: faScrewdriverWrench, badgeColor: 'bg-amber-50 text-amber-700 border border-amber-200' },
+    administratif: { label: 'Administratifs', icone: faUserGear, badgeColor: 'bg-purple-50 text-purple-700 border border-purple-200' },
+    charge_client: { label: 'Chargés de Suivi Client', icone: faHeadset, badgeColor: 'bg-rose-50 text-rose-700 border border-rose-200' },
+};
+
+// Accordéon principal (Liste globale des employés)
+const isEmployeesMenuOpen = ref(true);
+
+const toggleEmployeesMenu = () => {
+    isEmployeesMenuOpen.value = !isEmployeesMenuOpen.value;
+};
+
+// Sous-accordéons par rôle
+const activeRoles = ref({
+    admin: true,
+    receptionniste: false,
+    mecanicien: false,
+    administratif: false,
+    charge_client: false,
+});
+
+const toggleRole = (roleKey) => {
+    activeRoles.value[roleKey] = !activeRoles.value[roleKey];
+};
+
+// Regroupement des employés par rôle
+const groupedUsers = computed(() => {
+    if (!props.users) return {};
+
+    const groups = {};
+    
+    Object.keys(ROLES_CONFIG).forEach(role => {
+        groups[role] = [];
+    });
+
+    props.users.forEach(user => {
+        if (groups[user.role]) {
+            groups[user.role].push(user);
+        } else {
+            if (!groups['autre']) groups['autre'] = [];
+            groups['autre'].push(user);
+        }
+    });
+
+    return groups;
+});
+
 const formatRole = (role) => {
-    const roles = {
-        admin: 'Administrateur',
-        receptionniste: 'Réceptionniste',
-        mecanicien: 'Mécanicien',
-        administratif: 'Administratif',
-        charge_client: 'Chargé de Suivi Client',
-    };
-    return roles[role] || role;
+    return ROLES_CONFIG[role]?.label || role;
 };
 
 const deleteUser = (id) => {
@@ -89,72 +145,145 @@ const logout = () => {
           <p class="text-sm" style="color: #8A8D8F;">Accéder au catalogue des pièces détachées et inventaire.</p>
         </Link>
 
-        <!-- Suivi de tous les Devis (Route corrigée) -->
-        <Link :href="route('administration.devis.index')" 
+        <!-- Suivi des Interactions -->
+        <Link :href="route('admin.users.interactionindex')" 
               class="bg-white p-6 rounded-xl shadow-md border border-gray-200 hover:border-[#C8102E] transition group block">
           <div class="flex items-center justify-between mb-2">
-            <h3 class="text-lg font-bold group-hover:text-[#C8102E] transition" style="color: #1A1A1A;">Suivi des Devis</h3>
+            <h3 class="text-lg font-bold group-hover:text-[#C8102E] transition" style="color: #1A1A1A;">Suivi des Interactions</h3>
             <span class="w-9 h-9 flex items-center justify-center rounded-lg shrink-0 transition"
                   style="background-color: #F3F4F6; color: #C8102E;">
               <font-awesome-icon :icon="faFileLines" class="text-base" />
             </span>
           </div>
-          <p class="text-sm" style="color: #8A8D8F;">Consulter tous les devis du garage.</p>
+          <p class="text-sm" style="color: #8A8D8F;">Consulter les Interactions entre les chargés client et les clients.</p>
         </Link>
       </div>
 
-      <!-- SECTION 3 : Liste des Collaborateurs -->
-      <div class="space-y-4">
-        <div class="flex justify-between items-center">
-          <div>
-            <h2 class="text-xl font-bold" style="color: #1A1A1A;">Liste des Employés</h2>
-            <p class="text-xs mt-0.5" style="color: #8A8D8F;">Gestion des accès et rôles du garage</p>
+      <!-- SECTION 3 : Grand Menu Dépliant "Liste des Employés" -->
+      <div class="bg-white rounded-2xl border border-gray-200 shadow-md overflow-hidden transition">
+        
+        <!-- EN-TÊTE PRINCIPAL DU MENU DÉROULANT -->
+        <div 
+          @click="toggleEmployeesMenu"
+          class="flex items-center justify-between p-6 bg-white hover:bg-gray-50/80 cursor-pointer select-none transition border-b border-transparent"
+          :class="{ 'border-gray-200 bg-gray-50/30': isEmployeesMenuOpen }"
+        >
+          <div class="flex items-center gap-4">
+            <span class="w-10 h-10 flex items-center justify-center rounded-xl text-white shadow-sm" style="background-color: #1A1A1A;">
+              <font-awesome-icon :icon="faUsers" class="text-lg" />
+            </span>
+            <div>
+              <h2 class="text-xl font-extrabold" style="color: #1A1A1A;">Liste des Employés</h2>
+              <p class="text-xs mt-0.5" style="color: #8A8D8F;">
+                Cliquez pour afficher ou masquer les différents rôles et collaborateurs
+              </p>
+            </div>
           </div>
-          <Link :href="route('admin.users.create')" 
-                class="text-white px-4 py-2.5 rounded-lg text-xs font-semibold shadow transition flex items-center gap-2"
-                style="background-color: #C8102E;">
-            <span>+ Ajouter un employé</span>
-          </Link>
+
+          <div class="flex items-center gap-4">
+            <Link :href="route('admin.users.create')" 
+                  @click.stop
+                  class="text-white px-4 py-2 rounded-lg text-xs font-semibold shadow transition flex items-center gap-2"
+                  style="background-color: #C8102E;">
+              <span>+ Ajouter un employé</span>
+            </Link>
+            
+            <div class="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 text-gray-500">
+              <font-awesome-icon 
+                :icon="faChevronDown" 
+                class="text-sm transition-transform duration-300"
+                :class="{ 'rotate-180': isEmployeesMenuOpen }"
+              />
+            </div>
+          </div>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          <div v-for="user in users" :key="user.id" class="bg-white p-6 rounded-xl shadow-md border border-gray-200 flex flex-col justify-between hover:shadow-lg transition">
-            <div>
-              <div class="flex items-start justify-between gap-2 mb-3">
-                <h3 class="font-bold text-base truncate" style="color: #1A1A1A;" :title="user.name">
-                  {{ user.name }}
-                </h3>
-                <span class="px-2.5 py-0.5 inline-flex text-[11px] leading-4 font-semibold rounded-full shrink-0"
-                      :style="user.role === 'admin' ? 'background-color: #1A1A1A; color: #FFFFFF;' : 'background-color: #F3F4F6; color: #C8102E; border: 1px solid #C8102E;'">
-                  {{ formatRole(user.role) }}
-                </span>
-              </div>
+        <!-- CONTENU DU GRAND MENU : SOUS-MENUS PAR RÔLE -->
+        <div v-show="isEmployeesMenuOpen" class="p-6 space-y-4 bg-gray-50/50 border-t border-gray-100">
+          
+          <template v-for="(usersList, roleKey) in groupedUsers" :key="roleKey">
+            <div v-if="usersList.length > 0" class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden transition">
               
-              <div class="space-y-1.5 text-xs text-gray-500 mb-6">
-                <p class="flex items-center gap-2 truncate">
-                  <span class="font-medium text-gray-700">Email :</span> {{ user.email }}
-                </p>
-                <p class="flex items-center gap-2">
-                  <span class="font-medium text-gray-700">Créé le :</span> {{ new Date(user.created_at).toLocaleDateString() }}
-                </p>
-              </div>
-            </div>
+              <!-- Bouton Sous-Menu Rôle -->
+              <button 
+                type="button"
+                @click="toggleRole(roleKey)"
+                class="w-full flex items-center justify-between p-4 text-left bg-white hover:bg-gray-50 transition border-b border-transparent"
+                :class="{ 'border-gray-200 bg-gray-50/50': activeRoles[roleKey] }"
+              >
+                <div class="flex items-center gap-3">
+                  <span class="w-8 h-8 flex items-center justify-center rounded-lg bg-gray-100 text-gray-700 text-sm">
+                    <font-awesome-icon :icon="ROLES_CONFIG[roleKey]?.icone || faUserGroup" />
+                  </span>
+                  <div>
+                    <h3 class="text-sm font-extrabold text-gray-800">
+                      {{ ROLES_CONFIG[roleKey]?.label || 'Autres Rôles' }}
+                    </h3>
+                    <p class="text-[11px] text-gray-400">
+                      {{ usersList.length }} {{ usersList.length > 1 ? 'collaborateurs' : 'collaborateur' }}
+                    </p>
+                  </div>
+                </div>
 
-            <div class="flex items-center justify-end gap-3 pt-4 border-t border-gray-100 text-xs font-medium">
-              <Link :href="route('admin.users.edit', user.id)" class="text-blue-600 hover:text-blue-900 transition">
-                Modifier
-              </Link>
-              <button v-if="user.id !== $page.props.auth.user.id" 
-                      @click="deleteUser(user.id)" 
-                      class="text-red-600 hover:text-red-900 transition">
-                Supprimer
+                <div class="flex items-center gap-3">
+                  <span class="px-2.5 py-0.5 text-xs font-bold rounded-full bg-gray-100 text-gray-600">
+                    {{ usersList.length }}
+                  </span>
+                  <font-awesome-icon 
+                    :icon="faChevronDown" 
+                    class="text-gray-400 text-xs transition-transform duration-200"
+                    :class="{ 'rotate-180': activeRoles[roleKey] }"
+                  />
+                </div>
               </button>
-            </div>
-          </div>
 
-          <div v-if="users.length === 0" class="col-span-full bg-white p-8 rounded-xl shadow-md border border-gray-200 text-center text-sm" style="color: #8A8D8F;">
+              <!-- Liste des cartes employés du rôle -->
+              <div v-show="activeRoles[roleKey]" class="p-5 bg-gray-50/30 border-t border-gray-100">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                  <div v-for="user in usersList" :key="user.id" class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-between hover:shadow-md transition">
+                    <div>
+                      <div class="flex items-start justify-between gap-2 mb-3">
+                        <h4 class="font-bold text-sm truncate" style="color: #1A1A1A;" :title="user.name">
+                          {{ user.name }}
+                        </h4>
+                        <span class="px-2 py-0.5 inline-flex text-[10px] leading-4 font-semibold rounded-full shrink-0"
+                              :class="ROLES_CONFIG[user.role]?.badgeColor || 'bg-gray-100 text-gray-700'">
+                          {{ formatRole(user.role) }}
+                        </span>
+                      </div>
+                      
+                      <div class="space-y-1 text-xs text-gray-500 mb-5">
+                        <p class="flex items-center gap-1.5 truncate">
+                          <span class="font-medium text-gray-700">Email :</span> {{ user.email }}
+                        </p>
+                        <p class="flex items-center gap-1.5">
+                          <span class="font-medium text-gray-700">Créé le :</span> {{ new Date(user.created_at).toLocaleDateString() }}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div class="flex items-center justify-end gap-3 pt-3 border-t border-gray-100 text-xs font-medium">
+                      <Link :href="route('admin.users.edit', user.id)" class="text-blue-600 hover:text-blue-900 transition">
+                        Modifier
+                      </Link>
+                      <button v-if="user.id !== $page.props.auth.user.id" 
+                              @click="deleteUser(user.id)" 
+                              class="text-red-600 hover:text-red-900 transition">
+                        Supprimer
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </template>
+
+          <!-- Aucun utilisateur -->
+          <div v-if="!users || users.length === 0" class="bg-white p-8 rounded-xl border border-gray-200 text-center text-sm" style="color: #8A8D8F;">
             Aucun collaborateur enregistré pour le moment.
           </div>
+
         </div>
       </div>
 
