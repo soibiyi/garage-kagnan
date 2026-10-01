@@ -143,4 +143,18 @@ class UserController extends Controller
             'chargesClients' => $chargesClients,
         ]);
     }
+
+    /**
+     * Afficher tous les véhicules avec leur propriétaire et leur dernier statut
+     */
+    public function vehiculesStatus()
+    {
+        $vehicules = Vehicule::with(['client', 'interventions' => function ($q) {
+            $q->latest();
+        }])->latest()->get();
+
+        return Inertia::render('Admin/Status', [
+            'vehicules' => $vehicules,
+        ]);
+    }
 }

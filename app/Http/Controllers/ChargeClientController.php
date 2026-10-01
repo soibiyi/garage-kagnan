@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\InteractionClient;
+use App\Models\Intervention;
 use App\Models\Vehicule;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -113,7 +114,21 @@ class ChargeClientController extends Controller
         ]);
     }
 
-    // 4. Enregistre une interaction (appel, WhatsApp, visite...) au sujet d'un véhicule
+    // 4. Mettre à jour le statut d'une intervention (Bouton Véhicule Livré)
+    public function updateStatut(Request $request, Intervention $intervention)
+    {
+        $data = $request->validate([
+            'statut' => 'required|string',
+        ]);
+
+        $intervention->update([
+            'statut' => $data['statut'],
+        ]);
+
+        return back()->with('success', 'Statut du véhicule mis à jour avec succès.');
+    }
+
+    // 5. Enregistre une interaction (appel, WhatsApp, visite...) au sujet d'un véhicule
     public function storeInteraction(Request $request, Vehicule $vehicule)
     {
         $data = $request->validate([
