@@ -1,6 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head } from '@inertiajs/vue3';
+import { Head, Link } from '@inertiajs/vue3';
 import { ref, computed } from 'vue';
 
 const props = defineProps({
@@ -118,24 +118,35 @@ const iconeType = (valeur) => TYPES.find((t) => t.valeur === valeur)?.icone || '
                     </p>
                 </div>
 
-                <!-- BARRE DE RECHERCHE -->
-                <div class="relative w-full sm:w-80">
-                    <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
-                        <i class="fa-solid fa-magnifying-glass text-xs"></i>
-                    </span>
-                    <input
-                        v-model="searchQuery"
-                        type="text"
-                        placeholder="Rechercher par chargé client ou client..."
-                        class="w-full rounded-xl border border-gray-200 bg-gray-50/50 pl-9 pr-8 py-2 text-xs font-medium text-[#0B0F19] transition focus:border-[#0B0F19] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B0F19]"
-                    />
-                    <button
-                        v-if="searchQuery"
-                        @click="searchQuery = ''"
-                        class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+                <div class="flex items-center gap-3">
+                    <!-- UNIQUE BOUTON RETOUR (HAUT DE PAGE) -->
+                    <Link
+                        :href="route('admin.users.index')"
+                        class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-bold text-[#0B0F19] transition hover:bg-gray-100 shadow-sm shrink-0"
                     >
-                        <i class="fa-solid fa-circle-xmark text-xs"></i>
-                    </button>
+                        <i class="fa-solid fa-arrow-left text-xs"></i>
+                        <span>Retour</span>
+                    </Link>
+
+                    <!-- BARRE DE RECHERCHE -->
+                    <div class="relative w-full sm:w-72">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-400">
+                            <i class="fa-solid fa-magnifying-glass text-xs"></i>
+                        </span>
+                        <input
+                            v-model="searchQuery"
+                            type="text"
+                            placeholder="Rechercher par chargé ou client..."
+                            class="w-full rounded-xl border border-gray-200 bg-gray-50/50 pl-9 pr-8 py-2 text-xs font-medium text-[#0B0F19] transition focus:border-[#0B0F19] focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#0B0F19]"
+                        />
+                        <button
+                            v-if="searchQuery"
+                            @click="searchQuery = ''"
+                            class="absolute inset-y-0 right-0 flex items-center pr-3 text-gray-400 hover:text-gray-600"
+                        >
+                            <i class="fa-solid fa-circle-xmark text-xs"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
         </template>

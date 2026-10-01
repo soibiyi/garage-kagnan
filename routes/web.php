@@ -67,10 +67,11 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
     Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy'); 
     Route::get('/charge-clients/{user}/activites', [UserController::class, 'chargeClientActivities'])->name('charge_clients.activities');
-    // Route pour le suivi de toutes les interactions
     Route::get('/users/interactions', [UserController::class, 'interactionIndex'])->name('users.interactionindex');
-});
 
+    // NOUVELLE ROUTE : Liste et statut de tous les véhicules enregistrés
+    Route::get('/vehicules/status', [UserController::class, 'vehiculesStatus'])->name('vehicules.status');
+});
 // ==========================================
 // Routes Réceptionniste (Accueil client & véhicule)
 // ==========================================
@@ -100,6 +101,10 @@ Route::middleware(['auth', 'verified'])->prefix('suivi-client')->name('charge_cl
     Route::get('/vehicules/{vehicule}/infos', [ChargeClientController::class, 'infosVehicule'])->name('vehicules.infos');
     Route::get('/vehicules/{vehicule}/relances', [ChargeClientController::class, 'relancesVehicule'])->name('vehicules.relances');
     Route::get('/vehicules/{vehicule}/interventions', [ChargeClientController::class, 'interventionsVehicule'])->name('vehicules.interventions');
+
+    // Mise à jour du statut (Bouton Véhicule Livré)
+    Route::patch('/interventions/{intervention}/statut', [ChargeClientController::class, 'updateStatut'])
+        ->name('vehicules.update-statut');
 
     // Enregistrement d'une interaction liée à un véhicule
     Route::post('/vehicules/{vehicule}/interactions', [ChargeClientController::class, 'storeInteraction'])

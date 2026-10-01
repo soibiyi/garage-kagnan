@@ -114,22 +114,34 @@ const logout = () => {
         {{ $page.props.flash.error }}
       </div>
 
-      <!-- SECTION 1 : Statistiques -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-          <p class="text-xs font-bold uppercase tracking-wider" style="color: #8A8D8F;">Chiffre d'affaires</p>
-          <p class="text-2xl font-black mt-2" style="color: #1A1A1A;">{{ stats?.chiffre_affaires || '0 FCFA' }}</p>
-        </div>
-        <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-          <p class="text-xs font-bold uppercase tracking-wider" style="color: #8A8D8F;">Voitures enregistrées</p>
-          <p class="text-2xl font-black mt-2" style="color: #1A1A1A;">{{ stats?.nombre_voitures || '0' }}</p>
-        </div>
-        <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-          <p class="text-xs font-bold uppercase tracking-wider" style="color: #8A8D8F;">Clients totaux</p>
-          <p class="text-2xl font-black mt-2" style="color: #1A1A1A;">{{ stats?.nombre_clients || '0' }}</p>
-        </div>
-      </div>
+     <!-- SECTION 1 : Statistiques -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+  <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+    <p class="text-xs font-bold uppercase tracking-wider" style="color: #8A8D8F;">Chiffre d'affaires</p>
+    <p class="text-2xl font-black mt-2" style="color: #1A1A1A;">{{ stats?.chiffre_affaires || '0 FCFA' }}</p>
+  </div>
 
+  <!-- CARD VOITURES ENREGISTRÉES CLIQUABLE -->
+  <Link 
+    :href="route('admin.vehicules.status')" 
+    class="bg-white p-6 rounded-xl shadow-md border border-gray-200 hover:border-[#C8102E] transition group block cursor-pointer"
+  >
+    <div class="flex items-center justify-between">
+      <p class="text-xs font-bold uppercase tracking-wider group-hover:text-[#C8102E] transition" style="color: #8A8D8F;">
+        Voitures enregistrées
+      </p>
+      <span class="text-[10px] font-semibold text-[#C8102E] bg-red-50 px-2 py-0.5 rounded-full">
+        Voir tout →
+      </span>
+    </div>
+    <p class="text-2xl font-black mt-2" style="color: #1A1A1A;">{{ stats?.nombre_voitures || '0' }}</p>
+  </Link>
+
+  <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+    <p class="text-xs font-bold uppercase tracking-wider" style="color: #8A8D8F;">Clients totaux</p>
+    <p class="text-2xl font-black mt-2" style="color: #1A1A1A;">{{ stats?.nombre_clients || '0' }}</p>
+  </div>
+</div>
       <!-- SECTION 2 : Navigation Rapide -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <!-- Stock -->

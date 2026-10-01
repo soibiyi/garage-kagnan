@@ -1,7 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import VehiculeEntete from '@/Components/VehiculeEntete.vue';
-import { Head } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import {
@@ -14,11 +14,32 @@ import {
     faCheck,
     faXmark,
     faClipboardList,
+    faTruckRampBox,
+    faCircleCheck
 } from '@fortawesome/free-solid-svg-icons';
 
 const props = defineProps({
     vehicule: Object,
 });
+
+/* ------------------------------------------------------------------ */
+/* Action de livraison                                                */
+/* ------------------------------------------------------------------ */
+const enCoursDeLivraison = ref(false);
+
+const marquerCommeLivre = () => {
+    if (!fiche.value) return;
+    if (confirm('Êtes-vous sûr de vouloir marquer ce véhicule comme livré ?')) {
+        enCoursDeLivraison.value = true;
+        router.patch(route('charge_client.vehicules.update-statut', fiche.value.id), {
+            statut: 'livre',
+        }, {
+            onFinish: () => {
+                enCoursDeLivraison.value = false;
+            }
+        });
+    }
+};
 
 /* ------------------------------------------------------------------ */
 /* Fiche de réception affichée                                          */
@@ -77,6 +98,7 @@ const getStatutBadge = (statut) => {
         en_cours: { text: 'En réparation', classe: 'bg-purple-50 text-purple-700 ring-purple-200' },
         attente_accord: { text: 'Attente accord devis', classe: 'bg-[#E11D48]/10 text-[#E11D48] ring-[#E11D48]/25' },
         accepte: { text: 'Devis accepté', classe: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
+        livre: { text: 'Véhicule livré', classe: 'bg-gray-900 text-white ring-gray-900' },
     };
     return badges[statut] || { text: statut || 'En cours', classe: 'bg-gray-100 text-gray-700 ring-gray-200' };
 };
@@ -129,7 +151,7 @@ const photos = [
         <div class="min-h-screen bg-white py-8 sm:py-12">
             <div class="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8">
 
-                <!-- BANDEAU : FICHE DE RÉCEPTION -->
+                <!-- BANDEAU : FICHE DE RÉCEPTION ET BOUTON LIVRAISON -->
                 <div
                     v-if="fiche"
                     class="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-[#F8FAFC] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5"
@@ -155,19 +177,38 @@ const photos = [
                         </p>
                     </div>
 
-                    <div v-if="receptions.length > 1" class="sm:w-64">
-                        <label for="choix-reception" class="mb-1.5 block text-xs font-semibold text-[#8A8D8F]">
-                            Réception affichée
-                        </label>
-                        <select
-                            id="choix-reception"
-                            v-model="receptionChoisie"
-                            class="min-h-11 w-full rounded-xl border border-gray-200 bg-white px-3.5 text-sm font-semibold text-[#0B0F19] transition duration-200 focus:border-[#E11D48] focus:outline-none focus:ring-4 focus:ring-[#E11D48]/10"
+                    <div class="flex flex-wrap items-center gap-3 sm:justify-end">
+                        <!-- BOUTON MARQUER COMME LIVRÉ -->
+                        <button
+                            v-if="fiche.statut !== 'livre'"
+                            type="button"
+                            @click="marquerCommeLivre"
+                            :disabled="enCoursDeLivraison"
+                            class="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white transition hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:opacity-50 shadow-sm"
                         >
-                            <option v-for="r in receptions" :key="r.id" :value="r.id">
-                                OT {{ r.numero_ot || '#' + r.id }}, {{ dateReception(r.date_reception) }}
-                            </option>
-                        </select>
+                            <FontAwesomeIcon :icon="faTruckRampBox" class="text-xs" />
+                            <span>{{ enCoursDeLivraison ? 'Mise à jour...' : 'Véhicule livré' }}</span>
+                        </button>
+                        <span
+                            v-else
+                            class="inline-flex items-center gap-1.5 rounded-xl bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200"
+                        >
+                            <FontAwesomeIcon :icon="faCircleCheck" class="text-xs" />
+                            Véhicule livré
+                        </span>
+
+                        <!-- SÉLECTEUR SI PLUSIEURS RÉCEPTIONS -->
+                        <div v-if="receptions.length > 1" class="sm:w-56">
+                            <select
+                                id="choix-reception"
+                                v-model="receptionChoisie"
+                                class="min-h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-xs font-semibold text-[#0B0F19] transition duration-200 focus:border-[#E11D48] focus:outline-none focus:ring-2 focus:ring-[#E11D48]/10"
+                            >
+                                <option v-for="r in receptions" :key="r.id" :value="r.id">
+                                    OT {{ r.numero_ot || '#' + r.id }}, {{ dateReception(r.date_reception) }}
+                                </option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
