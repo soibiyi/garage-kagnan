@@ -38,6 +38,10 @@ class HandleInertiaRequests extends Middleware
                     'email' => $request->user()->email,
                     'role' => $request->user()->role, // <-- C'est cette ligne qui manquait pour Vue.js
                 ] : null,
+                'flash' => [
+                    'success' => fn () => $request->session()->get('success'),
+                    'error'   => fn () => $request->session()->get('error'),
+                ],
             ],
         ];
     }

@@ -115,13 +115,7 @@ const logout = () => {
         </div>
       </div>
 
-      <!-- Messages flash -->
-      <div v-if="$page.props.flash?.success" class="p-4 bg-green-100 text-green-700 rounded-lg shadow-sm border border-green-200">
-        {{ $page.props.flash.success }}
-      </div>
-      <div v-if="$page.props.flash?.error" class="p-4 bg-red-100 text-red-700 rounded-lg shadow-sm border border-red-200">
-        {{ $page.props.flash.error }}
-      </div>
+      
 
      <!-- SECTION 1 : Statistiques -->
 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
