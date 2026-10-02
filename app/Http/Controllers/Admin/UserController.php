@@ -11,26 +11,45 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
+use App\Models\Paiement;
+use Carbon\Carbon;
 
 class UserController extends Controller
 {
     // Affiche la liste des utilisateurs via Inertia
-    public function index()
-    {
-        $users = User::latest()->get();
+   public function index()
+{
+    $users = User::latest()->get();
 
-        // Calcul des statistiques pour l'affichage sur le tableau de bord admin
-        $stats = [
-            'chiffre_affaires' => '0 FCFA',
-            'nombre_voitures' => Vehicule::count(),
-            'nombre_clients' => Client::count(),
+    // Totaux des paiements regroupés par mois (12 derniers mois)
+    $totauxParMois = Paiement::where('date_paiement', '>=', now()->startOfMonth()->subMonths(11))
+        ->get(['montant', 'date_paiement'])
+        ->groupBy(fn ($p) => Carbon::parse($p->date_paiement)->format('Y-m'))
+        ->map(fn ($groupe) => (float) $groupe->sum('montant'));
+
+    // Liste des 12 derniers mois (du plus récent au plus ancien), mois sans paiement = 0
+    $chiffreAffairesMensuel = collect(range(0, 11))->map(function ($i) use ($totauxParMois) {
+        $date = now()->startOfMonth()->subMonths($i);
+        $cle = $date->format('Y-m');
+
+        return [
+            'cle' => $cle,
+            'label' => ucfirst($date->locale('fr')->translatedFormat('F Y')),
+            'total' => $totauxParMois[$cle] ?? 0,
         ];
+    })->values();
 
-        return Inertia::render('Admin/Users/Index', [
-            'users' => $users,
-            'stats' => $stats,
-        ]);
-    }
+    $stats = [
+        'chiffre_affaires_mensuel' => $chiffreAffairesMensuel,
+        'nombre_voitures' => Vehicule::count(),
+        'nombre_clients' => Client::count(),
+    ];
+
+    return Inertia::render('Admin/Users/Index', [
+        'users' => $users,
+        'stats' => $stats,
+    ]);
+}
 
     // Affiche le formulaire de création
     public function create()
@@ -157,4 +176,35 @@ class UserController extends Controller
             'vehicules' => $vehicules,
         ]);
     }
+
+    /**
+ * Historique du chiffre d'affaires par année (avec détail mensuel)
+ */
+public function chiffreAffaires()
+{
+    $paiements = Paiement::get(['montant', 'date_paiement']);
+
+    $annees = $paiements
+        ->groupBy(fn ($p) => Carbon::parse($p->date_paiement)->year)
+        ->map(function ($groupe, $annee) {
+            $parMois = $groupe->groupBy(fn ($p) => Carbon::parse($p->date_paiement)->month);
+
+            return [
+                'annee' => (int) $annee,
+                'total' => (float) $groupe->sum('montant'),
+                'nombre_paiements' => $groupe->count(),
+                'mois' => collect(range(1, 12))->map(fn ($m) => [
+                    'numero' => $m,
+                    'label' => ucfirst(Carbon::create(2000, $m, 1)->locale('fr')->translatedFormat('F')),
+                    'total' => (float) ($parMois->get($m)?->sum('montant') ?? 0),
+                ])->values(),
+            ];
+        })
+        ->sortByDesc('annee')
+        ->values();
+
+    return Inertia::render('Admin/ChiffreAffaires', [
+        'annees' => $annees,
+    ]);
+}
 }

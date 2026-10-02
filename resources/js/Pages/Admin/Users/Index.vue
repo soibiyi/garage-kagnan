@@ -20,6 +20,15 @@ const props = defineProps({
     stats: Object,
 });
 
+// Chiffre d'affaires par mois (mois courant sélectionné par défaut)
+const moisSelectionne = ref(props.stats?.chiffre_affaires_mensuel?.[0]?.cle ?? '');
+
+const chiffreAffairesAffiche = computed(() => {
+    const mois = props.stats?.chiffre_affaires_mensuel?.find(m => m.cle === moisSelectionne.value);
+    const total = mois?.total ?? 0;
+    return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(total) + ' FCFA';
+});
+
 // Définition des rôles avec labels et icônes
 const ROLES_CONFIG = {
     admin: { label: 'Administrateurs', icone: faUserShield, badgeColor: 'bg-gray-900 text-white' },
@@ -117,8 +126,21 @@ const logout = () => {
      <!-- SECTION 1 : Statistiques -->
 <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
   <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-    <p class="text-xs font-bold uppercase tracking-wider" style="color: #8A8D8F;">Chiffre d'affaires</p>
-    <p class="text-2xl font-black mt-2" style="color: #1A1A1A;">{{ stats?.chiffre_affaires || '0 FCFA' }}</p>
+    <div class="flex items-center justify-between gap-2">
+      <p class="text-xs font-bold uppercase tracking-wider" style="color: #8A8D8F;">Chiffre d'affaires</p>
+      <select
+        v-model="moisSelectionne"
+        class="text-xs font-semibold border border-gray-200 rounded-lg py-1 pl-2 pr-7 focus:border-[#C8102E] focus:ring-0"
+      >
+        <option v-for="m in stats?.chiffre_affaires_mensuel" :key="m.cle" :value="m.cle">
+          {{ m.label }}
+        </option>
+      </select>
+    </div>
+    <p class="text-2xl font-black mt-2" style="color: #1A1A1A;">{{ chiffreAffairesAffiche }}</p>
+    <Link :href="route('admin.chiffre-affaires')" class="inline-block mt-3 text-xs font-semibold text-[#C8102E] hover:underline">
+      Voir l'historique par année →
+    </Link>
   </div>
 
   <!-- CARD VOITURES ENREGISTRÉES CLIQUABLE -->

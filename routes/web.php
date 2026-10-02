@@ -71,6 +71,9 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 
     // NOUVELLE ROUTE : Liste et statut de tous les véhicules enregistrés
     Route::get('/vehicules/status', [UserController::class, 'vehiculesStatus'])->name('vehicules.status');
+
+     // Historique du chiffre d'affaires par année
+    Route::get('/chiffre-affaires', [UserController::class, 'chiffreAffaires'])->name('chiffre-affaires');
 });
 // ==========================================
 // Routes Réceptionniste (Accueil client & véhicule)
