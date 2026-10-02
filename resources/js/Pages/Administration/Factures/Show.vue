@@ -1,7 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, router, useForm } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
 import { FAMILLES, FAMILLE_PAR_DEFAUT } from '@/constants/familles.js';
 
 const props = defineProps({
@@ -20,7 +20,7 @@ const lignesGroupesParFamille = computed(() => {
     if (!lignesFacturees.value || lignesFacturees.value.length === 0) return [];
 
     const groupes = {};
-    
+
     lignesFacturees.value.forEach(ligne => {
         const familleNom = ligne.famille || FAMILLE_PAR_DEFAUT;
         if (!groupes[familleNom]) {
@@ -62,17 +62,20 @@ const totalRemises = computed(() => somme('remise'));
 const totalTtcBrut = computed(() => somme('montant_ttc'));
 const totalTva = computed(() => totalTtcBrut.value - totalHt.value);
 
-// Petite fourniture (3% du total TTC brut)
-const petiteFourniture = computed(() => Math.round(totalTtcBrut.value * 0.03));
+// ─────────────────────────────────────────────
+// TOTAUX : le serveur (resume) est la seule source de vérité.
+// Cela évite tout écart d'arrondi entre le front et le contrôleur,
+// qui empêcherait la facture de passer automatiquement à « soldée ».
+// ─────────────────────────────────────────────
+const totalTtcFinal = computed(() => Number(props.resume?.total_ttc || 0));
+const montantPaye = computed(() => Number(props.resume?.montant_paye || 0));
+const reste = computed(() => Number(props.resume?.reste || 0));
+const soldee = computed(() => Boolean(props.resume?.soldee));
 
-// Total TTC Final
-const totalTtcFinal = computed(() => totalTtcBrut.value + petiteFourniture.value);
-
-// Calcul dynamique du reste à payer côté front
-const resteAPayerCalcul = computed(() => {
-    const paye = Number(props.resume?.montant_paye || 0);
-    return Math.max(totalTtcFinal.value - paye, 0);
-});
+// Petite fourniture (3 %) = écart entre le total final et le TTC brut des lignes
+const petiteFourniture = computed(() =>
+    Math.max(Math.round(totalTtcFinal.value - totalTtcBrut.value), 0)
+);
 
 const formatDate = (dateString) => {
     if (!dateString) return '';
@@ -96,10 +99,12 @@ const form = useForm({
 const fmt = (n) => Number(n || 0).toLocaleString('fr-FR');
 
 const pctVersement = (montant) =>
-    totalTtcFinal.value > 0 ? Math.round((Number(montant) * 100) / totalTtcFinal.value) : 0;
+    totalTtcFinal.value > 0
+        ? Math.min(100, Math.round((Number(montant) * 100) / totalTtcFinal.value))
+        : 0;
 
 const solderReste = () => {
-    form.montant = resteAPayerCalcul.value;
+    form.montant = reste.value;
 };
 
 const submitEncaissement = () => {
@@ -120,6 +125,61 @@ const retour = () => {
         router.visit(route('administration.factures.index'));
     }
 };
+
+// ─────────────────────────────────────────────
+// PASSAGE AUTOMATIQUE À « SOLDÉE »
+// Détecté aussi bien après notre propre versement
+// qu'après un versement saisi par quelqu'un d'autre (actualisation auto).
+// ─────────────────────────────────────────────
+const vientDEtreSoldee = ref(false);
+
+watch(
+    () => props.resume?.soldee,
+    (nouveau, ancien) => {
+        if (nouveau && !ancien) {
+            vientDEtreSoldee.value = true;
+            form.reset('montant', 'notes');
+        }
+    }
+);
+
+// ─────────────────────────────────────────────
+// ACTUALISATION AUTOMATIQUE (versements + totaux)
+// S'arrête une fois la facture soldée.
+// ─────────────────────────────────────────────
+const REFRESH_INTERVAL = 5000; // 5 secondes
+let refreshTimer = null;
+let rechargementEnCours = false;
+
+const actualiser = () => {
+    if (document.hidden || rechargementEnCours || form.processing || soldee.value) return;
+
+    rechargementEnCours = true;
+    router.reload({
+        only: ['dossier', 'paiements', 'resume'],
+        preserveScroll: true,
+        preserveState: true,
+        onFinish: () => {
+            rechargementEnCours = false;
+        },
+    });
+};
+
+const onVisibilityChange = () => {
+    if (!document.hidden) actualiser();
+};
+
+onMounted(() => {
+    refreshTimer = setInterval(actualiser, REFRESH_INTERVAL);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', actualiser);
+});
+
+onUnmounted(() => {
+    clearInterval(refreshTimer);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    window.removeEventListener('focus', actualiser);
+});
 </script>
 
 <template>
@@ -149,6 +209,38 @@ const retour = () => {
 
         <div class="py-8 bg-white min-h-screen text-gray-900 print:py-0 print:bg-white">
             <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 print:max-w-none print:px-0 print:mx-0">
+
+                <!-- BANNIÈRE : facture vient d'être soldée -->
+                <transition
+                    enter-active-class="transition duration-300"
+                    enter-from-class="opacity-0 -translate-y-2"
+                    leave-active-class="transition duration-200"
+                    leave-to-class="opacity-0"
+                >
+                    <div
+                        v-if="vientDEtreSoldee"
+                        class="print:hidden mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-xl"
+                    >
+                        <span class="flex items-center gap-2">
+                            <i class="fa-solid fa-circle-check"></i>
+                            Cette facture est entièrement soldée. Elle apparaît maintenant dans l'onglet « Soldées ».
+                        </span>
+                        <span class="flex items-center gap-2">
+                            <button type="button" @click="imprimer" class="px-3 py-1.5 bg-white border border-emerald-200 hover:bg-emerald-100 rounded-lg transition">
+                                Imprimer
+                            </button>
+                            <Link
+                                :href="route('administration.factures.index', { onglet: 'soldes' })"
+                                class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition"
+                            >
+                                Voir les factures soldées
+                            </Link>
+                            <button type="button" @click="vientDEtreSoldee = false" class="text-emerald-600 hover:text-emerald-800">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </span>
+                    </div>
+                </transition>
 
                 <div v-if="!dossier.devis" class="bg-white shadow-xl shadow-gray-200/50 rounded-2xl p-12 border border-gray-100 text-center print:hidden">
                     <div class="w-12 h-12 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-400 mx-auto mb-3">
@@ -292,11 +384,11 @@ const retour = () => {
                             </div>
                             <div class="flex justify-between border-t border-gray-900 px-3 py-1 bg-white">
                                 <span class="font-semibold text-gray-700">Déjà payé</span>
-                                <span class="font-medium text-emerald-700">{{ fmt(resume.montant_paye) }} F</span>
+                                <span class="font-medium text-emerald-700">{{ fmt(montantPaye) }} F</span>
                             </div>
                             <div class="flex justify-between border-t border-gray-900 px-3 py-1.5 font-black bg-gray-50 text-sm">
                                 <span>Reste à payer</span>
-                                <span :class="resteAPayerCalcul === 0 ? 'text-emerald-700' : 'text-[#E11D48]'">{{ fmt(resteAPayerCalcul) }} F</span>
+                                <span :class="soldee ? 'text-emerald-700' : 'text-[#E11D48]'">{{ fmt(reste) }} F</span>
                             </div>
                         </div>
                     </div>
@@ -308,21 +400,21 @@ const retour = () => {
                                 <i class="fa-solid fa-money-bill-wave text-gray-400 text-[11px]"></i>
                                 <span>Suivi des paiements</span>
                             </p>
-                            <span v-if="resteAPayerCalcul === 0" class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-[10px] uppercase">Facture soldée</span>
+                            <span v-if="soldee" class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-bold text-[10px] uppercase">Facture soldée</span>
                             <span v-else class="px-2 py-0.5 bg-amber-100 text-amber-800 rounded font-bold text-[10px] uppercase">En cours de paiement</span>
                         </div>
 
                         <!-- Barre de progression -->
                         <div class="px-3 py-2 border-b border-gray-300">
                             <div class="flex justify-between mb-1 font-semibold text-gray-700">
-                                <span>{{ fmt(resume.montant_paye) }} F payés sur {{ fmt(totalTtcFinal) }} F</span>
-                                <span :class="resteAPayerCalcul === 0 ? 'text-emerald-700' : 'text-[#E11D48]'">{{ pctVersement(resume.montant_paye) }} %</span>
+                                <span>{{ fmt(montantPaye) }} F payés sur {{ fmt(totalTtcFinal) }} F</span>
+                                <span :class="soldee ? 'text-emerald-700' : 'text-[#E11D48]'">{{ pctVersement(montantPaye) }} %</span>
                             </div>
                             <div class="h-2.5 w-full bg-gray-200 rounded-full overflow-hidden">
                                 <div
                                     class="h-full rounded-full transition-all"
-                                    :class="resteAPayerCalcul === 0 ? 'bg-emerald-500' : 'bg-[#E11D48]'"
-                                    :style="{ width: pctVersement(resume.montant_paye) + '%' }"
+                                    :class="soldee ? 'bg-emerald-500' : 'bg-[#E11D48]'"
+                                    :style="{ width: pctVersement(montantPaye) + '%' }"
                                 ></div>
                             </div>
                         </div>
@@ -357,16 +449,16 @@ const retour = () => {
                             </tbody>
                         </table>
 
-                        <!-- Formulaire d'encaissement -->
-                        <form v-if="resteAPayerCalcul > 0" @submit.prevent="submitEncaissement" class="print:hidden bg-gray-50 border-t border-gray-900 p-3">
+                        <!-- Formulaire d'encaissement (disparaît automatiquement quand la facture est soldée) -->
+                        <form v-if="reste > 0" @submit.prevent="submitEncaissement" class="print:hidden bg-gray-50 border-t border-gray-900 p-3">
                             <p class="font-bold uppercase tracking-wider text-gray-900 mb-2">Enregistrer un versement</p>
                             <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
                                 <div>
                                     <label class="block font-semibold text-gray-700 mb-1">Montant (F)</label>
-                                    <input v-model="form.montant" type="number" min="1" :max="resteAPayerCalcul" step="1" required
+                                    <input v-model="form.montant" type="number" min="1" :max="reste" step="1" required
                                         class="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:border-[#E11D48]" />
                                     <button type="button" @click="solderReste" class="mt-1 text-[10px] text-[#E11D48] font-bold hover:underline">
-                                        Solder le reste ({{ fmt(resteAPayerCalcul) }} F)
+                                        Solder le reste ({{ fmt(reste) }} F)
                                     </button>
                                 </div>
                                 <div>
