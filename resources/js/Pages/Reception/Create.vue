@@ -1,12 +1,13 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, Link } from '@inertiajs/vue3';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 
 const props = defineProps({
     clients: Array,
     mecaniciens: Array,
-    defaultNumeroOt: String, // ⬅️ Récupération de la prop du backend
+    defaultNumerosOt: Object, // { SGK: 'SGK-02102026/001', ZGK: ..., YGK: ... }
+    siege: String,            // siège de l'utilisateur connecté (null pour l'admin)
 });
 
 const currentStep = ref(1);
@@ -93,7 +94,8 @@ const form = useForm({
     expiration_sicta: '',
 
     // Intervention - Infos administratives & traçabilité
-    numero_ot: props.defaultNumeroOt || '', // ⬅️ Initialisé automatiquement avec le format SGK-JJMMAA/001
+    siege: props.siege || '',
+    numero_ot: props.siege ? (props.defaultNumerosOt?.[props.siege] ?? '') : '',
     date_reception: new Date().toISOString().split('T')[0],
     kilometrage: '',
     personne_a_contacter: '',
@@ -126,6 +128,11 @@ const form = useForm({
     photo_arriere: null,
     photo_gauche: null,
     photo_droite: null,
+});
+
+// L'admin choisit le siège : le n° OT suit le siège choisi
+watch(() => form.siege, (code) => {
+    form.numero_ot = props.defaultNumerosOt?.[code] ?? '';
 });
 
 const nextStep = () => {
@@ -384,10 +391,22 @@ const submit = () => {
                         </div>
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                            <div class="sm:col-span-2">
+                                <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Siège *</label>
+                                <select v-if="!siege" v-model="form.siege" required class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]">
+                                    <option value="" disabled>Choisir le siège</option>
+                                    <option v-for="(nom, code) in $page.props.sieges" :key="code" :value="code">{{ code }} — {{ nom }}</option>
+                                </select>
+                                <div v-else class="w-full rounded-2xl border border-gray-200 bg-gray-100 p-3.5 text-sm font-bold text-gray-600">
+                                    {{ siege }} — {{ $page.props.sieges[siege] }}
+                                </div>
+                                <p v-if="form.errors.siege" class="mt-1 text-xs text-red-600 font-medium">{{ form.errors.siege }}</p>
+                            </div>
+
                             <div>
                                 <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Numéro OT (Généré auto) *</label>
                                 <input type="text" v-model="form.numero_ot" required readonly class="w-full rounded-2xl border-gray-200 bg-gray-100 text-sm p-3.5 shadow-xs text-gray-600 font-bold cursor-not-allowed" />
-                                <span class="text-[10px] text-[#8A8D8F] mt-1 block">Format : SGK-JJMMAA/001</span>
+                                <span class="text-[10px] text-[#8A8D8F] mt-1 block">Format : {{ form.siege || 'SGK' }}-JJMMAAAA/001</span>
                             </div>
 
                             <div>

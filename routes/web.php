@@ -29,7 +29,7 @@ Route::get('/dashboard', function () {
         return redirect()->route('admin.users.index');
     }
 
-    $interventionsAtelier = Intervention::with(['vehicule.client', 'receptionniste', 'mecanicien'])
+    $interventionsAtelier = Intervention::duSiege()->with(['vehicule.client', 'receptionniste', 'mecanicien'])
         ->whereIn('statut', ['atelier', 'en_cours', 'attente_accord'])
         ->latest('date_reception')
         ->get();
@@ -38,8 +38,9 @@ Route::get('/dashboard', function () {
     
     $stats = [
         'chiffre_affaires' => '0 FCFA', 
-        'nombre_voitures' => \App\Models\Vehicule::count(),
-        'nombre_clients' => \App\Models\Client::count(),
+        // Compteurs limités aux véhicules / clients ayant un dossier dans le siège de l'utilisateur
+        'nombre_voitures' => \App\Models\Vehicule::whereHas('interventions', fn ($q) => $q->duSiege())->count(),
+        'nombre_clients' => \App\Models\Client::whereHas('vehicules.interventions', fn ($q) => $q->duSiege())->count(),
     ];
 
     return Inertia::render('Dashboard', [
@@ -75,6 +76,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
      // Historique du chiffre d'affaires par année
     Route::get('/chiffre-affaires', [UserController::class, 'chiffreAffaires'])->name('chiffre-affaires');
 });
+
 // ==========================================
 // Routes Réceptionniste (Accueil client & véhicule)
 // ==========================================
@@ -114,7 +116,9 @@ Route::middleware(['auth', 'verified'])->prefix('suivi-client')->name('charge_cl
         ->name('vehicules.interactions.store');
 });
 
-// Routes Administration (Dossiers & Devis)
+// ==========================================
+// Routes Administration (Dossiers, Devis & Stocks)
+// ==========================================
 Route::middleware(['auth'])->prefix('administration')->name('administration.')->group(function () {
     Route::get('/dossiers', [DossierController::class, 'index'])->name('dossiers.index');
     Route::get('/dossiers/{dossier}', [DossierController::class, 'show'])->name('dossiers.show');
@@ -146,11 +150,15 @@ Route::middleware(['auth'])->prefix('administration')->name('administration.')->
     Route::get('/devis-directs/rechercher-pieces', [DossierController::class, 'rechercherPieces'])
         ->name('devis.directs.rechercher-pieces');
 
+    // GESTION DES STOCKS (CRUD + EXPORT/IMPORT EXCEL)
     Route::get('/stocks', [StockController::class, 'index'])->name('stocks.index');
     Route::post('/stocks', [StockController::class, 'store'])->name('stocks.store');
     Route::put('/stocks/{stock}', [StockController::class, 'update'])->name('stocks.update');
     Route::delete('/stocks/{stock}', [StockController::class, 'destroy'])->name('stocks.destroy');
+    Route::get('/stocks/export', [StockController::class, 'export'])->name('stocks.export');
+    Route::post('/stocks/import', [StockController::class, 'import'])->name('stocks.import');
 
+    // FACTURES & ENCAISSEMENT
     Route::get('/factures', [FactureController::class, 'index'])->name('factures.index');
     Route::get('/factures/{id}', [FactureController::class, 'show'])->name('factures.show');
     Route::post('/factures/{id}/encaisser', [FactureController::class, 'storeEncaissement'])->name('factures.encaisser');

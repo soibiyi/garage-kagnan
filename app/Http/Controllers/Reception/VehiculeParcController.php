@@ -16,19 +16,22 @@ class VehiculeParcController extends Controller
     public function index()
     {
         // 1. Véhicules toujours sur le parc (en attente de prise en charge / au statut réception)
-        $interventionsParc = Intervention::with(['vehicule.client', 'receptionniste', 'mecanicien'])
+        $interventionsParc = Intervention::duSiege()->with(['vehicule.client', 'receptionniste', 'mecanicien'])
             ->where('statut', 'reception')
             ->latest('date_reception')
             ->get();
 
         // 2. Véhicules passés en mode atelier / administration (sortis du parc principal)
-        $interventionsAtelier = Intervention::with(['vehicule.client', 'receptionniste', 'mecanicien'])
+        $interventionsAtelier = Intervention::duSiege()->with(['vehicule.client', 'receptionniste', 'mecanicien'])
             ->whereIn('statut', ['atelier', 'en_cours', 'attente_accord'])
             ->latest('date_reception')
             ->get();
 
         // Récupère uniquement les utilisateurs qui ont le rôle 'mecanicien'
-        $mecaniciens = User::where('role', 'mecanicien')->get();
+        // Uniquement les mécaniciens du même siège (l'admin les voit tous)
+        $mecaniciens = User::where('role', 'mecanicien')
+            ->when(auth()->user()->role !== 'admin', fn ($q) => $q->where('siege', auth()->user()->siege))
+            ->get();
 
         return Inertia::render('Reception/Parc/Index', [
             'interventions' => $interventionsParc,
@@ -42,7 +45,7 @@ class VehiculeParcController extends Controller
      */
     public function show($id)
     {
-        $intervention = Intervention::with(['vehicule.client', 'receptionniste', 'mecanicien'])
+        $intervention = Intervention::duSiege()->with(['vehicule.client', 'receptionniste', 'mecanicien'])
             ->findOrFail($id);
 
         return Inertia::render('Reception/Parc/Show', [
@@ -60,7 +63,7 @@ class VehiculeParcController extends Controller
             'rapport_mecanicien' => 'required|string',
         ]);
 
-        $intervention = Intervention::findOrFail($id);
+        $intervention = Intervention::duSiege()->findOrFail($id);
 
         $intervention->update([
             'mecanicien_id' => $request->mecanicien_id,

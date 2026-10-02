@@ -12,17 +12,44 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use App\Models\Paiement;
+use App\Models\Facture;
+use App\Models\Intervention;
 use Carbon\Carbon;
 
 class UserController extends Controller
 {
+    /** Siège demandé dans l'URL (?siege=ZGK). null = tous les sièges. */
+    private function siegeDemande(Request $request): ?string
+    {
+        $siege = $request->query('siege');
+
+        return in_array($siege, array_keys(config('sieges')), true) ? $siege : null;
+    }
+
+    /** Paiements, éventuellement limités aux factures des dossiers d'un siège. */
+    private function paiementsQuery(?string $siege)
+    {
+        $query = Paiement::query();
+
+        if ($siege) {
+            $query->whereIn(
+                'facture_id',
+                Facture::whereIn('intervention_id', Intervention::where('siege', $siege)->select('id'))->select('id')
+            );
+        }
+
+        return $query;
+    }
+
     // Affiche la liste des utilisateurs via Inertia
-   public function index()
+   public function index(Request $request)
 {
+    $siege = $this->siegeDemande($request);
+
     $users = User::latest()->get();
 
     // Totaux des paiements regroupés par mois (12 derniers mois)
-    $totauxParMois = Paiement::where('date_paiement', '>=', now()->startOfMonth()->subMonths(11))
+    $totauxParMois = $this->paiementsQuery($siege)->where('date_paiement', '>=', now()->startOfMonth()->subMonths(11))
         ->get(['montant', 'date_paiement'])
         ->groupBy(fn ($p) => Carbon::parse($p->date_paiement)->format('Y-m'))
         ->map(fn ($groupe) => (float) $groupe->sum('montant'));
@@ -41,13 +68,14 @@ class UserController extends Controller
 
     $stats = [
         'chiffre_affaires_mensuel' => $chiffreAffairesMensuel,
-        'nombre_voitures' => Vehicule::count(),
-        'nombre_clients' => Client::count(),
+        'nombre_voitures' => Vehicule::when($siege, fn ($q) => $q->whereHas('interventions', fn ($i) => $i->where('siege', $siege)))->count(),
+        'nombre_clients' => Client::when($siege, fn ($q) => $q->whereHas('vehicules.interventions', fn ($i) => $i->where('siege', $siege)))->count(),
     ];
 
     return Inertia::render('Admin/Users/Index', [
         'users' => $users,
         'stats' => $stats,
+        'siegeFiltre' => $siege,
     ]);
 }
 
@@ -65,6 +93,9 @@ class UserController extends Controller
             'email' => 'required|string|email|max:191|unique:users',
             'password' => 'required|string|min:6',
             'role' => 'required|string|in:admin,receptionniste,mecanicien,administratif,charge_client',
+            'siege' => [Rule::requiredIf($request->role !== 'admin'), 'nullable', Rule::in(array_keys(config('sieges')))],
+        ], [
+            'siege.required' => 'Veuillez attribuer un siège à ce collaborateur.',
         ]);
 
         User::create([
@@ -72,6 +103,8 @@ class UserController extends Controller
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'role' => $request->role,
+            // L'administrateur a accès à tous les sièges : pas de siège attribué
+            'siege' => $request->role === 'admin' ? null : $request->siege,
         ]);
 
         return redirect()->route('admin.users.index')->with('success', 'Utilisateur créé avec succès !');
@@ -93,12 +126,16 @@ class UserController extends Controller
             'email' => ['required', 'string', 'email', 'max:191', Rule::unique('users')->ignore($user->id)],
             'role' => 'required|string|in:admin,receptionniste,mecanicien,administratif,charge_client',
             'password' => 'nullable|string|min:6',
+            'siege' => [Rule::requiredIf($request->role !== 'admin'), 'nullable', Rule::in(array_keys(config('sieges')))],
+        ], [
+            'siege.required' => 'Veuillez attribuer un siège à ce collaborateur.',
         ]);
 
         $user->update([
             'name' => $request->name,
             'email' => $request->email,
             'role' => $request->role,
+            'siege' => $request->role === 'admin' ? null : $request->siege,
             'password' => $request->filled('password') ? Hash::make($request->password) : $user->password,
         ]);
 
@@ -166,33 +203,51 @@ class UserController extends Controller
     /**
      * Afficher tous les véhicules avec leur propriétaire et leur dernier statut
      */
-    public function vehiculesStatus()
+    public function vehiculesStatus(Request $request)
     {
-        $vehicules = Vehicule::with(['client', 'interventions' => function ($q) {
-            $q->latest();
-        }])->latest()->get();
+        $siege = $this->siegeDemande($request);
+
+        $vehicules = Vehicule::with(['client', 'interventions' => function ($q) use ($siege) {
+            $q->when($siege, fn ($i) => $i->where('siege', $siege))->latest();
+        }])
+            ->when($siege, fn ($q) => $q->whereHas('interventions', fn ($i) => $i->where('siege', $siege)))
+            ->latest()
+            ->get();
 
         return Inertia::render('Admin/Status', [
             'vehicules' => $vehicules,
+            'siegeFiltre' => $siege,
         ]);
     }
 
     /**
  * Historique du chiffre d'affaires par année (avec détail mensuel)
  */
-public function chiffreAffaires()
+public function chiffreAffaires(Request $request)
 {
-    $paiements = Paiement::get(['montant', 'date_paiement']);
+    $siege = $this->siegeDemande($request);
+
+    $paiements = $this->paiementsQuery($siege)->get(['montant', 'date_paiement']);
+
+    // Chiffre d'affaires de chaque siège par année (indépendant du filtre, pour comparer les sièges)
+    $totauxSieges = collect(array_keys(config('sieges')))->mapWithKeys(function ($code) {
+        $parAnnee = $this->paiementsQuery($code)->get(['montant', 'date_paiement'])
+            ->groupBy(fn ($p) => Carbon::parse($p->date_paiement)->year)
+            ->map(fn ($g) => (float) $g->sum('montant'));
+
+        return [$code => $parAnnee];
+    });
 
     $annees = $paiements
         ->groupBy(fn ($p) => Carbon::parse($p->date_paiement)->year)
-        ->map(function ($groupe, $annee) {
+        ->map(function ($groupe, $annee) use ($totauxSieges) {
             $parMois = $groupe->groupBy(fn ($p) => Carbon::parse($p->date_paiement)->month);
 
             return [
                 'annee' => (int) $annee,
                 'total' => (float) $groupe->sum('montant'),
                 'nombre_paiements' => $groupe->count(),
+                'par_siege' => $totauxSieges->map(fn ($parAnnee) => (float) ($parAnnee[(int) $annee] ?? 0)),
                 'mois' => collect(range(1, 12))->map(fn ($m) => [
                     'numero' => $m,
                     'label' => ucfirst(Carbon::create(2000, $m, 1)->locale('fr')->translatedFormat('F')),
@@ -205,6 +260,7 @@ public function chiffreAffaires()
 
     return Inertia::render('Admin/ChiffreAffaires', [
         'annees' => $annees,
+        'siegeFiltre' => $siege,
     ]);
 }
 }
