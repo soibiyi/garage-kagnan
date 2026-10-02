@@ -1,26 +1,40 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, Link } from '@inertiajs/vue3';
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onUnmounted } from 'vue';
 
 const props = defineProps({
     clients: Array,
     mecaniciens: Array,
-    defaultNumerosOt: Object, // { SGK: 'SGK-02102026/001', ZGK: ..., YGK: ... }
-    siege: String,            // siège de l'utilisateur connecté (null pour l'admin)
+    defaultNumerosOt: Object,
+    siege: String,
 });
 
 const currentStep = ref(1);
 const totalSteps = 4;
 
-// Recherche dynamique du client
+// Recherche dynamique client
 const searchQuery = ref('');
 const showDropdown = ref(false);
 const isNewClientMode = ref(false);
 
-// Mode de gestion véhicule si client existant ('new' ou 'edit_existing')
 const clientVehicleMode = ref('new'); 
 const selectedExistingVehiculeId = ref('');
+
+// Gestion Galerie & Aperçus
+const fileInputs = ref({});
+const photoPreviews = ref({
+    photo_avant: null,
+    photo_arriere: null,
+    photo_gauche: null,
+    photo_droite: null,
+});
+
+// Modale & Flux Caméra en Direct
+const showCameraModal = ref(false);
+const currentCameraField = ref(null);
+const videoRef = ref(null);
+const mediaStream = ref(null);
 
 const filteredClients = computed(() => {
     if (!searchQuery.value || searchQuery.value.length < 2) return [];
@@ -51,16 +65,14 @@ const enableNewClientForm = () => {
     form.clearErrors();
 };
 
-// Récupérer le client actuellement sélectionné pour lister ses véhicules existants
 const selectedClientObj = computed(() => {
     if (!form.client_id) return null;
     return props.clients.find(c => c.id === form.client_id);
 });
 
-// Quand on choisit de modifier un véhicule existant
 const selectExistingVehicule = (vehicule) => {
     selectedExistingVehiculeId.value = vehicule.id;
-    form.vehicule_id = vehicule.id; // Pour indiquer au backend qu'on met à jour un véhicule existant
+    form.vehicule_id = vehicule.id;
     form.immatriculation = vehicule.immatriculation || '';
     form.marque = vehicule.marque || '';
     form.modele = vehicule.modele || '';
@@ -68,14 +80,11 @@ const selectExistingVehicule = (vehicule) => {
     form.expiration_assurance = vehicule.expiration_assurance || '';
     form.expiration_sicta = vehicule.expiration_sicta || '';
     
-    // Passage direct à l'étape 3 (OT & Équipements) car client et véhicule sont déjà connus
     currentStep.value = 3;
     window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
-// Formulaire complet
 const form = useForm({
-    // Client (si nouveau)
     client_id: '',
     nom: '',
     prenom: '',
@@ -84,8 +93,7 @@ const form = useForm({
     adresse: '',
     type_client: 'particulier',
     
-    // Véhicule (table vehicules)
-    vehicule_id: '', // Utilisé si modification d'un véhicule existant
+    vehicule_id: '',
     immatriculation: '',
     marque: '',
     modele: '',
@@ -93,7 +101,6 @@ const form = useForm({
     expiration_assurance: '',
     expiration_sicta: '',
 
-    // Intervention - Infos administratives & traçabilité
     siege: props.siege || '',
     numero_ot: props.siege ? (props.defaultNumerosOt?.[props.siege] ?? '') : '',
     date_reception: new Date().toISOString().split('T')[0],
@@ -102,7 +109,6 @@ const form = useForm({
     circuit: 'normal',
     mecanicien_id: '',
 
-    // Intervention - Équipements (Booleans)
     allume_cigare: false,
     rk7: false,
     rcd: false,
@@ -117,20 +123,17 @@ const form = useForm({
     trousse: false,
     pare_brise_fissure: false,
 
-    // Intervention - Carburant & remarques
     enjoliveurs: [],
     niveau_carburant: '1/2',
     intervalle_niveau_carburant: '',
     remarques_eventuelles: '',
 
-    // Photos d'état initial
     photo_avant: null,
     photo_arriere: null,
     photo_gauche: null,
     photo_droite: null,
 });
 
-// L'admin choisit le siège : le n° OT suit le siège choisi
 watch(() => form.siege, (code) => {
     form.numero_ot = props.defaultNumerosOt?.[code] ?? '';
 });
@@ -149,8 +152,85 @@ const prevStep = () => {
     }
 };
 
+/* ------------------------------------------------------------------ */
+/* Gestion de la Caméra en Direct (Live WebCam / Mobile)               */
+/* ------------------------------------------------------------------ */
+const openLiveCamera = async (field) => {
+    currentCameraField.value = field;
+    showCameraModal.value = true;
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: 'environment' } }, // Priorité caméra arrière
+            audio: false
+        });
+        mediaStream.value = stream;
+        if (videoRef.value) {
+            videoRef.value.srcObject = stream;
+        }
+    } catch (err) {
+        alert("Impossible d'accéder à la caméra. Vérifiez les autorisations de votre navigateur.");
+        closeCameraModal();
+    }
+};
+
+const capturePhotoFromLive = () => {
+    if (!videoRef.value) return;
+
+    const video = videoRef.value;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob((blob) => {
+        if (blob) {
+            const field = currentCameraField.value;
+            const file = new File([blob], `${field}_${Date.now()}.jpg`, { type: 'image/jpeg' });
+            
+            form[field] = file;
+            photoPreviews.value[field] = URL.createObjectURL(file);
+            closeCameraModal();
+        }
+    }, 'image/jpeg', 0.85);
+};
+
+const closeCameraModal = () => {
+    if (mediaStream.value) {
+        mediaStream.value.getTracks().forEach(track => track.stop());
+        mediaStream.value = null;
+    }
+    showCameraModal.value = false;
+    currentCameraField.value = null;
+};
+
+// Nettoyage automatique au démontage
+onUnmounted(() => {
+    closeCameraModal();
+});
+
+/* ------------------------------------------------------------------ */
+/* Import depuis Galerie                                              */
+/* ------------------------------------------------------------------ */
+const triggerFileInput = (field) => {
+    if (fileInputs.value[field]) {
+        fileInputs.value[field].click();
+    }
+};
+
 const handleFileUpload = (event, field) => {
-    form[field] = event.target.files[0];
+    const file = event.target.files[0];
+    if (file) {
+        form[field] = file;
+        photoPreviews.value[field] = URL.createObjectURL(file);
+    }
+};
+
+const removePhoto = (field) => {
+    form[field] = null;
+    photoPreviews.value[field] = null;
 };
 
 const submit = () => {
@@ -271,7 +351,6 @@ const submit = () => {
                                 </button>
                             </div>
 
-                            <!-- Si le client a déjà des véhicules -->
                             <div v-if="selectedClientObj?.vehicules && selectedClientObj.vehicules.length > 0" class="bg-[#F8FAFC] p-6 rounded-2xl border border-gray-200/80 space-y-4">
                                 <h4 class="text-sm font-black text-[#0B0F19]">Ce client possède déjà des véhicules enregistrés :</h4>
                                 <div class="flex gap-6">
@@ -285,9 +364,8 @@ const submit = () => {
                                     </label>
                                 </div>
 
-                                <!-- Liste des véhicules existants si "Modifier" est choisi -->
                                 <div v-if="clientVehicleMode === 'edit_existing'" class="space-y-3 pt-2">
-                                    <p class="text-xs text-[#8A8D8F] font-medium">Cliquez sur le véhicule à modifier (vous passerez directement à l'étape OT & Équipements) :</p>
+                                    <p class="text-xs text-[#8A8D8F] font-medium">Cliquez sur le véhicule à modifier :</p>
                                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div 
                                             v-for="vehicule in selectedClientObj.vehicules" 
@@ -454,7 +532,7 @@ const submit = () => {
                             </div>
                         </div>
 
-                        <!-- Équipements et accessoires -->
+                        <!-- Équipements -->
                         <div class="border-t border-gray-100 pt-6 space-y-4">
                             <h4 class="font-black text-sm text-[#0B0F19]">Équipements et accessoires à bord</h4>
                             <div class="grid grid-cols-2 sm:grid-cols-4 gap-3.5 text-xs font-medium text-gray-700">
@@ -476,45 +554,75 @@ const submit = () => {
                     </div>
 
                     <!-- ========================================== -->
-                    <!-- ÉTAPE 4 : PHOTOS & REMARQUES -->
+                    <!-- ÉTAPE 4 : PHOTOS & REMARQUES (WEBCAM EN DIRECT OU GALERIE) -->
                     <!-- ========================================== -->
                     <div v-if="currentStep === 4" class="bg-white p-8 sm:p-10 rounded-3xl shadow-xl shadow-gray-100 border border-gray-100 space-y-8">
                         <div class="flex items-center gap-4 border-b border-gray-100 pb-6">
                             <div class="w-12 h-12 rounded-2xl bg-[#E11D48]/10 text-[#E11D48] flex items-center justify-center font-black text-base border border-[#E11D48]/30">4</div>
                             <div>
                                 <h3 class="text-xl font-black text-[#0B0F19]">Photos réglementaires & Remarques</h3>
-                                <p class="text-xs text-[#8A8D8F] font-medium mt-0.5">Joignez les photos sous tous les angles de l'état initial.</p>
+                                <p class="text-xs text-[#8A8D8F] font-medium mt-0.5">Prenez en direct la photo ou choisissez-la dans votre galerie.</p>
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                            <div class="border-2 border-dashed border-gray-200 bg-[#F8FAFC] rounded-2xl p-5 text-center hover:border-[#E11D48] transition">
-                                <label class="cursor-pointer block space-y-2">
-                                    <span class="text-xs font-black text-[#0B0F19] uppercase tracking-wider block">Face Avant *</span>
-                                    <input type="file" @change="e => handleFileUpload(e, 'photo_avant')" required accept="image/*" class="text-xs text-[#8A8D8F] w-full file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#E11D48]/10 file:text-[#E11D48] file:cursor-pointer" />
-                                </label>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            
+                            <div 
+                                v-for="(label, key) in { photo_avant: 'Face Avant', photo_arriere: 'Face Arrière', photo_gauche: 'Côté Gauche', photo_droite: 'Côté Droit' }" 
+                                :key="key"
+                                class="border-2 border-dashed border-gray-200 bg-[#F8FAFC] rounded-2xl p-5 hover:border-[#E11D48] transition flex flex-col justify-between"
+                            >
+                                <div class="mb-3 flex justify-between items-center">
+                                    <span class="text-xs font-black text-[#0B0F19] uppercase tracking-wider block">{{ label }} *</span>
+                                    <span v-if="form[key]" class="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                                        Image chargée ✓
+                                    </span>
+                                </div>
+
+                                <!-- Aperçu photo -->
+                                <div v-if="photoPreviews[key]" class="relative mb-3 rounded-xl overflow-hidden border border-gray-200 h-40 bg-slate-900">
+                                    <img :src="photoPreviews[key]" alt="Aperçu photo" class="w-full h-full object-cover" />
+                                    <button 
+                                        type="button" 
+                                        @click="removePhoto(key)" 
+                                        class="absolute top-2 right-2 bg-rose-600 text-white rounded-full p-1.5 shadow-md hover:bg-rose-700 transition" 
+                                        title="Supprimer la photo"
+                                    >
+                                        <i class="fa-solid fa-xmark text-xs w-4 h-4 flex items-center justify-center"></i>
+                                    </button>
+                                </div>
+
+                                <!-- Boutons d'action -->
+                                <div class="grid grid-cols-2 gap-2 mt-auto">
+                                    <button 
+                                        type="button" 
+                                        @click="openLiveCamera(key)" 
+                                        class="px-3 py-2.5 bg-[#E11D48] hover:bg-[#BE123C] text-white text-[11px] font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs"
+                                    >
+                                        <i class="fa-solid fa-camera text-xs"></i>
+                                        <span>Prendre photo</span>
+                                    </button>
+
+                                    <button 
+                                        type="button" 
+                                        @click="triggerFileInput(key)" 
+                                        class="px-3 py-2.5 bg-white border border-gray-300 hover:bg-gray-100 text-[#0B0F19] text-[11px] font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs"
+                                    >
+                                        <i class="fa-solid fa-image text-xs text-blue-600"></i>
+                                        <span>Galerie</span>
+                                    </button>
+                                </div>
+
+                                <!-- Input Masqué pour la Galerie -->
+                                <input 
+                                    type="file" 
+                                    :ref="el => fileInputs[key] = el" 
+                                    @change="e => handleFileUpload(e, key)" 
+                                    accept="image/*" 
+                                    class="hidden" 
+                                />
                             </div>
 
-                            <div class="border-2 border-dashed border-gray-200 bg-[#F8FAFC] rounded-2xl p-5 text-center hover:border-[#E11D48] transition">
-                                <label class="cursor-pointer block space-y-2">
-                                    <span class="text-xs font-black text-[#0B0F19] uppercase tracking-wider block">Face Arrière *</span>
-                                    <input type="file" @change="e => handleFileUpload(e, 'photo_arriere')" required accept="image/*" class="text-xs text-[#8A8D8F] w-full file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#E11D48]/10 file:text-[#E11D48] file:cursor-pointer" />
-                                </label>
-                            </div>
-
-                            <div class="border-2 border-dashed border-gray-200 bg-[#F8FAFC] rounded-2xl p-5 text-center hover:border-[#E11D48] transition">
-                                <label class="cursor-pointer block space-y-2">
-                                    <span class="text-xs font-black text-[#0B0F19] uppercase tracking-wider block">Côté Gauche *</span>
-                                    <input type="file" @change="e => handleFileUpload(e, 'photo_gauche')" required accept="image/*" class="text-xs text-[#8A8D8F] w-full file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#E11D48]/10 file:text-[#E11D48] file:cursor-pointer" />
-                                </label>
-                            </div>
-
-                            <div class="border-2 border-dashed border-gray-200 bg-[#F8FAFC] rounded-2xl p-5 text-center hover:border-[#E11D48] transition">
-                                <label class="cursor-pointer block space-y-2">
-                                    <span class="text-xs font-black text-[#0B0F19] uppercase tracking-wider block">Côté Droit *</span>
-                                    <input type="file" @change="e => handleFileUpload(e, 'photo_droite')" required accept="image/*" class="text-xs text-[#8A8D8F] w-full file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#E11D48]/10 file:text-[#E11D48] file:cursor-pointer" />
-                                </label>
-                            </div>
                         </div>
 
                         <div class="pt-4 border-t border-gray-100">
@@ -560,5 +668,42 @@ const submit = () => {
                 </form>
             </div>
         </div>
+
+        <!-- MODALE CAMÉRA EN DIRECT (WEBCAM / MOBILE) -->
+        <div v-if="showCameraModal" class="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-between p-4 sm:p-6">
+            <div class="w-full max-w-xl flex justify-between items-center text-white pb-2">
+                <span class="text-xs font-black uppercase tracking-wider">
+                    Capture en direct : {{ currentCameraField?.replace('photo_', 'Face ') }}
+                </span>
+                <button @click="closeCameraModal" class="text-white hover:text-rose-500 text-xl p-2">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+
+            <!-- Lecteur Vidéo du flux Caméra -->
+            <div class="relative w-full max-w-xl flex-1 bg-black rounded-2xl overflow-hidden flex items-center justify-center border border-gray-800">
+                <video ref="videoRef" autoplay playsinline class="w-full h-full object-cover"></video>
+            </div>
+
+            <!-- Commandes de Déclenchement -->
+            <div class="w-full max-w-xl flex items-center justify-center gap-6 pt-4">
+                <button 
+                    type="button" 
+                    @click="closeCameraModal" 
+                    class="px-5 py-3 bg-gray-800 hover:bg-gray-700 text-white text-xs font-bold rounded-2xl transition"
+                >
+                    Annuler
+                </button>
+                <button 
+                    type="button" 
+                    @click="capturePhotoFromLive" 
+                    class="w-16 h-16 bg-white border-4 border-[#E11D48] rounded-full flex items-center justify-center text-[#E11D48] hover:scale-105 active:scale-95 transition shadow-2xl"
+                    title="Déclencher la photo"
+                >
+                    <div class="w-12 h-12 bg-[#E11D48] rounded-full"></div>
+                </button>
+            </div>
+        </div>
+
     </AuthenticatedLayout>
 </template>
