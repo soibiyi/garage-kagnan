@@ -22,6 +22,7 @@ const form = useForm({
     email: props.user.email,
     password: '',
     role: props.user.role,
+    siege: props.user.siege || '',
 });
 
 const submit = () => {
@@ -126,6 +127,20 @@ const submit = () => {
               </select>
             </div>
             <p v-if="form.errors.role" class="mt-1 text-xs text-red-600 font-medium">{{ form.errors.role }}</p>
+          </div>
+
+          <!-- Siège d'affectation (pas pour l'administrateur) -->
+          <div v-if="form.role !== 'admin'">
+            <label class="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-700">
+              Siège d'affectation <span class="text-red-500">*</span>
+            </label>
+            <select v-model="form.siege" required
+                    class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/20 focus:border-[#C8102E] transition"
+                    :class="{ 'border-red-500 focus:ring-red-200': form.errors.siege }">
+              <option value="" disabled>Choisir un siège</option>
+              <option v-for="(nom, code) in $page.props.sieges" :key="code" :value="code">{{ code }} — {{ nom }}</option>
+            </select>
+            <p v-if="form.errors.siege" class="mt-1 text-xs text-red-600 font-medium">{{ form.errors.siege }}</p>
           </div>
 
           <!-- Mot de passe facultatif -->

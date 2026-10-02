@@ -72,7 +72,7 @@ class FactureController extends Controller
     {
         $search = $request->input('search');
 
-        $dossiers = Intervention::with(['vehicule.client', 'devis.lignes', 'mecanicien'])
+        $dossiers = Intervention::duSiege()->with(['vehicule.client', 'devis.lignes', 'mecanicien'])
             ->where('statut', 'accepte')
             ->when($search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
@@ -107,7 +107,7 @@ class FactureController extends Controller
      */
     public function show($id)
     {
-        $dossier = Intervention::with(['vehicule.client', 'devis.lignes'])->findOrFail($id);
+        $dossier = Intervention::duSiege()->with(['vehicule.client', 'devis.lignes'])->findOrFail($id);
 
         $facture = Facture::where('intervention_id', $dossier->id)->first();
 
@@ -151,7 +151,7 @@ class FactureController extends Controller
 
         DB::transaction(function () use ($request, $id, &$erreur) {
             // Verrou sur le dossier : évite deux encaissements simultanés qui dépasseraient le total
-            $dossier = Intervention::lockForUpdate()->findOrFail($id);
+            $dossier = Intervention::duSiege()->lockForUpdate()->findOrFail($id);
             $dossier->load(['devis.lignes']);
 
             $total = $this->totalAccepte($dossier);

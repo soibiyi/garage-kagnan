@@ -12,12 +12,47 @@ use Inertia\Inertia;
 
 class ChargeClientController extends Controller
 {
+    private function estAdmin(): bool
+    {
+        return auth()->user()->role === 'admin';
+    }
+
+    /** Contrainte « dossiers de mon siège » pour les relations chargées. */
+    private function dossiersDuSiege(): \Closure
+    {
+        return fn ($q) => $q->duSiege();
+    }
+
+    /** Contrainte « véhicules ayant au moins un dossier dans mon siège » (aucun filtre pour l'admin). */
+    private function vehiculesDuSiege(): \Closure
+    {
+        return fn ($q) => $q->when(
+            !$this->estAdmin(),
+            fn ($v) => $v->whereHas('interventions', fn ($i) => $i->duSiege())
+        );
+    }
+
+    /** Refuse (404) l'accès à un véhicule qui n'a aucun dossier dans mon siège. */
+    private function autoriserVehicule(Vehicule $vehicule): void
+    {
+        if ($this->estAdmin()) {
+            return;
+        }
+
+        abort_unless($vehicule->interventions()->duSiege()->exists(), 404);
+    }
+
     // 1. Liste de tous les clients avec leurs véhicules
     public function index(Request $request)
     {
         $search = $request->input('search');
 
-        $clients = Client::with(['vehicules.interventions'])
+        $clients = Client::with([
+                'vehicules' => $this->vehiculesDuSiege(),
+                'vehicules.interventions' => $this->dossiersDuSiege(),
+            ])
+            // Uniquement les clients ayant un dossier dans mon siège (l'admin voit tout)
+            ->when(!$this->estAdmin(), fn ($q) => $q->whereHas('vehicules.interventions', fn ($i) => $i->duSiege()))
             ->when($search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('nom', 'like', "%{$search}%")
@@ -48,9 +83,13 @@ class ChargeClientController extends Controller
     public function showClient(Client $client)
     {
         $client->load([
+            'vehicules' => $this->vehiculesDuSiege(),
+            'vehicules.interventions' => $this->dossiersDuSiege(),
             'vehicules.interventions.devis.lignes',
             'vehicules.interventions.facture.paiements',
         ]);
+
+        abort_if(!$this->estAdmin() && $client->vehicules->isEmpty(), 404);
 
         return Inertia::render('ChargeClient/ClientShow', [
             'client' => $client
@@ -60,8 +99,11 @@ class ChargeClientController extends Controller
     // 3. Fiche d'un véhicule (accueil : 3 cartes + échéances)
     public function showVehicule(Vehicule $vehicule)
     {
+        $this->autoriserVehicule($vehicule);
+
         $vehicule->load([
             'client',
+            'interventions' => $this->dossiersDuSiege(),
             'interventions.devis.lignes',
             'interventions.facture.paiements',
             'interventions.mecanicien',
@@ -77,9 +119,11 @@ class ChargeClientController extends Controller
     // 3 bis. Page dédiée : infos du véhicule
     public function infosVehicule(Vehicule $vehicule)
     {
+        $this->autoriserVehicule($vehicule);
+
         $vehicule->load([
             'client',
-            'interventions',
+            'interventions' => $this->dossiersDuSiege(),
         ]);
 
         return Inertia::render('ChargeClient/VehiculeInfos', [
@@ -90,6 +134,8 @@ class ChargeClientController extends Controller
     // 3 ter. Page dédiée : suivi des relances
     public function relancesVehicule(Vehicule $vehicule)
     {
+        $this->autoriserVehicule($vehicule);
+
         $vehicule->load([
             'client',
             'interactions.user:id,name',
@@ -103,8 +149,11 @@ class ChargeClientController extends Controller
     // 3 quater. Page dédiée : interventions, devis et règlements
     public function interventionsVehicule(Vehicule $vehicule)
     {
+        $this->autoriserVehicule($vehicule);
+
         $vehicule->load([
             'client',
+            'interventions' => $this->dossiersDuSiege(),
             'interventions.devis.lignes',
             'interventions.facture.paiements',
         ]);
@@ -117,6 +166,8 @@ class ChargeClientController extends Controller
     // 4. Mettre à jour le statut d'une intervention (Bouton Véhicule Livré)
     public function updateStatut(Request $request, Intervention $intervention)
     {
+        abort_unless($intervention->estVisiblePar(auth()->user()), 404);
+
         $data = $request->validate([
             'statut' => 'required|string',
         ]);
@@ -131,6 +182,8 @@ class ChargeClientController extends Controller
     // 5. Enregistre une interaction (appel, WhatsApp, visite...) au sujet d'un véhicule
     public function storeInteraction(Request $request, Vehicule $vehicule)
     {
+        $this->autoriserVehicule($vehicule);
+
         $data = $request->validate([
             'type'                => 'required|in:appel,whatsapp,sms,email,visite,autre',
             'objet'               => 'required|string|max:255',

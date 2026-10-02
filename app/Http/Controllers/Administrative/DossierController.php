@@ -14,9 +14,15 @@ use App\Models\Stock;
 
 class DossierController extends Controller
 {
+    /** Refuse (404) l'accès à un dossier d'un autre siège. */
+    private function autoriser(Intervention $dossier): void
+    {
+        abort_unless($dossier->estVisiblePar(auth()->user()), 404);
+    }
+
     public function index()
     {
-        $dossiers = Intervention::with(['vehicule.client', 'mecanicien', 'receptionniste'])
+        $dossiers = Intervention::duSiege()->with(['vehicule.client', 'mecanicien', 'receptionniste'])
             ->where('statut', 'atelier') 
             ->latest()
             ->get();
@@ -29,7 +35,7 @@ class DossierController extends Controller
     public function facturationIndex()
     {
         // On ne garde que les dossiers qui sont en attente d'accord client
-        $dossiers = Intervention::with(['vehicule.client', 'devis', 'mecanicien'])
+        $dossiers = Intervention::duSiege()->with(['vehicule.client', 'devis', 'mecanicien'])
             ->where('statut', 'attente_accord') 
             ->latest()
             ->get();
@@ -42,6 +48,8 @@ class DossierController extends Controller
     // Affichage du détail de facturation d'un dossier spécifique
     public function facturationShow(Intervention $dossier)
     {
+        $this->autoriser($dossier);
+
         $dossier->load(['vehicule.client', 'devis.lignes']);
 
         return Inertia::render('Administration/FacturationShow', [
@@ -51,6 +59,8 @@ class DossierController extends Controller
 
     public function updateDevisValidation(Request $request, Intervention $dossier)
     {
+        $this->autoriser($dossier);
+
         $request->validate([
             'lignes_acceptees' => 'array',
             'lignes_acceptees.*' => 'exists:lignes_devis,id',
@@ -84,6 +94,8 @@ class DossierController extends Controller
 
     public function show(Intervention $dossier)
     {
+        $this->autoriser($dossier);
+
         $dossier->load(['vehicule.client', 'mecanicien', 'receptionniste']);
 
         return Inertia::render('Administration/DossierShow', [
@@ -93,6 +105,8 @@ class DossierController extends Controller
 
     public function storeDevis(Request $request, Intervention $dossier)
     {
+        $this->autoriser($dossier);
+
         $request->validate([
             'lignes' => 'required|array|min:1',
             'lignes.*.quantite' => 'required|numeric|min:0',
@@ -127,7 +141,7 @@ class DossierController extends Controller
     // NOUVELLE MÉTHODE : Vue globale de tous les devis pour l'administration
     public function devisIndex()
     {
-        $dossiers = Intervention::with(['vehicule.client', 'devis.lignes', 'mecanicien', 'receptionniste'])
+        $dossiers = Intervention::duSiege()->with(['vehicule.client', 'devis.lignes', 'mecanicien', 'receptionniste'])
             ->has('devis')
             ->latest()
             ->get();
@@ -142,7 +156,7 @@ class DossierController extends Controller
     {
         $search = $request->input('search');
 
-        $dossiers = Intervention::with(['vehicule.client', 'devis.lignes', 'mecanicien'])
+        $dossiers = Intervention::duSiege()->with(['vehicule.client', 'devis.lignes', 'mecanicien'])
             ->where('statut', 'accepte')
             ->where('circuit', 'normal') // On filtre par circuit normal
             ->when($search, function ($query, $search) {
@@ -167,7 +181,7 @@ class DossierController extends Controller
     // NOUVELLE VUE : Historique global de tous les devis (acceptés et refusés)
     public function devisHistoriqueIndex()
     {
-        $dossiers = Intervention::with(['vehicule.client', 'devis.lignes', 'mecanicien'])
+        $dossiers = Intervention::duSiege()->with(['vehicule.client', 'devis.lignes', 'mecanicien'])
             ->has('devis')
             ->latest()
             ->get();
@@ -180,7 +194,7 @@ class DossierController extends Controller
     // Affiche la liste des devis directs
     public function devisDirectIndex()
     {
-        $devisDirects = Intervention::with(['vehicule.client', 'devis.lignes', 'receptionniste'])
+        $devisDirects = Intervention::duSiege()->with(['vehicule.client', 'devis.lignes', 'receptionniste'])
             ->where('circuit', 'devis_direct')
             ->latest()
             ->get();
@@ -220,7 +234,14 @@ class DossierController extends Controller
             'lignes.*.sous_famille' => 'nullable|string|max:100',
         ]);
 
-        DB::transaction(function () use ($request) {
+        // Siège du dossier : celui de l'employé (l'admin, sans siège, est rattaché au premier siège par défaut)
+        $user = auth()->user();
+        if ($user->role !== 'admin' && empty($user->siege)) {
+            return back()->with('error', "Aucun siège ne vous est attribué. Contactez l'administrateur.");
+        }
+        $siege = $user->siege ?: array_key_first(config('sieges'));
+
+        DB::transaction(function () use ($request, $siege) {
             $vehiculeId = $request->vehicule_id;
 
             if (!$vehiculeId) {
@@ -245,6 +266,7 @@ class DossierController extends Controller
             $dossier = Intervention::create([
                 'vehicule_id' => $vehiculeId,
                 'circuit' => 'devis_direct',
+                'siege' => $siege,
                 'kilometrage' => 0, 
                 'date_reception' => now(),
                 'receptionniste_id' => auth()->id(),
@@ -267,6 +289,10 @@ class DossierController extends Controller
 
     public function rechercherPieces(Request $request, ?Intervention $dossier = null)
     {
+        if ($dossier) {
+            $this->autoriser($dossier);
+        }
+
         $marque = $request->input('marque');
         $modele = $request->input('modele');
 

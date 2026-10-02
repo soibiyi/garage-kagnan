@@ -37,12 +37,16 @@ class HandleInertiaRequests extends Middleware
                     'name' => $request->user()->name,
                     'email' => $request->user()->email,
                     'role' => $request->user()->role, // <-- C'est cette ligne qui manquait pour Vue.js
+                    'siege' => $request->user()->siege, // SGK, ZGK, YGK (null pour l'admin)
                 ] : null,
-                'flash' => [
-                    'success' => fn () => $request->session()->get('success'),
-                    'error'   => fn () => $request->session()->get('error'),
-                ],
             ],
+            // Messages flash : au même niveau que "auth" (lus par FlashToast via page.props.flash)
+            'flash' => [
+                'success' => fn () => $request->session()->get('success'),
+                'error'   => fn () => $request->session()->get('error'),
+            ],
+            // Liste des sièges { SGK: 'Siège Garage Kagnan', ... } disponible dans tous les composants Vue
+            'sieges' => config('sieges'),
         ];
     }
 }

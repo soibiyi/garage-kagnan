@@ -17,13 +17,16 @@ class MecanicienController extends Controller
     public function index(Request $request)
     {
         // Récupère uniquement les véhicules au statut 'reception'
-        $interventions = Intervention::with(['vehicule.client', 'mecanicien'])
+        $interventions = Intervention::duSiege()->with(['vehicule.client', 'mecanicien'])
             ->where('statut', 'reception')
             ->latest('date_reception')
             ->get();
 
         // Récupère tous les utilisateurs ayant le rôle 'mecanicien' pour alimenter le select
-        $mecaniciens = User::where('role', 'mecanicien')->get();
+        // Uniquement les mécaniciens du même siège (l'admin les voit tous)
+        $mecaniciens = User::where('role', 'mecanicien')
+            ->when(auth()->user()->role !== 'admin', fn ($q) => $q->where('siege', auth()->user()->siege))
+            ->get();
 
         return Inertia::render('Mecanicien/Index', [
             'interventions' => $interventions,
@@ -42,7 +45,7 @@ class MecanicienController extends Controller
             'rapport_mecanicien' => 'required|string',
         ]);
 
-        $intervention = Intervention::findOrFail($id);
+        $intervention = Intervention::duSiege()->findOrFail($id);
 
         $intervention->update([
             'mecanicien_id' => $request->mecanicien_id,

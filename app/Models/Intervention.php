@@ -17,6 +17,45 @@ class Intervention extends Model
         'date_reception' => 'datetime',
     ];
 
+    /**
+     * Limite la requête aux dossiers du siège de l'utilisateur connecté.
+     * - admin : aucun filtre (voit tous les sièges)
+     * - employé avec siège : uniquement les dossiers de son siège
+     * - employé sans siège : aucun dossier
+     */
+    public function scopeDuSiege($query, ?User $user = null)
+    {
+        $user = $user ?? auth()->user();
+
+        if (!$user) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        if ($user->role === 'admin') {
+            return $query;
+        }
+
+        if (empty($user->siege)) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->where($query->getModel()->getTable() . '.siege', $user->siege);
+    }
+
+    /** Ce dossier est-il accessible à cet utilisateur ? (utilisé pour les pages de détail) */
+    public function estVisiblePar(?User $user): bool
+    {
+        if (!$user) {
+            return false;
+        }
+
+        if ($user->role === 'admin') {
+            return true;
+        }
+
+        return !empty($user->siege) && $this->siege === $user->siege;
+    }
+
     public function vehicule()
     {
         return $this->belongsTo(Vehicule::class);

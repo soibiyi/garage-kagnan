@@ -9,26 +9,48 @@ use App\Models\Intervention;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Carbon\Carbon;
+use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class ReceptionController extends Controller
 {
+    /**
+     * Prochain numéro d'OT d'un siège pour aujourd'hui : SGK-02102026/001, ZGK-02102026/001, ...
+     * On repart de l'OT le plus élevé déjà émis par ce siège aujourd'hui (le compteur
+     * redémarre à 001 chaque jour et reste indépendant d'un siège à l'autre).
+     */
+    private function prochainNumeroOt(string $siege): string
+    {
+        // Pour passer à l'année sur 2 chiffres (SGK-021026/001), remplacer 'dmY' par 'dmy'
+        $prefix = $siege . '-' . Carbon::now()->format('dmY') . '/';
+
+        $dernier = Intervention::where('numero_ot', 'like', $prefix . '%')
+            ->pluck('numero_ot')
+            ->map(fn ($ot) => (int) substr($ot, strlen($prefix)))
+            ->max() ?? 0;
+
+        return $prefix . str_pad($dernier + 1, 3, '0', STR_PAD_LEFT);
+    }
+
     // Affiche le formulaire de nouvelle réception avec génération automatique du numéro OT
     public function create()
     {
-        // 1. Format de la date du jour : ddmmyy (ex: 230926)
-        $datePart = Carbon::now()->format('dmY');
-        $prefix = "SGK-{$datePart}/";
+        $user = auth()->user();
 
-        // 2. Compter les interventions créées aujourd'hui pour calculer le prochain numéro séquentiel
-        $todayCount = Intervention::whereDate('created_at', Carbon::today())->count();
-        $nextNumber = str_pad($todayCount + 1, 3, '0', STR_PAD_LEFT);
+        // Un employé sans siège attribué ne peut pas ouvrir de dossier (l'admin choisit le siège dans le formulaire)
+        if ($user->role !== 'admin' && empty($user->siege)) {
+            return redirect()->route('dashboard')
+                ->with('error', "Aucun siège ne vous est attribué. Contactez l'administrateur.");
+        }
 
-        // 3. Résultat final : SGK-230926/001
-        $defaultNumeroOt = $prefix . $nextNumber;
+        // Un prochain numéro d'OT par siège : le formulaire affiche celui du siège concerné
+        $defaultNumerosOt = collect(array_keys(config('sieges')))
+            ->mapWithKeys(fn ($code) => [$code => $this->prochainNumeroOt($code)]);
 
         return Inertia::render('Reception/Create', [
             'clients' => Client::with('vehicules')->orderBy('nom')->get(),
-            'defaultNumeroOt' => $defaultNumeroOt,
+            'defaultNumerosOt' => $defaultNumerosOt,
+            'siege' => $user->siege, // null pour l'admin
         ]);
     }
 
@@ -53,6 +75,7 @@ class ReceptionController extends Controller
 
             // Nouveaux champs d'intervention
             'numero_ot' => 'nullable|string|max:191',
+            'siege' => ['nullable', Rule::in(array_keys(config('sieges')))],
             'date_reception' => 'nullable|date',
             'kilometrage' => 'required|integer',
             'personne_a_contacter' => 'nullable|string|max:191',
@@ -129,17 +152,20 @@ class ReceptionController extends Controller
         
         $dateHeureExacte = $dateBase . ' ' . now()->format('H:i:s');
 
-        // Sécurité : s'assurer qu'un numéro OT unique est assigné s'il est vide
-        $numeroOt = $validated['numero_ot'];
-        if (empty($numeroOt)) {
-            $datePart = Carbon::now()->format('dmY');
-            $todayCount = Intervention::whereDate('created_at', Carbon::today())->count();
-            $numeroOt = "SGK-{$datePart}/" . str_pad($todayCount + 1, 3, '0', STR_PAD_LEFT);
+        // Siège : celui du compte connecté, sinon (admin) celui choisi dans le formulaire
+        $siege = auth()->user()->siege ?: ($validated['siege'] ?? null);
+        if (empty($siege)) {
+            throw ValidationException::withMessages(['siege' => 'Veuillez choisir le siège.']);
         }
+
+        // Le numéro d'OT est toujours recalculé côté serveur (jamais pris du formulaire) :
+        // évite les doublons dus à un numéro périmé resté affiché dans le formulaire
+        $numeroOt = $this->prochainNumeroOt($siege);
 
         // Création de l'intervention avec TOUTES les informations
         Intervention::create([
             'vehicule_id' => $vehicule->id,
+            'siege' => $siege,
             'receptionniste_id' => auth()->id(),
             'numero_ot' => $numeroOt,
             'date_reception' => $dateHeureExacte,
@@ -173,6 +199,6 @@ class ReceptionController extends Controller
             'photo_droite' => $photoPaths['photo_droite'],
         ]);
 
-        return redirect()->route('dashboard')->with('success', 'Fiche de réception complète enregistrée avec succès !');
+        return redirect()->route('dashboard')->with('success', "Fiche de réception enregistrée. N° OT : {$numeroOt}");
     }
 }

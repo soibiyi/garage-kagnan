@@ -10,15 +10,22 @@ const props = defineProps({
 
 const search = ref(props.filters.search || '');
 const showModal = ref(false);
+const showImportModal = ref(false);
 const isEditing = ref(false);
 const currentStockId = ref(null);
 
+// Formulaire pour Créer / Modifier une pièce
 const form = useForm({
     marque: '',
     modele: '',
     designation_piece: '',
     reference: '',
     prix_kagnan_ht: ''
+});
+
+// Formulaire pour Importer un fichier Excel
+const importForm = useForm({
+    fichier: null,
 });
 
 const openCreateModal = () => {
@@ -65,22 +72,65 @@ const deleteStock = (id) => {
 const handleSearch = () => {
     router.get(route('administration.stocks.index'), { search: search.value }, { preserveState: true, replace: true });
 };
+
+/* ------------------------------------------------------------------ */
+/* Export & Import Excel                                              */
+/* ------------------------------------------------------------------ */
+
+// Redirige vers la route Laravel de téléchargement du fichier Excel
+const exporterExcel = () => {
+    window.location.href = route('administration.stocks.export');
+};
+
+const openImportModal = () => {
+    importForm.reset();
+    importForm.clearErrors();
+    showImportModal.value = true;
+};
+
+const handleFileChange = (e) => {
+    importForm.fichier = e.target.files[0];
+};
+
+const submitImport = () => {
+    if (!importForm.fichier) return;
+
+    importForm.post(route('administration.stocks.import'), {
+        preserveScroll: true,
+        onSuccess: () => {
+            showImportModal.value = false;
+            importForm.reset();
+        }
+    });
+};
 </script>
 
 <template>
     <AuthenticatedLayout>
         <div class="py-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-            <!-- Header avec bouton Retour au dashboard -->
+            <!-- Header avec actions (Retour, Exporter, Importer, Ajouter) -->
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <div>
                     <h1 class="text-2xl font-black text-slate-900">Gestion des Stocks</h1>
                     <p class="text-sm text-slate-500">Catalogue des pièces détachées et inventaire (25 éléments par page).</p>
                 </div>
-                <div class="flex items-center gap-3">
-                    <Link :href="route('dashboard')" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-200 transition shadow-sm">
-                        <i class="fa-solid fa-arrow-left"></i> Retour au dashboard
+                <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <Link :href="route('dashboard')" class="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-200 transition shadow-sm">
+                        <i class="fa-solid fa-arrow-left"></i> <span class="hidden md:inline">Dashboard</span>
                     </Link>
-                    <button @click="openCreateModal" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#E11D48] text-white text-xs font-bold rounded-xl hover:bg-rose-700 transition shadow-sm">
+                    
+                    <!-- Bouton Exporter -->
+                    <button @click="exporterExcel" class="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition shadow-sm" title="Télécharger la liste sous format Excel">
+                        <i class="fa-solid fa-file-excel text-sm"></i> Exporter
+                    </button>
+
+                    <!-- Bouton Importer -->
+                    <button @click="openImportModal" class="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition shadow-sm" title="Mettre à jour la base de données par fichier Excel">
+                        <i class="fa-solid fa-file-import text-sm"></i> Importer
+                    </button>
+
+                    <!-- Bouton Ajouter une pièce -->
+                    <button @click="openCreateModal" class="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 bg-[#E11D48] text-white text-xs font-bold rounded-xl hover:bg-rose-700 transition shadow-sm">
                         <i class="fa-solid fa-plus"></i> Ajouter une pièce
                     </button>
                 </div>
@@ -188,6 +238,47 @@ const handleSearch = () => {
                     </form>
                 </div>
             </div>
+
+            <!-- Modal d'Importation Excel -->
+            <div v-if="showImportModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                <div class="bg-white rounded-2xl max-w-md w-full p-6 space-y-6 shadow-2xl">
+                    <div class="flex items-center justify-between border-b border-slate-100 pb-4">
+                        <h3 class="text-base font-black text-slate-900">Importer un fichier Excel</h3>
+                        <button @click="showImportModal = false" class="text-slate-400 hover:text-slate-600">
+                            <i class="fa-solid fa-xmark text-lg"></i>
+                        </button>
+                    </div>
+
+                    <form @submit.prevent="submitImport" class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-600 mb-2">Sélectionner un fichier Excel (.xlsx, .xls, .csv)</label>
+                            <input 
+                                type="file" 
+                                @change="handleFileChange" 
+                                accept=".xlsx, .xls, .csv" 
+                                required
+                                class="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs p-2 focus:border-blue-600 text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                            />
+                            <p v-if="importForm.errors.fichier" class="text-xs text-rose-600 mt-1.5 font-medium">
+                                {{ importForm.errors.fichier }}
+                            </p>
+                        </div>
+
+                        <div class="p-3 bg-blue-50/50 border border-blue-100 rounded-xl text-[11px] text-blue-800 space-y-1">
+                            <p class="font-bold"><i class="fa-solid fa-circle-info mr-1"></i> Structure attendue du fichier Excel :</p>
+                            <p class="text-slate-600">En-têtes conseillés en 1ère ligne : <strong>marque</strong>, <strong>modele</strong>, <strong>designation_piece</strong>, <strong>reference</strong>, <strong>prix_kagnan_ht</strong>.</p>
+                        </div>
+
+                        <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                            <button type="button" @click="showImportModal = false" class="px-4 py-2 bg-slate-100 text-slate-600 text-xs font-bold rounded-xl hover:bg-slate-200 transition">Annuler</button>
+                            <button type="submit" :disabled="importForm.processing || !importForm.fichier" class="px-5 py-2 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition shadow-sm disabled:opacity-50">
+                                <i class="fa-solid fa-upload mr-1.5"></i> Importer
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
         </div>
     </AuthenticatedLayout>
 </template>
