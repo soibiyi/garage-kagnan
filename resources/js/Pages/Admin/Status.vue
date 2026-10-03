@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue';
 import { Link } from '@inertiajs/vue3';
+import SiegeSwitcher from '@/Components/SiegeSwitcher.vue';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import {
     faCar,
@@ -13,6 +14,7 @@ import {
 
 const props = defineProps({
     vehicules: Array,
+    siegeFiltre: { type: String, default: null },
 });
 
 const search = ref('');
@@ -76,11 +78,14 @@ const vehiculesFiltres = computed(() => {
                         </Link>
                         <h1 class="text-2xl font-bold text-[#1A1A1A]">Statut des Véhicules Enregistrés</h1>
                     </div>
-                    <p class="text-xs text-[#8A8D8F] mt-1">Liste globale de tous les véhicules, propriétaires et état d'avancement</p>
+                    <p class="text-xs text-[#8A8D8F] mt-1">Véhicules, propriétaires et état d'avancement<span v-if="siegeFiltre" class="font-bold text-[#C8102E]"> — Siège {{ siegeFiltre }}</span></p>
                 </div>
 
-                <div class="text-xs font-bold bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm text-gray-700">
-                    Total : {{ vehiculesFiltres.length }} véhicule(s)
+                <div class="flex flex-wrap items-center gap-3">
+                    <SiegeSwitcher :current="siegeFiltre" />
+                    <div class="text-xs font-bold bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm text-gray-700">
+                        Total : {{ vehiculesFiltres.length }} véhicule(s)
+                    </div>
                 </div>
             </div>
 

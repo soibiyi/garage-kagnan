@@ -18,12 +18,38 @@ use Carbon\Carbon;
 
 class UserController extends Controller
 {
-    /** Siège demandé dans l'URL (?siege=ZGK). null = tous les sièges. */
-    private function siegeDemande(Request $request): ?string
-    {
-        $siege = $request->query('siege');
+    private const SESSION_SIEGE = 'admin_siege';
 
-        return in_array($siege, array_keys(config('sieges')), true) ? $siege : null;
+    /**
+     * Siège actif de l'administrateur : celui choisi dans le menu déroulant, conservé en session
+     * jusqu'à ce qu'il en choisisse un autre. Par défaut : le premier siège de config/sieges.php.
+     */
+    private function siegeActif(): string
+    {
+        $codes = array_keys(config('sieges'));
+        $siege = session(self::SESSION_SIEGE);
+
+        return in_array($siege, $codes, true) ? $siege : $codes[0];
+    }
+
+    /** Enregistre le siège choisi dans le menu déroulant puis revient sur la page courante. */
+    public function changerSiege(Request $request)
+    {
+        $request->validate([
+            'siege' => ['required', Rule::in(array_keys(config('sieges')))],
+        ]);
+
+        session([self::SESSION_SIEGE => $request->siege]);
+
+        return back();
+    }
+
+    /** Un collaborateur n'est accessible que depuis le siège auquel il est rattaché (l'admin est commun). */
+    private function verifierAccesCollaborateur(User $user): void
+    {
+        if ($user->role !== 'admin' && $user->siege !== $this->siegeActif()) {
+            abort(404);
+        }
     }
 
     /** Paiements, éventuellement limités aux factures des dossiers d'un siège. */
@@ -42,11 +68,14 @@ class UserController extends Controller
     }
 
     // Affiche la liste des utilisateurs via Inertia
-   public function index(Request $request)
+   public function index()
 {
-    $siege = $this->siegeDemande($request);
+    $siege = $this->siegeActif();
 
-    $users = User::latest()->get();
+    // Collaborateurs du siège actif (l'administrateur, commun à tous les sièges, reste visible)
+    $users = User::where(fn ($q) => $q->where('siege', $siege)->orWhere('role', 'admin'))
+        ->latest()
+        ->get();
 
     // Totaux des paiements regroupés par mois (12 derniers mois)
     $totauxParMois = $this->paiementsQuery($siege)->where('date_paiement', '>=', now()->startOfMonth()->subMonths(11))
@@ -82,7 +111,9 @@ class UserController extends Controller
     // Affiche le formulaire de création
     public function create()
     {
-        return Inertia::render('Admin/Users/Create');
+        return Inertia::render('Admin/Users/Create', [
+            'siegeActif' => $this->siegeActif(),
+        ]);
     }
 
     // Enregistre le nouvel utilisateur
@@ -93,9 +124,6 @@ class UserController extends Controller
             'email' => 'required|string|email|max:191|unique:users',
             'password' => 'required|string|min:6',
             'role' => 'required|string|in:admin,receptionniste,mecanicien,administratif,charge_client',
-            'siege' => [Rule::requiredIf($request->role !== 'admin'), 'nullable', Rule::in(array_keys(config('sieges')))],
-        ], [
-            'siege.required' => 'Veuillez attribuer un siège à ce collaborateur.',
         ]);
 
         User::create([
@@ -103,8 +131,8 @@ class UserController extends Controller
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'role' => $request->role,
-            // L'administrateur a accès à tous les sièges : pas de siège attribué
-            'siege' => $request->role === 'admin' ? null : $request->siege,
+            // Le collaborateur est rattaché au siège actif ; l'administrateur n'a pas de siège (accès à tous)
+            'siege' => $request->role === 'admin' ? null : $this->siegeActif(),
         ]);
 
         return redirect()->route('admin.users.index')->with('success', 'Utilisateur créé avec succès !');
@@ -113,6 +141,8 @@ class UserController extends Controller
     // Affiche le formulaire de modification d'un collaborateur
     public function edit(User $user)
     {
+        $this->verifierAccesCollaborateur($user);
+
         return Inertia::render('Admin/Users/Edit', [
             'user' => $user,
         ]);
@@ -121,6 +151,8 @@ class UserController extends Controller
     // Met à jour les informations du collaborateur
     public function update(Request $request, User $user)
     {
+        $this->verifierAccesCollaborateur($user);
+
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => ['required', 'string', 'email', 'max:191', Rule::unique('users')->ignore($user->id)],
@@ -145,6 +177,8 @@ class UserController extends Controller
     // Supprimer un utilisateur (avec protection pour ne pas supprimer son propre compte admin)
     public function destroy(User $user)
     {
+        $this->verifierAccesCollaborateur($user);
+
         if ($user->id === auth()->id()) {
             return back()->with('error', 'Vous ne pouvez pas supprimer votre propre compte administrateur.');
         }
@@ -159,8 +193,11 @@ class UserController extends Controller
      */
     public function interactionIndex()
     {
-        // Récupère toutes les interactions avec leurs relations
+        $siege = $this->siegeActif();
+
+        // Interactions des chargés client du siège actif uniquement
         $interactions = InteractionClient::with(['user', 'client', 'vehicule'])
+            ->whereHas('user', fn ($q) => $q->where('siege', $siege))
             ->latest()
             ->get();
 
@@ -197,15 +234,16 @@ class UserController extends Controller
 
         return Inertia::render('Admin/Users/InteractionIndex', [
             'chargesClients' => $chargesClients,
+            'siegeFiltre' => $siege,
         ]);
     }
 
     /**
      * Afficher tous les véhicules avec leur propriétaire et leur dernier statut
      */
-    public function vehiculesStatus(Request $request)
+    public function vehiculesStatus()
     {
-        $siege = $this->siegeDemande($request);
+        $siege = $this->siegeActif();
 
         $vehicules = Vehicule::with(['client', 'interventions' => function ($q) use ($siege) {
             $q->when($siege, fn ($i) => $i->where('siege', $siege))->latest();
@@ -223,31 +261,22 @@ class UserController extends Controller
     /**
  * Historique du chiffre d'affaires par année (avec détail mensuel)
  */
-public function chiffreAffaires(Request $request)
+public function chiffreAffaires()
 {
-    $siege = $this->siegeDemande($request);
+    $siege = $this->siegeActif();
 
+    // Paiements du siège actif uniquement (aucune comparaison avec les autres sièges)
     $paiements = $this->paiementsQuery($siege)->get(['montant', 'date_paiement']);
-
-    // Chiffre d'affaires de chaque siège par année (indépendant du filtre, pour comparer les sièges)
-    $totauxSieges = collect(array_keys(config('sieges')))->mapWithKeys(function ($code) {
-        $parAnnee = $this->paiementsQuery($code)->get(['montant', 'date_paiement'])
-            ->groupBy(fn ($p) => Carbon::parse($p->date_paiement)->year)
-            ->map(fn ($g) => (float) $g->sum('montant'));
-
-        return [$code => $parAnnee];
-    });
 
     $annees = $paiements
         ->groupBy(fn ($p) => Carbon::parse($p->date_paiement)->year)
-        ->map(function ($groupe, $annee) use ($totauxSieges) {
+        ->map(function ($groupe, $annee) {
             $parMois = $groupe->groupBy(fn ($p) => Carbon::parse($p->date_paiement)->month);
 
             return [
                 'annee' => (int) $annee,
                 'total' => (float) $groupe->sum('montant'),
                 'nombre_paiements' => $groupe->count(),
-                'par_siege' => $totauxSieges->map(fn ($parAnnee) => (float) ($parAnnee[(int) $annee] ?? 0)),
                 'mois' => collect(range(1, 12))->map(fn ($m) => [
                     'numero' => $m,
                     'label' => ucfirst(Carbon::create(2000, $m, 1)->locale('fr')->translatedFormat('F')),

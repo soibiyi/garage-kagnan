@@ -61,6 +61,9 @@ Route::middleware('auth')->group(function () {
 // Routes Administrateur (Gestion des employés & rôles)
 // ==========================================
 Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.')->group(function () {
+    // Choix du siège actif (menu déroulant) : mémorisé en session jusqu'au prochain changement
+    Route::post('/siege', [UserController::class, 'changerSiege'])->name('siege.switch');
+
     Route::get('/users', [UserController::class, 'index'])->name('users.index');
     Route::get('/users/create', [UserController::class, 'create'])->name('users.create');
     Route::post('/users', [UserController::class, 'store'])->name('users.store');

@@ -1,10 +1,12 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link } from '@inertiajs/vue3';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
+import SiegeSwitcher from '@/Components/SiegeSwitcher.vue';
 
 const props = defineProps({
     chargesClients: Array,
+    siegeFiltre: { type: String, default: null },
 });
 
 /* ------------------------------------------------------------------ */
@@ -51,6 +53,11 @@ const chargesClientsFiltres = computed(() => {
 /* Gestion de l'ouverture/fermeture des accordéons                   */
 /* ------------------------------------------------------------------ */
 const chargeOuvertId = ref(props.chargesClients?.[0]?.id || null);
+
+// Au changement de siège, on rouvre le premier chargé client de la nouvelle liste
+watch(() => props.chargesClients, (liste) => {
+    chargeOuvertId.value = liste?.[0]?.id || null;
+});
 
 const basculerCharge = (id) => {
     chargeOuvertId.value = chargeOuvertId.value === id ? null : id;
@@ -114,11 +121,12 @@ const iconeType = (valeur) => TYPES.find((t) => t.valeur === valeur)?.icone || '
                         Suivi des interactions
                     </h2>
                     <p class="text-xs font-medium text-[#8A8D8F]">
-                        Vue d'ensemble de l'historique des échanges par chargé client et par client
+                        Vue d'ensemble de l'historique des échanges par chargé client et par client<span v-if="siegeFiltre" class="font-bold text-[#C8102E]"> — Siège {{ siegeFiltre }}</span>
                     </p>
                 </div>
 
                 <div class="flex items-center gap-3">
+                    <SiegeSwitcher :current="siegeFiltre" />
                     <!-- UNIQUE BOUTON RETOUR (HAUT DE PAGE) -->
                     <Link
                         :href="route('admin.users.index')"

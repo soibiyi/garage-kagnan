@@ -11,13 +11,17 @@ import {
     faCircleNotch
 } from '@fortawesome/free-solid-svg-icons';
 
+// Le collaborateur est toujours créé dans le siège actif de l'administrateur
+defineProps({
+    siegeActif: { type: String, default: null },
+});
+
 // Initialisation du formulaire avec Inertia
 const form = useForm({
     name: '',
     email: '',
     password: '',
     role: 'receptionniste',
-    siege: '',
 });
 
 const submit = () => {
@@ -124,18 +128,17 @@ const submit = () => {
             <p v-if="form.errors.role" class="mt-1 text-xs text-red-600 font-medium">{{ form.errors.role }}</p>
           </div>
 
-          <!-- Siège d'affectation (pas pour l'administrateur) -->
+          <!-- Siège d'affectation : toujours le siège actif (pas pour l'administrateur) -->
           <div v-if="form.role !== 'admin'">
             <label class="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-700">
-              Siège d'affectation <span class="text-red-500">*</span>
+              Siège d'affectation
             </label>
-            <select v-model="form.siege" required
-                    class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/20 focus:border-[#C8102E] transition"
-                    :class="{ 'border-red-500 focus:ring-red-200': form.errors.siege }">
-              <option value="" disabled>Choisir un siège</option>
-              <option v-for="(nom, code) in $page.props.sieges" :key="code" :value="code">{{ code }} — {{ nom }}</option>
-            </select>
-            <p v-if="form.errors.siege" class="mt-1 text-xs text-red-600 font-medium">{{ form.errors.siege }}</p>
+            <div class="w-full px-4 py-2.5 bg-gray-100 border border-gray-200 rounded-xl text-sm font-semibold text-gray-800">
+              {{ siegeActif }} — {{ $page.props.sieges[siegeActif] }}
+            </div>
+            <p class="mt-1 text-[11px] text-gray-500">
+              Le collaborateur sera rattaché au siège actif. Pour en ajouter un dans un autre siège, changez de siège depuis le tableau de bord.
+            </p>
           </div>
 
           <!-- Mot de passe temporaire -->

@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue';
 import { Link, usePage, router } from '@inertiajs/vue3';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
-import SiegeFilter from '@/Components/SiegeFilter.vue';
+import SiegeSwitcher from '@/Components/SiegeSwitcher.vue';
 import { 
     faBoxesStacked, 
     faFileLines, 
@@ -105,11 +105,11 @@ const logout = () => {
       <div class="flex justify-between items-center">
         <div>
           <h1 class="text-3xl font-bold" style="color: #1A1A1A;">Tableau de Bord - Garage</h1>
-          <p class="text-sm mt-1" style="color: #8A8D8F;">Vue d'ensemble de la gestion et des activités</p>
+          <p class="text-sm mt-1" style="color: #8A8D8F;">Vue d'ensemble de la gestion et des activités<span v-if="siegeFiltre" class="font-bold" style="color: #C8102E;"> — Siège {{ siegeFiltre }}</span></p>
         </div>
         
         <div class="flex items-center gap-3">
-          <SiegeFilter route-name="admin.users.index" :current="siegeFiltre" />
+          <SiegeSwitcher :current="siegeFiltre" />
           <button @click="logout" 
                   class="text-sm font-semibold px-4 py-2.5 rounded-lg border border-gray-300 hover:bg-gray-100 transition shadow-sm bg-white"
                   style="color: #1A1A1A;">
@@ -135,7 +135,7 @@ const logout = () => {
       </select>
     </div>
     <p class="text-2xl font-black mt-2" style="color: #1A1A1A;">{{ chiffreAffairesAffiche }}</p>
-    <Link :href="route('admin.chiffre-affaires', siegeFiltre ? { siege: siegeFiltre } : {})" class="inline-block mt-3 text-xs font-semibold text-[#C8102E] hover:underline">
+    <Link :href="route('admin.chiffre-affaires')" class="inline-block mt-3 text-xs font-semibold text-[#C8102E] hover:underline">
       Voir l'historique par année →
     </Link>
   </div>
@@ -173,7 +173,7 @@ const logout = () => {
               <font-awesome-icon :icon="faBoxesStacked" class="text-base" />
             </span>
           </div>
-          <p class="text-sm" style="color: #8A8D8F;">Accéder au catalogue des pièces détachées et inventaire.</p>
+          <p class="text-sm" style="color: #8A8D8F;">Accéder au catalogue des pièces détachées et inventaire (commun à tous les sièges).</p>
         </Link>
 
         <!-- Suivi des Interactions -->
