@@ -36,10 +36,18 @@ const currentCameraField = ref(null);
 const videoRef = ref(null);
 const mediaStream = ref(null);
 
+// Clients du siège concerné uniquement (siège de l'utilisateur connecté,
+// ou siège choisi dans le formulaire si l'utilisateur n'est rattaché à aucun siège)
+const clientsDuSiege = computed(() => {
+    const siegeActif = props.siege || form.siege;
+    if (!siegeActif) return [];
+    return props.clients.filter(c => c.siege === siegeActif);
+});
+
 const filteredClients = computed(() => {
     if (!searchQuery.value || searchQuery.value.length < 2) return [];
     const query = searchQuery.value.toLowerCase();
-    return props.clients.filter(c => 
+    return clientsDuSiege.value.filter(c => 
         c.nom.toLowerCase().includes(query) || 
         (c.prenom && c.prenom.toLowerCase().includes(query)) ||
         (c.telephone && c.telephone.includes(query))
@@ -136,6 +144,18 @@ const form = useForm({
 
 watch(() => form.siege, (code) => {
     form.numero_ot = props.defaultNumerosOt?.[code] ?? '';
+
+    // Si le siège change (cas sans siège imposé), on annule le client déjà choisi
+    // s'il n'appartient pas au nouveau siège
+    if (form.client_id && !props.siege) {
+        const client = props.clients.find(c => c.id === form.client_id);
+        if (!client || client.siege !== code) {
+            form.client_id = '';
+            searchQuery.value = '';
+            selectedExistingVehiculeId.value = '';
+            form.vehicule_id = '';
+        }
+    }
 });
 
 const nextStep = () => {

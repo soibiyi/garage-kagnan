@@ -10,7 +10,7 @@ defineProps({
 </script>
 
 <template>
-    <Head title="Garage Kagnan — Excellence & Maintenance Automobile" />
+    <Head title="Garage Kagnan" />
 
     <div class="min-h-screen text-gray-900 font-sans selection:bg-red-600 selection:text-white" style="background-color: #8A8D8F;">
         

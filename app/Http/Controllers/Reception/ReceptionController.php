@@ -47,8 +47,15 @@ class ReceptionController extends Controller
         $defaultNumerosOt = collect(array_keys(config('sieges')))
             ->mapWithKeys(fn ($code) => [$code => $this->prochainNumeroOt($code)]);
 
+        // Un employé ne reçoit que les clients de son siège (rien des autres sièges n'arrive au navigateur).
+        // L'admin reçoit tous les clients : le formulaire filtre selon le siège qu'il choisit.
+        $clients = Client::with('vehicules')
+            ->when($user->siege, fn ($q) => $q->where('siege', $user->siege))
+            ->orderBy('nom')
+            ->get();
+
         return Inertia::render('Reception/Create', [
-            'clients' => Client::with('vehicules')->orderBy('nom')->get(),
+            'clients' => $clients,
             'defaultNumerosOt' => $defaultNumerosOt,
             'siege' => $user->siege, // null pour l'admin
         ]);
@@ -106,8 +113,26 @@ class ReceptionController extends Controller
             'photo_droite' => 'nullable|image|max:5120',
         ]);
 
+        // Siège : celui du compte connecté, sinon (admin) celui choisi dans le formulaire.
+        // Déterminé en premier car il sert aussi à contrôler et à rattacher le client.
+        $siege = auth()->user()->siege ?: ($validated['siege'] ?? null);
+        if (empty($siege)) {
+            throw ValidationException::withMessages(['siege' => 'Veuillez choisir le siège.']);
+        }
+
         // Gestion client
         if (!empty($validated['client_id'])) {
+            // Un client existant doit appartenir au siège concerné
+            $clientAutorise = Client::where('id', $validated['client_id'])
+                ->where('siege', $siege)
+                ->exists();
+
+            if (!$clientAutorise) {
+                throw ValidationException::withMessages([
+                    'client_id' => "Ce client n'appartient pas au siège {$siege}.",
+                ]);
+            }
+
             $clientId = $validated['client_id'];
         } else {
             $client = Client::create([
@@ -117,6 +142,7 @@ class ReceptionController extends Controller
                 'email' => $validated['email'] ?? null,
                 'adresse' => $validated['adresse'] ?? null,
                 'type_client' => $validated['type_client'] ?? 'particulier',
+                'siege' => $siege, // le nouveau client est rattaché au siège de la réception
             ]);
             $clientId = $client->id;
         }
@@ -151,12 +177,6 @@ class ReceptionController extends Controller
             : now()->format('Y-m-d');
         
         $dateHeureExacte = $dateBase . ' ' . now()->format('H:i:s');
-
-        // Siège : celui du compte connecté, sinon (admin) celui choisi dans le formulaire
-        $siege = auth()->user()->siege ?: ($validated['siege'] ?? null);
-        if (empty($siege)) {
-            throw ValidationException::withMessages(['siege' => 'Veuillez choisir le siège.']);
-        }
 
         // Le numéro d'OT est toujours recalculé côté serveur (jamais pris du formulaire) :
         // évite les doublons dus à un numéro périmé resté affiché dans le formulaire

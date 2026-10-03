@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import { Link } from '@inertiajs/vue3';
-import SiegeFilter from '@/Components/SiegeFilter.vue';
+import SiegeSwitcher from '@/Components/SiegeSwitcher.vue';
 
 const props = defineProps({
     annees: { type: Array, default: () => [] },
@@ -19,17 +19,6 @@ watch(() => props.annees, (liste) => {
     if (!liste.some(a => a.annee === anneeSelectionnee.value)) {
         anneeSelectionnee.value = liste[0]?.annee ?? null;
     }
-});
-
-// Répartition du CA de l'année sélectionnée entre les sièges (toujours tous les sièges, pour comparer)
-const repartitionSieges = computed(() => {
-    const parSiege = donneesAnnee.value?.par_siege ?? {};
-    const total = Object.values(parSiege).reduce((somme, n) => somme + n, 0);
-    return Object.entries(parSiege).map(([code, montant]) => ({
-        code,
-        montant,
-        part: total > 0 ? Math.round((montant * 100) / total) : 0,
-    }));
 });
 
 const formatMontant = (n) => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(n || 0) + ' FCFA';
@@ -82,7 +71,7 @@ const barresAnnees = computed(() => {
         </div>
 
         <div class="flex flex-wrap items-center gap-3">
-          <SiegeFilter route-name="admin.chiffre-affaires" :current="siegeFiltre" />
+          <SiegeSwitcher :current="siegeFiltre" />
           <select
             v-if="annees.length"
             v-model="anneeSelectionnee"
@@ -98,24 +87,6 @@ const barresAnnees = computed(() => {
             ← Retour au tableau de bord
           </Link>
         </div>
-      </div>
-
-      <!-- Répartition par siège (année sélectionnée) : cliquer sur un siège pour le filtrer -->
-      <div v-if="repartitionSieges.length" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Link
-          v-for="s in repartitionSieges"
-          :key="s.code"
-          :href="route('admin.chiffre-affaires', { siege: s.code })"
-          class="bg-white p-5 rounded-xl border shadow-sm transition hover:shadow-md"
-          :class="siegeFiltre === s.code ? 'border-[#C8102E] ring-1 ring-[#C8102E]' : 'border-gray-200'"
-        >
-          <p class="text-xs font-bold uppercase tracking-wider" style="color: #8A8D8F;">{{ s.code }} — {{ $page.props.sieges[s.code] }}</p>
-          <p class="text-xl font-black mt-2" style="color: #1A1A1A;">{{ formatMontant(s.montant) }}</p>
-          <div class="mt-3 h-1.5 rounded-full bg-gray-100 overflow-hidden">
-            <div class="h-full rounded-full" style="background-color: #C8102E;" :style="{ width: s.part + '%' }"></div>
-          </div>
-          <p class="text-[11px] mt-1" style="color: #8A8D8F;">{{ s.part }} % du total {{ anneeSelectionnee }}</p>
-        </Link>
       </div>
 
       <!-- Aucun paiement -->
