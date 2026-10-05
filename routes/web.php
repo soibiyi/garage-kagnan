@@ -127,6 +127,10 @@ Route::middleware(['auth'])->prefix('administration')->name('administration.')->
     Route::get('/dossiers/{dossier}', [DossierController::class, 'show'])->name('dossiers.show');
     Route::post('/dossiers/{dossier}/devis', [DossierController::class, 'storeDevis'])->name('devis.store');
 
+    // MODIFICATION D'UN DEVIS EN ATTENTE DE VALIDATION (nouvelles routes)
+    Route::get('/dossiers/{dossier}/devis/modifier', [DossierController::class, 'editDevis'])->name('devis.edit');
+    Route::put('/dossiers/{dossier}/devis', [DossierController::class, 'updateDevis'])->name('devis.update');
+
     // FACTURATION & RÈGLEMENTS
     Route::get('/facturation', [DossierController::class, 'facturationIndex'])->name('facturation.index');
     Route::get('/facturation/{dossier}', [DossierController::class, 'facturationShow'])->name('facturation.show');

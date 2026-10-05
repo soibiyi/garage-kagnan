@@ -6,7 +6,11 @@ import axios from 'axios';
 import { FAMILLES, FAMILLE_PAR_DEFAUT } from '@/constants/familles.js';
 const props = defineProps({
     dossier: Object,
+    // Fourni uniquement en mode modification (devis en attente de validation)
+    devis: { type: Object, default: null },
 });
+
+const modeModification = computed(() => !!props.devis);
 
 // Détection automatique de la Famille & Sous-famille selon les mots-clés
 const detecterFamilleEtSousFamille = (designation) => {
@@ -34,9 +38,19 @@ const detecterFamilleEtSousFamille = (designation) => {
     };
 };
 
-// Formulaire Inertia pour les lignes de devis
-const form = useForm({
-    lignes: [
+// Lignes de départ : celles du devis existant (modification) ou une ligne par défaut (création)
+const lignesInitiales = props.devis?.lignes?.length
+    ? props.devis.lignes.map((l) => ({
+        quantite: l.quantite,
+        designation: l.designation,
+        reference_piece: l.reference_piece || '',
+        famille: l.famille || FAMILLE_PAR_DEFAUT,
+        sous_famille: l.sous_famille || '',
+        pu_net: l.pu_net,
+        remise: l.remise ?? 0,
+        ne_pas_appliquer_tva: !!l.ne_pas_appliquer_tva,
+    }))
+    : [
         {
             quantite: 1,
             designation: 'DIAGNOSTIC TECHNIQUE',
@@ -47,7 +61,11 @@ const form = useForm({
             remise: 0,
             ne_pas_appliquer_tva: true,
         }
-    ],
+    ];
+
+// Formulaire Inertia pour les lignes de devis
+const form = useForm({
+    lignes: lignesInitiales,
 });
 
 // États pour la gestion de l'autocomplétion des pièces par ligne
@@ -162,6 +180,13 @@ const totalGeneralTtc = computed(() => {
 
 // Soumission
 const submitDevis = () => {
+    if (modeModification.value) {
+        form.put(route('administration.devis.update', props.dossier.id), {
+            preserveScroll: true,
+        });
+        return;
+    }
+
     form.post(route('administration.devis.store', props.dossier.id), {
         preserveScroll: true,
     });
@@ -177,7 +202,7 @@ const submitDevis = () => {
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <div class="flex items-center gap-3 text-xs text-slate-500">
-                        <Link :href="route('administration.dossiers.index')" class="hover:text-slate-900 transition flex items-center gap-1.5">
+                        <Link :href="modeModification ? route('administration.facturation.index') : route('administration.dossiers.index')" class="hover:text-slate-900 transition flex items-center gap-1.5">
                             <i class="fa-solid fa-arrow-left"><span>Retour aux dossiers</span></i>
                         </Link>
                         <span>/</span>
@@ -187,7 +212,7 @@ const submitDevis = () => {
                     </div>
                     <h2 class="text-xl font-bold tracking-tight text-slate-900 mt-2 flex items-center gap-2">
                         <i class="fa-solid fa-file-invoice-dollar text-[#E11D48]"></i>
-                        <span>Établissement du Devis & Chiffrage</span>
+                        <span>{{ modeModification ? 'Modification du Devis' : 'Établissement du Devis & Chiffrage' }}</span>
                     </h2>
                 </div>
             </div>
@@ -433,7 +458,7 @@ const submitDevis = () => {
                                 class="mt-4 px-6 py-3 bg-[#E11D48] hover:bg-rose-700 text-white text-xs font-bold uppercase tracking-wider rounded-lg shadow-md transition-all disabled:opacity-50 flex items-center gap-2"
                             >
                                 <i class="fa-solid fa-check"></i>
-                                <span>Enregistrer et émettre le devis</span>
+                                <span>{{ modeModification ? 'Enregistrer les modifications' : 'Enregistrer et émettre le devis' }}</span>
                             </button>
                         </div>
                     </div>

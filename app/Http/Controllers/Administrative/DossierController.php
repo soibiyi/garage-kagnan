@@ -138,6 +138,65 @@ class DossierController extends Controller
             ->with('success', 'Devis enregistré avec succès.');
     }
 
+    /**
+     * Seul un devis encore en attente de validation client peut être modifié.
+     */
+    private function verifierDevisModifiable(Intervention $dossier): void
+    {
+        abort_unless(
+            $dossier->statut === 'attente_accord'
+                && $dossier->devis
+                && $dossier->devis->statut === 'en_attente',
+            403,
+            'Ce devis ne peut plus être modifié.'
+        );
+    }
+
+    // MODIFICATION : affiche le formulaire de devis pré-rempli avec les lignes existantes
+    public function editDevis(Intervention $dossier)
+    {
+        $this->autoriser($dossier);
+        $this->verifierDevisModifiable($dossier);
+
+        $dossier->load(['vehicule.client', 'mecanicien', 'receptionniste', 'devis.lignes']);
+
+        return Inertia::render('Administration/DossierShow', [
+            'dossier' => $dossier,
+            'devis'   => $dossier->devis,
+        ]);
+    }
+
+    // MODIFICATION : remplace les lignes du devis, le statut du dossier ne change pas
+    public function updateDevis(Request $request, Intervention $dossier)
+    {
+        $this->autoriser($dossier);
+        $this->verifierDevisModifiable($dossier);
+
+        $request->validate([
+            'lignes' => 'required|array|min:1',
+            'lignes.*.quantite' => 'required|numeric|min:0',
+            'lignes.*.designation' => 'required|string',
+            'lignes.*.pu_net' => 'required|numeric|min:0',
+            'lignes.*.remise' => 'nullable|numeric|min:0',
+            'lignes.*.reference_piece' => 'nullable|string',
+            'lignes.*.ne_pas_appliquer_tva' => 'nullable|boolean',
+            'lignes.*.famille' => 'nullable|string|max:100',
+            'lignes.*.sous_famille' => 'nullable|string|max:100',
+        ]);
+
+        DB::transaction(function () use ($request, $dossier) {
+            $devis = $dossier->devis;
+
+            // Le client n'a encore rien validé : on peut remplacer les lignes
+            $devis->lignes()->delete();
+            $this->creerLignesDevis($devis, $request->lignes);
+            $devis->touch();
+        });
+
+        return redirect()->route('administration.facturation.index')
+            ->with('success', 'Devis modifié avec succès.');
+    }
+
     // NOUVELLE MÉTHODE : Vue globale de tous les devis pour l'administration
     public function devisIndex()
     {
@@ -324,7 +383,7 @@ class DossierController extends Controller
     }
 
     /**
-     * Crée les lignes d'un devis (utilisé par storeDevis et storeDevisDirect).
+     * Crée les lignes d'un devis (utilisé par storeDevis, updateDevis et storeDevisDirect).
      */
     private function creerLignesDevis(Devis $devis, array $lignes): void
     {

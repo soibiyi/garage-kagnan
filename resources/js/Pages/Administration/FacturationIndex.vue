@@ -109,13 +109,22 @@ const backText = computed(() => {
                                         </span>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right">
-                                        <Link 
-                                            :href="route('administration.facturation.show', dossier.id)" 
-                                            class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#E11D48] hover:bg-rose-700 text-white font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-[11px]"
-                                        >
-                                            <span>Traiter</span>
-                                            <i class="fa-solid fa-arrow-right text-[10px]"></i>
-                                        </Link>
+                                        <div class="inline-flex items-center gap-2">
+                                            <Link 
+                                                :href="route('administration.devis.edit', dossier.id)" 
+                                                class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-[11px]"
+                                            >
+                                                <i class="fa-solid fa-pen text-[10px]"></i>
+                                                <span>Modifier</span>
+                                            </Link>
+                                            <Link 
+                                                :href="route('administration.facturation.show', dossier.id)" 
+                                                class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#E11D48] hover:bg-rose-700 text-white font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-[11px]"
+                                            >
+                                                <span>Traiter</span>
+                                                <i class="fa-solid fa-arrow-right text-[10px]"></i>
+                                            </Link>
+                                        </div>
                                     </td>
                                 </tr>
                             </tbody>
