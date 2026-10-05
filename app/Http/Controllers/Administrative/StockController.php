@@ -7,6 +7,7 @@ use App\Models\Stock;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Illuminate\Support\Facades\DB;
 
 class StockController extends Controller
 {
@@ -132,33 +133,60 @@ class StockController extends Controller
      * Importation et mise à jour des pièces via fichier CSV.
      */
     public function import(Request $request)
-    {
-        $request->validate([
-            'fichier' => 'required|file|max:10240',
-        ]);
+{
+    $request->validate([
+        'fichier' => 'required|file|mimes:csv,txt|max:10240',
+    ]);
 
-        $file = $request->file('fichier');
-        $handle = fopen($file->getRealPath(), 'r');
+    $handle = fopen($request->file('fichier')->getRealPath(), 'r');
 
-        // Ignorer la ligne des en-têtes
-        fgetcsv($handle, 1000, ';');
+    if ($handle === false) {
+        return redirect()->back()->with('error', 'Impossible de lire le fichier.');
+    }
 
-        while (($data = fgetcsv($handle, 1000, ';')) !== FALSE) {
-            if (!empty($data[2])) { // La désignation de la pièce est obligatoire
-                Stock::updateOrCreate(
-                    ['reference' => !empty($data[3]) ? $data[3] : null],
-                    [
-                        'marque'            => $data[0] ?? null,
-                        'modele'            => $data[1] ?? null,
-                        'designation_piece' => $data[2],
-                        'prix_kagnan_ht'    => $data[4] ?? null,
-                    ]
-                );
+    // Ignorer la ligne des en-têtes
+    fgetcsv($handle, 0, ';');
+
+    $crees = 0;
+    $modifies = 0;
+    $ignores = 0;
+
+    DB::transaction(function () use ($handle, &$crees, &$modifies, &$ignores) {
+        while (($data = fgetcsv($handle, 0, ';')) !== false) {
+            $designation = trim($data[2] ?? '');
+
+            // La désignation est obligatoire
+            if ($designation === '') {
+                $ignores++;
+                continue;
+            }
+
+            $reference = trim($data[3] ?? '');
+
+            $values = [
+                'marque'            => trim($data[0] ?? '') ?: null,
+                'modele'            => trim($data[1] ?? '') ?: null,
+                'designation_piece' => $designation,
+                'prix_kagnan_ht'    => trim($data[4] ?? '') ?: null,
+            ];
+
+            if ($reference !== '') {
+                // Même référence : mise à jour, sinon création
+                $stock = Stock::updateOrCreate(['reference' => $reference], $values);
+                $stock->wasRecentlyCreated ? $crees++ : $modifies++;
+            } else {
+                // Pas de référence : toujours un ajout
+                Stock::create($values);
+                $crees++;
             }
         }
+    });
 
-        fclose($handle);
+    fclose($handle);
 
-        return redirect()->back()->with('success', 'Importation et mise à jour du stock effectuées avec succès.');
-    }
+    return redirect()->back()->with(
+        'success',
+        "Import terminé : {$crees} ajoutée(s), {$modifies} mise(s) à jour, {$ignores} ligne(s) ignorée(s)."
+    );
+}
 }
