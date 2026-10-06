@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Intervention;
 use App\Models\Devis;
 use App\Models\LigneDevis;
+use App\Models\Facture;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
@@ -237,6 +238,7 @@ class DossierController extends Controller
             'filters' => $request->only(['search']),
         ]);
     }
+
     // NOUVELLE VUE : Historique global de tous les devis (acceptés et refusés)
     public function devisHistoriqueIndex()
     {
@@ -250,13 +252,33 @@ class DossierController extends Controller
         ]);
     }
 
-    // Affiche la liste des devis directs
+    // Affiche la liste des devis directs avec le résumé des paiements pour actualiser le statut "Soldé"
     public function devisDirectIndex()
     {
         $devisDirects = Intervention::duSiege()->with(['vehicule.client', 'devis.lignes', 'receptionniste'])
             ->where('circuit', 'devis_direct')
             ->latest()
             ->get();
+
+        // Récupérer les factures associées pour calculer le statut de paiement
+        $factures = Facture::whereIn('intervention_id', $devisDirects->pluck('id'))
+            ->get()
+            ->keyBy('intervention_id');
+
+        $devisDirects->each(function ($d) use ($factures) {
+            $facture = $factures->get($d->id);
+            $paye = (int) round((float) optional($facture)->montant_paye);
+
+            $totalBrut = $d->devis ? (float) $d->devis->lignes->sum('montant_ttc') : 0;
+            $total = (int) round($totalBrut * 1.03);
+
+            $d->setAttribute('resume_paiement', [
+                'total_ttc'    => $total,
+                'montant_paye' => $paye,
+                'reste'        => max($total - $paye, 0),
+                'soldee'       => $total > 0 && $paye >= $total,
+            ]);
+        });
 
         return Inertia::render('Administration/DevisDirectIndex', [
             'devisDirects' => $devisDirects
@@ -293,7 +315,6 @@ class DossierController extends Controller
             'lignes.*.sous_famille' => 'nullable|string|max:100',
         ]);
 
-        // Siège du dossier : celui de l'employé (l'admin, sans siège, est rattaché au premier siège par défaut)
         $user = auth()->user();
         if ($user->role !== 'admin' && empty($user->siege)) {
             return back()->with('error', "Aucun siège ne vous est attribué. Contactez l'administrateur.");
@@ -316,7 +337,7 @@ class DossierController extends Controller
                     'client_id' => $client->id,
                     'marque' => $request->nouvelle_marque,
                     'modele' => $request->nouveau_modele,
-                    'immatriculation' => 'TEMP-' . uniqid(), // Valeur unique temporaire pour contourner le NOT NULL
+                    'immatriculation' => 'TEMP-' . uniqid(),
                 ]);
 
                 $vehiculeId = $vehicule->id;
@@ -362,7 +383,6 @@ class DossierController extends Controller
 
         $query = $request->input('q', ''); 
 
-        // Toutes les colonnes de stocks sont renvoyées, y compris famille et sous_famille
         $stocks = Stock::query()
             ->when($marque, function ($q) use ($marque) {
                 $q->where('marque', 'LIKE', "%{$marque}%");
@@ -382,9 +402,6 @@ class DossierController extends Controller
         return response()->json($stocks);
     }
 
-    /**
-     * Crée les lignes d'un devis (utilisé par storeDevis, updateDevis et storeDevisDirect).
-     */
     private function creerLignesDevis(Devis $devis, array $lignes): void
     {
         foreach ($lignes as $ligne) {
@@ -396,7 +413,6 @@ class DossierController extends Controller
             $nePasAppliquerTva = $ligne['ne_pas_appliquer_tva'] ?? false;
             $ttc = $nePasAppliquerTva ? $ht : $ht * 1.18;
 
-            // Pas de sous-famille sans famille
             $famille = !empty($ligne['famille']) ? $ligne['famille'] : null;
             $sousFamille = ($famille && !empty($ligne['sous_famille'])) ? $ligne['sous_famille'] : null;
 

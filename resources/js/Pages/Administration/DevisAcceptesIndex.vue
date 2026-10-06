@@ -131,7 +131,7 @@ const backText = computed(() => {
                                             :href="route('administration.facturation.show', dossier.id)" 
                                             class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#E11D48] hover:bg-rose-700 text-white font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-[11px]"
                                         >
-                                            <span>Traiter / Facturer</span>
+                                            <span>Voir Infos</span>
                                             <i class="fa-solid fa-arrow-right text-[10px]"></i>
                                         </Link>
                                     </td>

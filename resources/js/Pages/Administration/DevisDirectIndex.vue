@@ -14,7 +14,11 @@ defineProps({
 // HELPERS POUR STATUT & PAIEMENT
 // ─────────────────────────────────────────────
 const estSolde = (dossier) => {
-    return Boolean(dossier.resume_paiement?.soldee) || dossier.statut?.toLowerCase() === 'solde' || dossier.statut?.toLowerCase() === 'soldé';
+    return Boolean(dossier.resume_paiement?.soldee) || 
+           dossier.statut?.toLowerCase() === 'solde' || 
+           dossier.statut?.toLowerCase() === 'soldé' ||
+           dossier.statut?.toLowerCase() === 'payé' ||
+           dossier.statut?.toLowerCase() === 'paye';
 };
 
 const getStatutLabel = (dossier) => {

@@ -27,47 +27,51 @@ watch(search, (value) => {
 });
 
 // ─────────────────────────────────────────────
-// HELPERS PAIEMENT & IMMATRICULATION TEMP
+// HELPERS PAIEMENT & TYPE
 // ─────────────────────────────────────────────
 const resteAPayer = (dossier) => Number(dossier.resume_paiement?.reste ?? 0);
 
 const estSolde = (dossier) => Boolean(dossier.resume_paiement?.soldee);
 
-// Vérifie si l'immatriculation commence par "TEMP" (ex: TEMP-123, temp001, etc.)
-const estImmatTemp = (dossier) => {
-    const immat = dossier.vehicule?.immatriculation || '';
-    return immat.trim().toLowerCase().startsWith('temp');
+// Vérifie si le dossier est un devis direct
+const estDevisDirect = (dossier) => {
+    return dossier.circuit === 'devis_direct' || dossier.type === 'devis_direct' || dossier.is_direct || !dossier.numero_ot;
 };
 
 // ─────────────────────────────────────────────
-// FILTRES (Non soldées / Soldées / Immat TEMP)
+// FILTRES (Séparation stricte Normaux vs Devis Directs)
 // ─────────────────────────────────────────────
 const ongletInitial = new URLSearchParams((page.url || '').split('?')[1] || '').get('onglet');
 const onglet = ref(
     ['soldes', 'temp'].includes(ongletInitial) ? ongletInitial : 'non_soldes'
 );
 
-const dossiersNonSoldes = computed(() => (props.dossiers || []).filter((d) => !estSolde(d)));
-const dossiersSoldes = computed(() => (props.dossiers || []).filter((d) => estSolde(d)));
-const dossiersTemp = computed(() => (props.dossiers || []).filter((d) => estImmatTemp(d)));
+// Dossiers normaux non soldés (exclut les devis directs)
+const dossiersNonSoldes = computed(() => (props.dossiers || []).filter((d) => !estDevisDirect(d) && !estSolde(d)));
+
+// Dossiers normaux soldés (exclut les devis directs)
+const dossiersSoldes = computed(() => (props.dossiers || []).filter((d) => !estDevisDirect(d) && estSolde(d)));
+
+// Uniquement les devis directs (qu'ils soient soldés ou non)
+const dossiersDevisDirects = computed(() => (props.dossiers || []).filter((d) => estDevisDirect(d)));
 
 const dossiersAffiches = computed(() => {
     if (onglet.value === 'soldes') return dossiersSoldes.value;
-    if (onglet.value === 'temp') return dossiersTemp.value;
+    if (onglet.value === 'temp') return dossiersDevisDirects.value;
     return dossiersNonSoldes.value;
 });
 
 // ─────────────────────────────────────────────
-// SUPPRESSION (Uniquement si immat commence par TEMP)
+// SUPPRESSION (Réservée aux devis directs)
 // ─────────────────────────────────────────────
 const supprimerDossier = (dossier) => {
-    const immat = dossier.vehicule?.immatriculation || `#${dossier.id}`;
+    const identifiant = dossier.vehicule?.immatriculation || dossier.numero_ot || `#${dossier.id}`;
     
-    if (confirm(`Êtes-vous sûr de vouloir supprimer ce dossier temporaire (${immat}) ? Cette action est irréversible.`)) {
+    if (confirm(`Êtes-vous sûr de vouloir supprimer ce devis direct (${identifiant}) ? Cette action est irréversible.`)) {
         router.delete(route('administration.factures.destroy', dossier.id), {
             preserveScroll: true,
             onSuccess: () => {
-                notification.value = `Le dossier temporaire (${immat}) a été supprimé avec succès.`;
+                notification.value = `Le devis direct (${identifiant}) a été supprimé avec succès.`;
                 clearTimeout(notifTimer);
                 notifTimer = setTimeout(() => (notification.value = null), 5000);
             },
@@ -125,10 +129,10 @@ watch(
         if (!nouveaux || !anciens) return;
 
         const idsNonSoldesAvant = new Set(
-            anciens.filter((d) => !estSolde(d)).map((d) => d.id)
+            anciens.filter((d) => !estDevisDirect(d) && !estSolde(d)).map((d) => d.id)
         );
         const nouvellementSoldes = nouveaux.filter(
-            (d) => estSolde(d) && idsNonSoldesAvant.has(d.id)
+            (d) => !estDevisDirect(d) && estSolde(d) && idsNonSoldesAvant.has(d.id)
         );
 
         if (nouvellementSoldes.length > 0) {
@@ -179,7 +183,7 @@ const backText = computed(() => {
                         <span>Facturation & Encaissements</span>
                     </h2>
                     <p class="text-xs text-gray-500 mt-1">
-                        Liste des dossiers dont le devis a été accepté par le client, prêts pour facturation et encaissement.
+                        Gestion des factures et encaissements des dossiers d'atelier et devis directs.
                     </p>
                 </div>
 
@@ -232,7 +236,7 @@ const backText = computed(() => {
 
                     <!-- BOUTONS DE FILTRES -->
                     <div class="flex flex-wrap items-center gap-2">
-                        <!-- FILTRE NON SOLDÉES -->
+                        <!-- FILTRE NON SOLDÉES (Uniquement dossiers normaux non soldés) -->
                         <button
                             type="button"
                             @click="onglet = 'non_soldes'"
@@ -253,7 +257,7 @@ const backText = computed(() => {
                             >{{ dossiersNonSoldes.length }}</span>
                         </button>
 
-                        <!-- FILTRE SOLDÉES -->
+                        <!-- FILTRE SOLDÉES (Uniquement dossiers normaux soldés) -->
                         <button
                             type="button"
                             @click="onglet = 'soldes'"
@@ -274,7 +278,7 @@ const backText = computed(() => {
                             >{{ dossiersSoldes.length }}</span>
                         </button>
 
-                        <!-- FILTRE IMMAT TEMP -->
+                        <!-- FILTRE DEVIS DIRECTS (Exclus des onglets non soldées / soldées) -->
                         <button
                             type="button"
                             @click="onglet = 'temp'"
@@ -285,14 +289,14 @@ const backText = computed(() => {
                                     : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
                             ]"
                         >
-                            <i class="fa-solid fa-thunder text-[11px]"></i>
-                            <span>Devis Direct</span>
+                            <i class="fa-solid fa-bolt text-[11px]"></i>
+                            <span>Devis Directs</span>
                             <span
                                 :class="[
                                     'px-1.5 py-0.5 rounded-md text-[10px] font-black',
                                     onglet === 'temp' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'
                                 ]"
-                            >{{ dossiersTemp.length }}</span>
+                            >{{ dossiersDevisDirects.length }}</span>
                         </button>
                     </div>
                 </div>
@@ -304,7 +308,7 @@ const backText = computed(() => {
                             <i class="fa-solid fa-folder-closed text-xl"></i>
                         </div>
                         <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wider">
-                            <template v-if="onglet === 'temp'">Aucune immatriculation temporaire (TEMP)</template>
+                            <template v-if="onglet === 'temp'">Aucun devis direct enregistré</template>
                             <template v-else-if="onglet === 'soldes'">Aucune facture soldée</template>
                             <template v-else>Aucun dossier à facturer</template>
                         </h3>
@@ -338,7 +342,7 @@ const backText = computed(() => {
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <span class="px-2.5 py-1 inline-flex text-[11px] font-semibold rounded-md bg-blue-50 text-blue-700 border border-blue-200">
-                                            {{ dossier.numero_ot ? `OT: ${dossier.numero_ot}` : 'Sans OT' }}
+                                            {{ dossier.numero_ot ? `OT: ${dossier.numero_ot}` : (estDevisDirect(dossier) ? 'Devis Direct' : 'Sans OT') }}
                                         </span>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right">
@@ -363,12 +367,12 @@ const backText = computed(() => {
                                                 <i class="fa-solid fa-arrow-right text-[10px]"></i>
                                             </Link>
 
-                                            <!-- Bouton Supprimer (ou espace réservé) -->
+                                            <!-- Bouton Supprimer (uniquement pour les devis directs) -->
                                             <button
-                                                v-if="estImmatTemp(dossier)"
+                                                v-if="estDevisDirect(dossier)"
                                                 type="button"
                                                 @click="supprimerDossier(dossier)"
-                                                title="Supprimer la fiche temporaire"
+                                                title="Supprimer ce devis direct"
                                                 class="inline-flex items-center justify-center h-9 w-9 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition border border-red-200 shrink-0"
                                             >
                                                 <i class="fa-solid fa-trash-can text-xs"></i>
