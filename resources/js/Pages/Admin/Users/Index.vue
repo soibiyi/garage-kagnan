@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { Link, usePage, router } from '@inertiajs/vue3';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import SiegeSwitcher from '@/Components/SiegeSwitcher.vue';
@@ -20,6 +20,23 @@ const props = defineProps({
     users: Array,
     stats: Object,
     siegeFiltre: { type: String, default: null },
+});
+
+// Écran de chargement (affiché uniquement une fois par session)
+const isLoading = ref(false);
+
+onMounted(() => {
+    // Vérifier si le loader a déjà été affiché durant cette session
+    const hasLoaded = sessionStorage.getItem('admin_loaded');
+
+    if (!hasLoaded) {
+        isLoading.value = true;
+        setTimeout(() => {
+            isLoading.value = false;
+            // Marquer comme déjà affiché pour toute la durée de la session
+            sessionStorage.setItem('admin_loaded', 'true');
+        }, 1500);
+    }
 });
 
 // Chiffre d'affaires par mois (mois courant sélectionné par défaut)
@@ -93,11 +110,30 @@ const deleteUser = (id) => {
 };
 
 const logout = () => {
+    // Nettoyer le stockage de session lors de la déconnexion
+    sessionStorage.removeItem('admin_loaded');
     router.post(route('logout'));
 };
 </script>
 
 <template>
+  <!-- ÉCRAN DE CHARGEMENT -->
+  <Transition name="fade">
+    <div v-if="isLoading" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white">
+      <div class="text-center space-y-4 max-w-sm w-full px-6">
+        <h1 class="text-2xl font-black uppercase tracking-wider" style="color: #1A1A1A;">
+          Garage Kagnan <span style="color: #C8102E;">Administration</span>
+        </h1>
+        <p class="text-xs font-semibold text-gray-400">Chargement de l'espace d'administration...</p>
+        
+        <!-- Barre de chargement en rouge -->
+        <div class="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+          <div class="h-full rounded-full animate-loader" style="background-color: #C8102E;"></div>
+        </div>
+      </div>
+    </div>
+  </Transition>
+
   <div class="min-h-screen bg-gray-50 py-10 px-4 sm:px-6 lg:px-8">
     <div class="max-w-7xl mx-auto space-y-8">
       
@@ -118,49 +154,52 @@ const logout = () => {
         </div>
       </div>
 
-      
+      <!-- SECTION 1 : Statistiques -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- CARD CHIFFRE D'AFFAIRES CLIQUABLE -->
+        <Link 
+          :href="route('admin.chiffre-affaires')" 
+          class="bg-white p-6 rounded-xl shadow-md border border-gray-200 hover:border-[#C8102E] transition group block cursor-pointer"
+        >
+          <div class="flex items-center justify-between gap-2">
+            <p class="text-xs font-bold uppercase tracking-wider group-hover:text-[#C8102E] transition" style="color: #8A8D8F;">
+              Chiffre d'affaires
+            </p>
+            <select
+              v-model="moisSelectionne"
+              @click.stop
+              class="text-xs font-semibold border border-gray-200 rounded-lg py-1 pl-2 pr-7 focus:border-[#C8102E] focus:ring-0"
+            >
+              <option v-for="m in stats?.chiffre_affaires_mensuel" :key="m.cle" :value="m.cle">
+                {{ m.label }}
+              </option>
+            </select>
+          </div>
+          <p class="text-2xl font-black mt-2" style="color: #1A1A1A;">{{ chiffreAffairesAffiche }}</p>
+        </Link>
 
-     <!-- SECTION 1 : Statistiques -->
-<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-  <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-    <div class="flex items-center justify-between gap-2">
-      <p class="text-xs font-bold uppercase tracking-wider" style="color: #8A8D8F;">Chiffre d'affaires</p>
-      <select
-        v-model="moisSelectionne"
-        class="text-xs font-semibold border border-gray-200 rounded-lg py-1 pl-2 pr-7 focus:border-[#C8102E] focus:ring-0"
-      >
-        <option v-for="m in stats?.chiffre_affaires_mensuel" :key="m.cle" :value="m.cle">
-          {{ m.label }}
-        </option>
-      </select>
-    </div>
-    <p class="text-2xl font-black mt-2" style="color: #1A1A1A;">{{ chiffreAffairesAffiche }}</p>
-    <Link :href="route('admin.chiffre-affaires')" class="inline-block mt-3 text-xs font-semibold text-[#C8102E] hover:underline">
-      Voir l'historique par année →
-    </Link>
-  </div>
+        <!-- CARD VOITURES ENREGISTRÉES CLIQUABLE -->
+        <Link 
+          :href="route('admin.vehicules.status')" 
+          class="bg-white p-6 rounded-xl shadow-md border border-gray-200 hover:border-[#C8102E] transition group block cursor-pointer"
+        >
+          <div class="flex items-center justify-between">
+            <p class="text-xs font-bold uppercase tracking-wider group-hover:text-[#C8102E] transition" style="color: #8A8D8F;">
+              Voitures enregistrées
+            </p>
+            <span class="text-[10px] font-semibold text-[#C8102E] bg-red-50 px-2 py-0.5 rounded-full">
+              
+            </span>
+          </div>
+          <p class="text-2xl font-black mt-2" style="color: #1A1A1A;">{{ stats?.nombre_voitures || '0' }}</p>
+        </Link>
 
-  <!-- CARD VOITURES ENREGISTRÉES CLIQUABLE -->
-  <Link 
-    :href="route('admin.vehicules.status')" 
-    class="bg-white p-6 rounded-xl shadow-md border border-gray-200 hover:border-[#C8102E] transition group block cursor-pointer"
-  >
-    <div class="flex items-center justify-between">
-      <p class="text-xs font-bold uppercase tracking-wider group-hover:text-[#C8102E] transition" style="color: #8A8D8F;">
-        Voitures enregistrées
-      </p>
-      <span class="text-[10px] font-semibold text-[#C8102E] bg-red-50 px-2 py-0.5 rounded-full">
-        Voir tout →
-      </span>
-    </div>
-    <p class="text-2xl font-black mt-2" style="color: #1A1A1A;">{{ stats?.nombre_voitures || '0' }}</p>
-  </Link>
+        <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
+          <p class="text-xs font-bold uppercase tracking-wider" style="color: #8A8D8F;">Clients totaux</p>
+          <p class="text-2xl font-black mt-2" style="color: #1A1A1A;">{{ stats?.nombre_clients || '0' }}</p>
+        </div>
+      </div>
 
-  <div class="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-    <p class="text-xs font-bold uppercase tracking-wider" style="color: #8A8D8F;">Clients totaux</p>
-    <p class="text-2xl font-black mt-2" style="color: #1A1A1A;">{{ stats?.nombre_clients || '0' }}</p>
-  </div>
-</div>
       <!-- SECTION 2 : Navigation Rapide -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <!-- Stock -->
@@ -324,3 +363,30 @@ const logout = () => {
     </div>
   </div>
 </template>
+
+<style scoped>
+/* Animation de disparition douce du loader */
+.fade-leave-active {
+  transition: opacity 0.4s ease;
+}
+.fade-leave-to {
+  opacity: 0;
+}
+
+/* Animation de la barre de chargement rouge */
+@keyframes loadingBar {
+  0% {
+    width: 0%;
+  }
+  50% {
+    width: 70%;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+.animate-loader {
+  animation: loadingBar 1.5s ease-in-out infinite;
+}
+</style>
