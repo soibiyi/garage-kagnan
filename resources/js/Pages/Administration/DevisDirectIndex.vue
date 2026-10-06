@@ -1,12 +1,64 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
+import { onMounted, onUnmounted } from 'vue';
 
 defineProps({
     devisDirects: {
         type: Array,
         default: () => []
     }
+});
+
+// ─────────────────────────────────────────────
+// HELPERS POUR STATUT & PAIEMENT
+// ─────────────────────────────────────────────
+const estSolde = (dossier) => {
+    return Boolean(dossier.resume_paiement?.soldee) || dossier.statut?.toLowerCase() === 'solde' || dossier.statut?.toLowerCase() === 'soldé';
+};
+
+const getStatutLabel = (dossier) => {
+    if (estSolde(dossier)) {
+        return 'Soldé';
+    }
+    return dossier.statut || 'En attente';
+};
+
+// ─────────────────────────────────────────────
+// ACTUALISATION AUTOMATIQUE
+// ─────────────────────────────────────────────
+const REFRESH_INTERVAL = 4000;
+let refreshTimer = null;
+let rechargementEnCours = false;
+
+const actualiser = () => {
+    if (document.hidden || rechargementEnCours) return;
+
+    rechargementEnCours = true;
+    router.reload({
+        only: ['devisDirects'],
+        preserveScroll: true,
+        preserveState: true,
+        onFinish: () => {
+            rechargementEnCours = false;
+        },
+    });
+};
+
+const onVisibilityChange = () => {
+    if (!document.hidden) actualiser();
+};
+
+onMounted(() => {
+    refreshTimer = setInterval(actualiser, REFRESH_INTERVAL);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', actualiser);
+});
+
+onUnmounted(() => {
+    clearInterval(refreshTimer);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    window.removeEventListener('focus', actualiser);
 });
 </script>
 
@@ -33,7 +85,7 @@ defineProps({
                         class="px-4 py-2 bg-[#E11D48] hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-lg shadow-rose-600/25 transition flex items-center gap-2"
                     >
                         <i class="fa-solid fa-plus"></i>
-                        <span>+ Nouveau Devis Direct</span>
+                        <span> Nouveau Devis Direct</span>
                     </Link>
 
                     <!-- Bouton de retour -->
@@ -63,7 +115,7 @@ defineProps({
                     </div>
 
                     <div v-else class="overflow-x-auto">
-                        <table class="min-w-full divide-y divide-gray-200 text-left text-xs">
+                        <table class="min-w-full divide-y divide-gray-200 text-left text-xs align-middle">
                             <thead class="bg-gray-50 text-gray-500 uppercase tracking-wider font-semibold">
                                 <tr>
                                     <th class="px-6 py-3">Client / Véhicule</th>
@@ -77,7 +129,7 @@ defineProps({
                                 <tr v-for="dossier in devisDirects" :key="dossier.id" class="hover:bg-gray-50/50 transition">
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="font-bold text-gray-900">
-                                            {{ dossier.vehicule?.client?.nom || 'Client inconnu' }} {{ dossier.vehicule?.client?.prenoms || '' }}
+                                            {{ dossier.vehicule?.client?.nom || 'Client inconnu' }} {{ dossier.vehicule?.client?.prenoms || dossier.vehicule?.client?.prenom || '' }}
                                         </div>
                                         <div class="text-gray-500 text-[11px]">
                                             {{ dossier.vehicule?.marque }} {{ dossier.vehicule?.modele }} ({{ dossier.vehicule?.immatriculation }})
@@ -90,8 +142,20 @@ defineProps({
                                         {{ dossier.receptionniste?.name || 'N/A' }}
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
-                                        <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-600 border border-amber-200">
-                                            {{ dossier.statut }}
+                                        <!-- BADGE DYNAMIQUE -->
+                                        <span
+                                            v-if="estSolde(dossier)"
+                                            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                        >
+                                            <i class="fa-solid fa-circle-check text-[10px]"></i>
+                                            <span>{{ getStatutLabel(dossier) }}</span>
+                                        </span>
+                                        <span
+                                            v-else
+                                            class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-50 text-amber-600 border border-amber-200"
+                                        >
+                                            <i class="fa-solid fa-hourglass-half text-[10px]"></i>
+                                            <span>{{ getStatutLabel(dossier) }}</span>
                                         </span>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right font-medium">

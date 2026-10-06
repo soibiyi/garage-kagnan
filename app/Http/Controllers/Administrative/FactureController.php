@@ -214,4 +214,37 @@ class FactureController extends Controller
 
         return back()->with('success', 'Versement enregistré avec succès.');
     }
+
+    /**
+     * Supprime un devis direct.
+     */
+    public function destroy($id)
+    {
+        $dossier = Intervention::duSiege()->findOrFail($id);
+
+        // Vérification : autoriser la suppression uniquement si c'est un devis direct
+        $isDirect = $dossier->type === 'devis_direct' || $dossier->is_direct || empty($dossier->numero_ot);
+
+        if (!$isDirect) {
+            return back()->withErrors(['error' => 'Seuls les devis directs peuvent être supprimés.']);
+        }
+
+        DB::transaction(function () use ($dossier) {
+            // Suppression de la facture et des paiements associés si existants
+            if ($facture = Facture::where('intervention_id', $dossier->id)->first()) {
+                Paiement::where('facture_id', $facture->id)->delete();
+                $facture->delete();
+            }
+
+            // Suppression du devis lié
+            if ($dossier->devis) {
+                $dossier->devis->lignes()->delete();
+                $dossier->devis->delete();
+            }
+
+            $dossier->delete();
+        });
+
+        return back()->with('success', 'Le devis direct a été supprimé avec succès.');
+    }
 }

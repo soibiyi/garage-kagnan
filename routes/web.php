@@ -169,6 +169,7 @@ Route::middleware(['auth'])->prefix('administration')->name('administration.')->
     Route::get('/factures', [FactureController::class, 'index'])->name('factures.index');
     Route::get('/factures/{id}', [FactureController::class, 'show'])->name('factures.show');
     Route::post('/factures/{id}/encaisser', [FactureController::class, 'storeEncaissement'])->name('factures.encaisser');
+    Route::delete('/factures/{id}', [FactureController::class, 'destroy'])->name('factures.destroy');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {

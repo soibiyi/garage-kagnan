@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue';
-import { Link, usePage } from '@inertiajs/vue3';
+import { Link, usePage, router } from '@inertiajs/vue3';
 import FlashToast from '@/Components/FlashToast.vue';
 
 const page = usePage();
@@ -41,6 +41,13 @@ const MENUS = {
 };
 
 const menu = computed(() => MENUS[role.value] ?? []);
+
+// Méthode de déconnexion réinitialisant le sessionStorage
+const logout = () => {
+    sessionStorage.removeItem('dashboard_loaded');
+    sessionStorage.removeItem('admin_loaded');
+    router.post(route('logout'));
+};
 </script>
 
 <template>
@@ -69,37 +76,37 @@ const menu = computed(() => MENUS[role.value] ?? []);
                                 <span class="truncate">{{ $page.props.auth.user.name }}</span>
                             </Link>
 
-                            <Link
-                                :href="route('logout')"
-                                method="post"
-                                as="button"
-                                class="inline-flex items-center gap-2 rounded-xl bg-[#E11D48] px-3 py-2 text-xs font-bold text-white transition hover:bg-[#BE123C] sm:px-4"
+                            <button
+                                type="button"
+                                @click="logout"
+                                class="inline-flex items-center gap-2 rounded-xl bg-[#E11D48] px-3 py-2 text-xs font-bold text-white transition hover:bg-[#BE123C] sm:px-4 cursor-pointer"
                             >
                                 <i class="fa-solid fa-right-from-bracket text-[11px]"></i>
                                 <span class="hidden sm:inline">Se déconnecter</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MENU PAR RÔLE (défilement horizontal sur mobile) -->
+                <div v-if="menu.length" class="border-t border-gray-100">
+                    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+                        <div class="flex gap-1 overflow-x-auto whitespace-nowrap">
+                            <Link
+                                v-for="item in menu"
+                                :key="item.label"
+                                :href="route(item.route)"
+                                class="inline-flex items-center gap-2 border-b-2 px-3 py-3 text-xs font-bold transition"
+                                :class="item.match.some((p) => route().current(p))
+                                    ? 'border-[#E11D48] text-[#0B0F19]'
+                                    : 'border-transparent text-[#8A8D8F] hover:border-[#8A8D8F]/40 hover:text-[#0B0F19]'"
+                            >
+                                <i :class="item.icon" class="text-[11px]"></i>
+                                <span>{{ item.label }}</span>
                             </Link>
                         </div>
                     </div>
                 </div>
-                <!-- MENU PAR RÔLE (défilement horizontal sur mobile) -->
-<div v-if="menu.length" class="border-t border-gray-100">
-    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div class="flex gap-1 overflow-x-auto whitespace-nowrap">
-            <Link
-                v-for="item in menu"
-                :key="item.label"
-                :href="route(item.route)"
-                class="inline-flex items-center gap-2 border-b-2 px-3 py-3 text-xs font-bold transition"
-                :class="item.match.some((p) => route().current(p))
-                    ? 'border-[#E11D48] text-[#0B0F19]'
-                    : 'border-transparent text-[#8A8D8F] hover:border-[#8A8D8F]/40 hover:text-[#0B0F19]'"
-            >
-                <i :class="item.icon" class="text-[11px]"></i>
-                <span>{{ item.label }}</span>
-            </Link>
-        </div>
-    </div>
-</div>
             </nav>
             <FlashToast />
 

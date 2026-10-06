@@ -69,15 +69,7 @@ const vehiculesFiltres = computed(() => {
             <!-- En-tête -->
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <div class="flex items-center gap-3">
-                        <Link
-                            :href="route('dashboard')"
-                            class="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 transition shadow-sm"
-                        >
-                            <FontAwesomeIcon :icon="faArrowLeft" class="text-sm" />
-                        </Link>
-                        <h1 class="text-2xl font-bold text-[#1A1A1A]">Statut des Véhicules Enregistrés</h1>
-                    </div>
+                    <h1 class="text-2xl font-bold text-[#1A1A1A]">Statut des Véhicules Enregistrés</h1>
                     <p class="text-xs text-[#8A8D8F] mt-1">Véhicules, propriétaires et état d'avancement<span v-if="siegeFiltre" class="font-bold text-[#C8102E]"> — Siège {{ siegeFiltre }}</span></p>
                 </div>
 
@@ -86,6 +78,13 @@ const vehiculesFiltres = computed(() => {
                     <div class="text-xs font-bold bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm text-gray-700">
                         Total : {{ vehiculesFiltres.length }} véhicule(s)
                     </div>
+                    <Link
+                        :href="route('dashboard')"
+                        class="inline-flex items-center justify-center px-3 py-2 rounded-xl bg-white border border-gray-200 text-gray-600 hover:bg-gray-100 transition shadow-sm text-xs font-medium gap-2"
+                    >
+                        <FontAwesomeIcon :icon="faArrowLeft" class="text-xs" />
+                        <span>Retour</span>
+                    </Link>
                 </div>
             </div>
 

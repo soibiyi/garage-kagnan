@@ -1,7 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, usePage, Link } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { Head, usePage, Link, router } from '@inertiajs/vue3';
+import { computed, ref, onMounted } from 'vue';
 
 const props = defineProps({
     interventionsAtelier: Array,
@@ -10,7 +10,7 @@ const props = defineProps({
 const page = usePage();
 const user = computed(() => page.props.auth.user);
 
-// Libellés et styles des rôles basés sur la nouvelle palette (Noir profond, Gris métallique, Rouge passion)
+// Libellés et styles des rôles
 const roleInfo = computed(() => {
     const roles = {
         receptionniste: { label: 'Réceptionniste', badge: 'bg-[#0B0F19] text-white border border-[#0B0F19]' },
@@ -18,12 +18,53 @@ const roleInfo = computed(() => {
         administratif: { label: 'Administratif', badge: 'bg-[#E11D48]/10 text-[#E11D48] border border-[#E11D48]/30' },
         charge_client: { label: 'Chargé de Suivi Client', badge: 'bg-gray-100 text-gray-800 border border-gray-300' },
     };
-    return roles[user.value?.role] || { label: user.value?.role, badge: 'bg-gray-100 text-gray-700 border border-gray-200' };
+    return roles[user.value?.role] || { label: user.value?.role || 'Espace', badge: 'bg-gray-100 text-gray-700 border border-gray-200' };
 });
+
+// Écran de chargement (affiché une seule fois par session d'utilisateur)
+const isLoading = ref(false);
+
+onMounted(() => {
+    const hasLoaded = sessionStorage.getItem('dashboard_loaded');
+
+    if (!hasLoaded) {
+        isLoading.value = true;
+        setTimeout(() => {
+            isLoading.value = false;
+            sessionStorage.setItem('dashboard_loaded', 'true');
+        }, 1500);
+    }
+});
+
+// Méthode de déconnexion avec nettoyage de session
+const logout = () => {
+    sessionStorage.removeItem('dashboard_loaded');
+    sessionStorage.removeItem('admin_loaded');
+    router.post(route('logout'));
+};
 </script>
 
 <template>
     <Head title="Tableau de bord — Garage Kagnan" />
+
+    <!-- ÉCRAN DE CHARGEMENT UNE FOIS PAR SESSION -->
+    <Transition name="fade">
+        <div v-if="isLoading" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white">
+            <div class="text-center space-y-4 max-w-sm w-full px-6">
+                <h1 class="text-2xl font-black uppercase tracking-wider text-[#0B0F19]">
+                    Garage Kagnan <span class="text-[#E11D48]">— {{ roleInfo.label }}</span>
+                </h1>
+                <p class="text-xs font-semibold text-[#8A8D8F]">
+                    Chargement de votre espace de travail...
+                </p>
+                
+                <!-- Barre de chargement rouge -->
+                <div class="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                    <div class="h-full rounded-full bg-[#E11D48] animate-loader"></div>
+                </div>
+            </div>
+        </div>
+    </Transition>
 
     <AuthenticatedLayout>
         <template #header>
@@ -36,10 +77,21 @@ const roleInfo = computed(() => {
                         Connecté en tant que <span class="font-bold text-[#0B0F19]">{{ user?.name }}</span>
                     </p>
                 </div>
-                <!-- Badge du rôle -->
-                <span :class="['px-4 py-1.5 text-xs font-bold rounded-xl shadow-xs uppercase tracking-wider', roleInfo.badge]">
-                    {{ roleInfo.label }}
-                </span>
+                
+                <div class="flex items-center gap-3">
+                    <!-- Badge du rôle -->
+                    <span :class="['px-4 py-1.5 text-xs font-bold rounded-xl shadow-xs uppercase tracking-wider', roleInfo.badge]">
+                        {{ roleInfo.label }}
+                    </span>
+                    
+                    <!-- Bouton Déconnexion (si présent dans le header) -->
+                    <button 
+                        @click="logout" 
+                        class="text-xs font-bold px-3 py-1.5 rounded-xl border border-gray-200 text-gray-600 hover:text-[#E11D48] hover:border-[#E11D48] transition bg-white shadow-xs"
+                    >
+                        Déconnexion
+                    </button>
+                </div>
             </div>
         </template>
 
@@ -343,3 +395,30 @@ const roleInfo = computed(() => {
         </div>
     </AuthenticatedLayout>
 </template>
+
+<style scoped>
+/* Disparition fondue du loader */
+.fade-leave-active {
+    transition: opacity 0.4s ease;
+}
+.fade-leave-to {
+    opacity: 0;
+}
+
+/* Animation de la barre rouge */
+@keyframes loadingBar {
+    0% {
+        width: 0%;
+    }
+    50% {
+        width: 70%;
+    }
+    100% {
+        width: 100%;
+    }
+}
+
+.animate-loader {
+    animation: loadingBar 1.5s ease-in-out infinite;
+}
+</style>
