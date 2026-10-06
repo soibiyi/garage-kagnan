@@ -20,7 +20,9 @@ const form = useForm({
     modele: '',
     designation_piece: '',
     reference: '',
-    prix_kagnan_ht: ''
+    prix_kagnan_ht: '',
+    famille: '',
+    sous_famille: ''
 });
 
 // Formulaire pour Importer un fichier Excel
@@ -43,6 +45,8 @@ const openEditModal = (stock) => {
     form.designation_piece = stock.designation_piece || '';
     form.reference = stock.reference || '';
     form.prix_kagnan_ht = stock.prix_kagnan_ht || '';
+    form.famille = stock.famille || '';
+    form.sous_famille = stock.sous_famille || '';
     form.clearErrors();
     showModal.value = true;
 };
@@ -154,6 +158,7 @@ const submitImport = () => {
                                 <th class="p-4">Marque</th>
                                 <th class="p-4">Modèle</th>
                                 <th class="p-4">Désignation</th>
+                                <th class="p-4">Famille</th>
                                 <th class="p-4">Référence</th>
                                 <th class="p-4 text-right">Prix Kagnan HT</th>
                                 <th class="p-4 text-right">Actions</th>
@@ -164,6 +169,7 @@ const submitImport = () => {
                                 <td class="p-4 font-semibold text-slate-900">{{ item.marque || '-' }}</td>
                                 <td class="p-4 text-slate-600">{{ item.modele || '-' }}</td>
                                 <td class="p-4 font-bold text-slate-900">{{ item.designation_piece }}</td>
+                                <td class="p-4 text-slate-600">{{ item.famille || '-' }}<span v-if="item.sous_famille" class="block text-[11px] text-slate-400">{{ item.sous_famille }}</span></td>
                                 <td class="p-4 font-mono text-slate-600">{{ item.reference || '-' }}</td>
                                 <td class="p-4 text-right font-semibold">{{ item.prix_kagnan_ht ? item.prix_kagnan_ht + ' FCFA' : '-' }}</td>
                                 <td class="p-4 text-right space-x-2">
@@ -176,7 +182,7 @@ const submitImport = () => {
                                 </td>
                             </tr>
                             <tr v-if="stocks.data.length === 0">
-                                <td colspan="6" class="p-8 text-center text-slate-400 font-medium">Aucune pièce trouvée dans le stock.</td>
+                                <td colspan="7" class="p-8 text-center text-slate-400 font-medium">Aucune pièce trouvée dans le stock.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -226,6 +232,17 @@ const submitImport = () => {
                             <div>
                                 <label class="block text-xs font-semibold text-slate-600 mb-1">Prix Kagnan HT</label>
                                 <input type="text" v-model="form.prix_kagnan_ht" class="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs p-2.5 focus:border-[#E11D48]" placeholder="Ex: 15000" />
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Famille</label>
+                                <input type="text" v-model="form.famille" class="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs p-2.5 focus:border-[#E11D48]" placeholder="Ex: Freinage" />
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Sous-famille</label>
+                                <input type="text" v-model="form.sous_famille" class="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs p-2.5 focus:border-[#E11D48]" placeholder="Ex: Plaquettes" />
                             </div>
                         </div>
 
