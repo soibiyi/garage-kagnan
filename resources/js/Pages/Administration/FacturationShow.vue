@@ -55,6 +55,37 @@ const lignesGroupesParFamille = computed(() => {
     return resultat;
 });
 
+// Remise = pourcentage par ligne → montant en F = qté × PU × remise / 100
+const montantRemise = (l) => Number(l.quantite || 0) * Number(l.pu_net || 0) * Number(l.remise || 0) / 100;
+
+// Totaux d'un jeu de lignes, avec la petite fourniture définie sur le devis
+// (auto = 3 % du TTC, ou montant saisi à la création du devis)
+const calculerTotaux = (lignes) => {
+    const devis = props.dossier?.devis || {};
+    const ht = lignes.reduce((a, l) => a + Number(l.montant_ht || 0), 0);
+    const ttcBrut = lignes.reduce((a, l) => a + Number(l.montant_ttc || 0), 0);
+    const remises = Math.round(lignes.reduce((a, l) => a + montantRemise(l), 0));
+    const actif = devis.petite_fourniture_active === null || devis.petite_fourniture_active === undefined
+        ? true : !!devis.petite_fourniture_active;
+    const manuel = devis.petite_fourniture_montant !== null && devis.petite_fourniture_montant !== undefined;
+
+    let pf = 0;
+    if (ttcBrut > 0 && actif) {
+        pf = manuel
+            ? Math.round(ttcBrut + Number(devis.petite_fourniture_montant)) - Math.round(ttcBrut)
+            : Math.round(ttcBrut * 1.03) - Math.round(ttcBrut);
+    }
+
+    return { ht, remises, tva: ttcBrut - ht, pf, manuel, ttc: Math.round(ttcBrut) + pf };
+};
+
+const totauxCoches = computed(() =>
+    calculerTotaux((props.dossier?.devis?.lignes || []).filter(l => form.lignes_acceptees.includes(l.id)))
+);
+const totauxAcceptes = computed(() =>
+    calculerTotaux((props.dossier?.devis?.lignes || []).filter(l => l.is_accepted))
+);
+
 const submitValidation = () => {
     form.post(route('administration.facturation.valider-devis', props.dossier.id), {
         preserveScroll: true,
@@ -225,7 +256,7 @@ const retour = () => {
                                                     <span v-if="!form.lignes_acceptees.includes(ligne.id)" class="hidden print:inline-block text-[10px] italic text-red-600 ml-1">(Refusé par le client)</span>
                                                 </td>
                                                 <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.pu_net).toLocaleString() }} F</td>
-                                                <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.remise || 0).toLocaleString() }} F</td>
+                                                <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.remise || 0) }} %</td>
                                                 <td class="border-r border-gray-900 p-1 text-center">
                                                     <span v-if="ligne.ne_pas_appliquer_tva" class="text-amber-600 font-semibold bg-amber-50 px-1 py-0.5 rounded border border-amber-200 text-[10px]">Exonéré</span>
                                                     <span v-else class="text-gray-600">18%</span>
@@ -261,7 +292,7 @@ const retour = () => {
                                     <div class="flex justify-between border-b border-gray-900 px-3 py-1 bg-white">
                                         <span class="font-semibold text-gray-700">Total Remises</span>
                                         <span class="font-medium">
-                                            {{ dossier.devis.lignes.filter(l => form.lignes_acceptees.includes(l.id)).reduce((acc, l) => acc + Number(l.remise || 0), 0).toLocaleString() }} F
+                                            {{ totauxCoches.remises.toLocaleString() }} F
                                         </span>
                                     </div>
                                     <div class="flex justify-between border-b border-gray-900 px-3 py-1 bg-white">
@@ -270,10 +301,14 @@ const retour = () => {
                                             {{ dossier.devis.lignes.filter(l => form.lignes_acceptees.includes(l.id)).reduce((acc, l) => acc + (Number(l.montant_ttc) - Number(l.montant_ht)), 0).toLocaleString() }} F
                                         </span>
                                     </div>
+                                    <div class="flex justify-between border-b border-gray-900 px-3 py-1 bg-gray-50">
+                                        <span class="font-semibold text-gray-700">Petite fourniture <span v-if="totauxCoches.manuel" class="text-[10px] font-normal text-gray-500">(saisie)</span><span v-else class="text-[10px] font-normal text-gray-500">(3 %)</span></span>
+                                        <span class="font-medium">{{ totauxCoches.pf.toLocaleString() }} F</span>
+                                    </div>
                                     <div class="flex justify-between px-3 py-1.5 font-black bg-gray-200 text-sm text-gray-900">
                                         <span>Total TTC à Payer</span>
                                         <span class="text-[#E11D48]">
-                                            {{ dossier.devis.lignes.filter(l => form.lignes_acceptees.includes(l.id)).reduce((acc, l) => acc + Number(l.montant_ttc), 0).toLocaleString() }} F
+                                            {{ totauxCoches.ttc.toLocaleString() }} F
                                         </span>
                                     </div>
                                 </div>
@@ -393,7 +428,7 @@ const retour = () => {
                                                 <span v-if="ligne.reference_piece" class="block text-[10px] text-gray-500 font-mono">Réf : {{ ligne.reference_piece }}</span>
                                             </td>
                                             <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.pu_net).toLocaleString() }} F</td>
-                                            <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.remise || 0).toLocaleString() }} F</td>
+                                            <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.remise || 0) }} %</td>
                                             <td class="border-r border-gray-900 p-1 text-center">
                                                 <span v-if="ligne.ne_pas_appliquer_tva" class="text-amber-600 font-semibold bg-amber-50 px-1 py-0.5 rounded border border-amber-200 text-[10px]">Exonéré</span>
                                                 <span v-else class="text-gray-600">18%</span>
@@ -425,7 +460,7 @@ const retour = () => {
                                 <div class="flex justify-between border-b border-gray-900 px-3 py-1 bg-white">
                                     <span class="font-semibold text-gray-700">Total Remises</span>
                                     <span class="font-medium">
-                                        {{ dossier.devis.lignes.filter(l => l.is_accepted).reduce((acc, l) => acc + Number(l.remise || 0), 0).toLocaleString() }} F
+                                        {{ totauxAcceptes.remises.toLocaleString() }} F
                                     </span>
                                 </div>
                                 <div class="flex justify-between border-b border-gray-900 px-3 py-1 bg-white">
@@ -434,10 +469,14 @@ const retour = () => {
                                         {{ dossier.devis.lignes.filter(l => l.is_accepted).reduce((acc, l) => acc + (Number(l.montant_ttc) - Number(l.montant_ht)), 0).toLocaleString() }} F
                                     </span>
                                 </div>
+                                <div class="flex justify-between border-b border-gray-900 px-3 py-1 bg-gray-50">
+                                    <span class="font-semibold text-gray-700">Petite fourniture <span v-if="totauxAcceptes.manuel" class="text-[10px] font-normal text-gray-500">(saisie)</span><span v-else class="text-[10px] font-normal text-gray-500">(3 %)</span></span>
+                                    <span class="font-medium">{{ totauxAcceptes.pf.toLocaleString() }} F</span>
+                                </div>
                                 <div class="flex justify-between px-3 py-1.5 font-black bg-gray-200 text-sm text-gray-900">
                                     <span>Total TTC à Payer</span>
                                     <span class="text-[#E11D48]">
-                                        {{ dossier.devis.lignes.filter(l => l.is_accepted).reduce((acc, l) => acc + Number(l.montant_ttc), 0).toLocaleString() }} F
+                                        {{ totauxAcceptes.ttc.toLocaleString() }} F
                                     </span>
                                 </div>
                             </div>

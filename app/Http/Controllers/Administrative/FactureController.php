@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Facture;
 use App\Models\Intervention;
 use App\Models\Paiement;
+use App\Support\PetiteFourniture;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -13,20 +14,24 @@ use Inertia\Inertia;
 
 class FactureController extends Controller
 {
-    /** Total TTC (avec les 3% de petite fourniture, arrondi au FCFA) des lignes acceptées du devis. */
+    /** TTC brut (sans petite fourniture) des lignes acceptées du devis. */
+    private function brutAccepte(Intervention $dossier): float
+    {
+        if (!$dossier->devis) {
+            return 0;
+        }
+
+        return (float) $dossier->devis->lignes->where('is_accepted', true)->sum('montant_ttc');
+    }
+
+    /** Total TTC (avec petite fourniture auto 3 % ou saisie, arrondi au FCFA) des lignes acceptées. */
     private function totalAccepte(Intervention $dossier): int
     {
         if (!$dossier->devis) {
             return 0;
         }
 
-        // Total TTC brut des lignes acceptées
-        $totalBrut = (float) $dossier->devis->lignes->where('is_accepted', true)->sum('montant_ttc');
-
-        // Total TTC final incluant les 3% de petite fourniture
-        $totalFinal = $totalBrut * 1.03;
-
-        return (int) round($totalFinal);
+        return PetiteFourniture::totalFinal($dossier->devis, $this->brutAccepte($dossier));
     }
 
     /** Numéro de facture, même format que celui affiché sur la vue. */
@@ -48,6 +53,9 @@ class FactureController extends Controller
         return [
             'numero'       => $this->numeroFacture($dossier),
             'total_ttc'    => $total,
+            'petite_fourniture' => $dossier->devis
+                ? PetiteFourniture::montant($dossier->devis, $this->brutAccepte($dossier))
+                : 0,
             'montant_paye' => $paye,
             'reste'        => max($total - $paye, 0),
             'pourcentage'  => $total > 0 ? min(100, (int) round($paye * 100 / $total)) : 0,

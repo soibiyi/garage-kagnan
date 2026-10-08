@@ -1,7 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import axios from 'axios';
 import { FAMILLES, FAMILLE_PAR_DEFAUT } from '@/constants/familles.js';
 const props = defineProps({
@@ -66,6 +66,8 @@ const lignesInitiales = props.devis?.lignes?.length
 // Formulaire Inertia pour les lignes de devis
 const form = useForm({
     lignes: lignesInitiales,
+    petite_fourniture_active: props.devis?.petite_fourniture_active == null ? true : !!props.devis.petite_fourniture_active,
+    petite_fourniture_montant: props.devis?.petite_fourniture_montant ?? '',
 });
 
 // États pour la gestion de l'autocomplétion des pièces par ligne
@@ -155,8 +157,9 @@ const supprimerLigne = (index) => {
 const calculerMontantHt = (ligne) => {
     const qte = parseFloat(ligne.quantite) || 0;
     const pu = parseFloat(ligne.pu_net) || 0;
-    const remise = parseFloat(ligne.remise) || 0;
-    const total = (qte * pu) - remise;
+    // Remise en POURCENTAGE du montant de la ligne
+    const remise = Math.min(Math.max(parseFloat(ligne.remise) || 0, 0), 100);
+    const total = (qte * pu) * (1 - remise / 100);
     return isNaN(total) ? 0 : total;
 };
 
@@ -176,6 +179,26 @@ const totalGeneralHt = computed(() => {
 
 const totalGeneralTtc = computed(() => {
     return form.lignes.reduce((acc, ligne) => acc + calculerTotalTtc(ligne), 0);
+});
+
+// ─── Petite fourniture : 3 % auto du TTC, ou montant saisi (alors non décochable) ───
+const petiteFournitureAuto = computed(() =>
+    Math.round(totalGeneralTtc.value * 1.03) - Math.round(totalGeneralTtc.value)
+);
+const petiteFournitureManuelle = computed(() =>
+    form.petite_fourniture_montant !== '' && form.petite_fourniture_montant !== null && form.petite_fourniture_montant !== undefined
+);
+const petiteFournitureMontant = computed(() => {
+    if (!form.petite_fourniture_active || totalGeneralTtc.value <= 0) return 0;
+    return petiteFournitureManuelle.value
+        ? Math.round(Number(form.petite_fourniture_montant) || 0)
+        : petiteFournitureAuto.value;
+});
+const totalFinalTtc = computed(() => Math.round(totalGeneralTtc.value) + petiteFournitureMontant.value);
+
+// Dès qu'un montant est saisi, la case est cochée et verrouillée
+watch(petiteFournitureManuelle, (manuel) => {
+    if (manuel) form.petite_fourniture_active = true;
 });
 
 // Soumission
@@ -267,7 +290,7 @@ const submitDevis = () => {
                                         <th class="px-3 py-3 font-semibold w-28">Réf. Pièce</th>
                                         <th class="px-3 py-3 font-semibold w-10 text-center">Stock</th>
                                         <th class="px-3 py-3 font-semibold w-24 text-right">PU Net</th>
-                                        <th class="px-3 py-3 font-semibold w-20 text-right">Remise</th>
+                                        <th class="px-3 py-3 font-semibold w-20 text-right">Remise (%)</th>
                                         <th class="px-3 py-3 font-semibold w-24 text-right">Total HT</th>
                                         <th class="px-3 py-3 font-semibold w-24 text-right">Total TTC</th>
                                         <th class="px-3 py-3 font-semibold text-center w-16">Exempt TVA</th>
@@ -374,7 +397,7 @@ const submitDevis = () => {
                                         <td class="px-3 py-3">
                                             <input 
                                                 type="number" 
-                                                v-model="ligne.remise" 
+                                                v-model="ligne.remise" min="0" max="100" 
                                                 step="0.01"
                                                 class="w-full bg-white border border-slate-300 rounded-lg text-xs text-right text-slate-900 focus:border-[#E11D48] focus:ring-1 focus:ring-[#E11D48]"
                                             />
@@ -447,9 +470,28 @@ const submitDevis = () => {
                                 <span>Total Général HT :</span>
                                 <span class="font-mono text-sm font-semibold text-slate-700">{{ totalGeneralHt.toLocaleString() }} FCFA</span>
                             </div>
+                            <div class="text-xs text-slate-500 flex items-center gap-2">
+                                <span>Total TTC des lignes :</span>
+                                <span class="font-mono text-sm font-semibold text-slate-700">{{ totalGeneralTtc.toLocaleString() }} FCFA</span>
+                            </div>
+                            <div class="text-xs text-slate-600 flex flex-wrap items-center justify-end gap-2">
+                                <label class="flex items-center gap-1.5" :class="petiteFournitureManuelle ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'">
+                                    <input type="checkbox" v-model="form.petite_fourniture_active" :disabled="petiteFournitureManuelle" class="rounded bg-white border-slate-300 text-[#E11D48] w-4 h-4" />
+                                    <span class="font-semibold">Petite fourniture</span>
+                                </label>
+                                <input
+                                    type="number" min="0" step="1"
+                                    v-model="form.petite_fourniture_montant"
+                                    :disabled="!form.petite_fourniture_active"
+                                    :placeholder="'Auto 3 % : ' + petiteFournitureAuto.toLocaleString()"
+                                    class="w-44 bg-white border border-slate-300 rounded-lg text-xs text-right text-slate-900 focus:border-[#E11D48] disabled:bg-slate-100"
+                                />
+                                <span class="font-mono text-sm font-semibold text-slate-700">{{ petiteFournitureMontant.toLocaleString() }} FCFA</span>
+                            </div>
+                            <p v-if="petiteFournitureManuelle" class="text-[10px] text-slate-400">Montant saisi : la case ne peut plus être décochée. Videz le champ pour revenir au calcul automatique.</p>
                             <div class="text-base font-extrabold text-slate-900 flex items-center gap-2">
                                 <span>Total Général TTC :</span>
-                                <span class="font-mono text-lg text-[#E11D48]">{{ totalGeneralTtc.toLocaleString() }} FCFA</span>
+                                <span class="font-mono text-lg text-[#E11D48]">{{ totalFinalTtc.toLocaleString() }} FCFA</span>
                             </div>
 
                             <button 

@@ -58,7 +58,11 @@ const somme = (champ) =>
     lignesFacturees.value.reduce((acc, l) => acc + Number(l[champ] || 0), 0);
 
 const totalHt = computed(() => somme('montant_ht'));
-const totalRemises = computed(() => somme('remise'));
+// Remise = pourcentage par ligne → montant en F = qté × PU × remise / 100
+const montantRemise = (l) => Number(l.quantite || 0) * Number(l.pu_net || 0) * Number(l.remise || 0) / 100;
+const totalRemises = computed(() =>
+    Math.round(lignesFacturees.value.reduce((acc, l) => acc + montantRemise(l), 0))
+);
 const totalTtcBrut = computed(() => somme('montant_ttc'));
 const totalTva = computed(() => totalTtcBrut.value - totalHt.value);
 
@@ -72,7 +76,7 @@ const montantPaye = computed(() => Number(props.resume?.montant_paye || 0));
 const reste = computed(() => Number(props.resume?.reste || 0));
 const soldee = computed(() => Boolean(props.resume?.soldee));
 
-// Petite fourniture (3 %) = écart entre le total final et le TTC brut des lignes
+// Petite fourniture (3 % auto ou montant saisi sur le devis) = écart entre le total final et le TTC brut des lignes
 const petiteFourniture = computed(() =>
     Math.max(Math.round(totalTtcFinal.value - totalTtcBrut.value), 0)
 );
@@ -337,7 +341,7 @@ onUnmounted(() => {
                                             <span v-if="ligne.reference_piece" class="block text-[10px] text-gray-500 font-mono mt-0.5">Réf : {{ ligne.reference_piece }}</span>
                                         </td>
                                         <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.pu_net).toLocaleString() }} F</td>
-                                        <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.remise || 0).toLocaleString() }} F</td>
+                                        <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.remise || 0) }} %</td>
                                         <td class="border-r border-gray-900 p-1 text-center">
                                             <span v-if="ligne.ne_pas_appliquer_tva" class="text-amber-600 font-semibold bg-amber-50 px-1 py-0.5 rounded border border-amber-200 text-[10px]">Exonéré</span>
                                             <span v-else class="text-gray-600">18%</span>

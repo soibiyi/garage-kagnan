@@ -12,6 +12,7 @@ use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
 use Barryvdh\DomPDF\Facade\Pdf;
 use App\Models\Stock;
+use App\Support\PetiteFourniture;
 
 class DossierController extends Controller
 {
@@ -126,11 +127,13 @@ class DossierController extends Controller
             'lignes.*.quantite' => 'required|numeric|min:0',
             'lignes.*.designation' => 'required|string',
             'lignes.*.pu_net' => 'required|numeric|min:0',
-            'lignes.*.remise' => 'nullable|numeric|min:0',
+            'lignes.*.remise' => 'nullable|numeric|min:0|max:100', // pourcentage
             'lignes.*.reference_piece' => 'nullable|string',
             'lignes.*.ne_pas_appliquer_tva' => 'nullable|boolean',
             'lignes.*.famille' => 'nullable|string|max:100',
             'lignes.*.sous_famille' => 'nullable|string|max:100',
+            'petite_fourniture_active' => 'nullable|boolean',
+            'petite_fourniture_montant' => 'nullable|integer|min:0',
         ]);
 
         DB::transaction(function () use ($request, $dossier) {
@@ -143,6 +146,7 @@ class DossierController extends Controller
 
             // Enregistrement des lignes du devis
             $this->creerLignesDevis($devis, $request->lignes);
+            $this->appliquerPetiteFourniture($devis, $request);
 
             // Mise à jour du statut du dossier
             $dossier->update(['statut' => 'attente_accord']);
@@ -190,11 +194,13 @@ class DossierController extends Controller
             'lignes.*.quantite' => 'required|numeric|min:0',
             'lignes.*.designation' => 'required|string',
             'lignes.*.pu_net' => 'required|numeric|min:0',
-            'lignes.*.remise' => 'nullable|numeric|min:0',
+            'lignes.*.remise' => 'nullable|numeric|min:0|max:100', // pourcentage
             'lignes.*.reference_piece' => 'nullable|string',
             'lignes.*.ne_pas_appliquer_tva' => 'nullable|boolean',
             'lignes.*.famille' => 'nullable|string|max:100',
             'lignes.*.sous_famille' => 'nullable|string|max:100',
+            'petite_fourniture_active' => 'nullable|boolean',
+            'petite_fourniture_montant' => 'nullable|integer|min:0',
         ]);
 
         DB::transaction(function () use ($request, $dossier) {
@@ -203,6 +209,7 @@ class DossierController extends Controller
             // Le client n'a encore rien validé : on peut remplacer les lignes
             $devis->lignes()->delete();
             $this->creerLignesDevis($devis, $request->lignes);
+            $this->appliquerPetiteFourniture($devis, $request);
             $devis->touch();
         });
 
@@ -280,8 +287,9 @@ class DossierController extends Controller
             $facture = $factures->get($d->id);
             $paye = (int) round((float) optional($facture)->montant_paye);
 
-            $totalBrut = $d->devis ? (float) $d->devis->lignes->sum('montant_ttc') : 0;
-            $total = (int) round($totalBrut * 1.03);
+            $total = $d->devis
+                ? PetiteFourniture::totalFinal($d->devis, (float) $d->devis->lignes->sum('montant_ttc'))
+                : 0;
 
             $d->setAttribute('resume_paiement', [
                 'total_ttc'    => $total,
@@ -319,11 +327,13 @@ class DossierController extends Controller
             'lignes.*.quantite' => 'required|numeric|min:0',
             'lignes.*.designation' => 'required|string',
             'lignes.*.pu_net' => 'required|numeric|min:0',
-            'lignes.*.remise' => 'nullable|numeric|min:0',
+            'lignes.*.remise' => 'nullable|numeric|min:0|max:100', // pourcentage
             'lignes.*.reference_piece' => 'nullable|string',
             'lignes.*.ne_pas_appliquer_tva' => 'nullable|boolean',
             'lignes.*.famille' => 'nullable|string|max:100',
             'lignes.*.sous_famille' => 'nullable|string|max:100',
+            'petite_fourniture_active' => 'nullable|boolean',
+            'petite_fourniture_montant' => 'nullable|integer|min:0',
         ]);
 
         $user = auth()->user();
@@ -372,6 +382,8 @@ class DossierController extends Controller
             ]);
 
             $this->creerLignesDevis($devis, $request->lignes);
+
+            $this->appliquerPetiteFourniture($devis, $request);
         });
 
         return $this->redirectApresAction('Devis direct enregistré avec succès.', 'administration.devis.directs.index');
@@ -412,6 +424,20 @@ class DossierController extends Controller
         return response()->json($stocks);
     }
 
+    /**
+     * Petite fourniture : montant saisi (obligatoirement appliqué) ou 3 % automatique.
+     * Une saisie manuelle verrouille la case : elle ne peut plus être décochée.
+     */
+    private function appliquerPetiteFourniture(Devis $devis, Request $request): void
+    {
+        $manuel = $request->filled('petite_fourniture_montant');
+
+        $devis->forceFill([
+            'petite_fourniture_montant' => $manuel ? (int) $request->input('petite_fourniture_montant') : null,
+            'petite_fourniture_active'  => $manuel ? true : $request->boolean('petite_fourniture_active', true),
+        ])->save();
+    }
+
     private function creerLignesDevis(Devis $devis, array $lignes): void
     {
         foreach ($lignes as $ligne) {
@@ -419,7 +445,9 @@ class DossierController extends Controller
             $pu = $ligne['pu_net'] ?? 0;
             $remise = $ligne['remise'] ?? 0;
 
-            $ht = ($qte * $pu) - $remise;
+            // La remise est un POURCENTAGE du montant de la ligne (qté × PU)
+            $remise = min(max((float) $remise, 0), 100);
+            $ht = ($qte * $pu) * (1 - $remise / 100);
             $nePasAppliquerTva = $ligne['ne_pas_appliquer_tva'] ?? false;
             $ttc = $nePasAppliquerTva ? $ht : $ht * 1.18;
 
