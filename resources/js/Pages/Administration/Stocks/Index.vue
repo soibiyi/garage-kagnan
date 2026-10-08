@@ -25,7 +25,7 @@ const form = useForm({
     sous_famille: ''
 });
 
-// Formulaire pour Importer un fichier Excel
+// Formulaire pour Importer un fichier CSV
 const importForm = useForm({
     fichier: null,
 });
@@ -78,10 +78,10 @@ const handleSearch = () => {
 };
 
 /* ------------------------------------------------------------------ */
-/* Export & Import Excel                                              */
+/* Export & Import (CSV compatible Excel)                             */
 /* ------------------------------------------------------------------ */
 
-// Redirige vers la route Laravel de téléchargement du fichier Excel
+// Redirige vers la route Laravel de téléchargement du fichier
 const exporterExcel = () => {
     window.location.href = route('administration.stocks.export');
 };
@@ -122,14 +122,14 @@ const submitImport = () => {
                     <Link :href="route('dashboard')" class="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-200 transition shadow-sm">
                         <i class="fa-solid fa-arrow-left"></i> <span class="hidden md:inline">Dashboard</span>
                     </Link>
-                    
+
                     <!-- Bouton Exporter -->
-                    <button @click="exporterExcel" class="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition shadow-sm" title="Télécharger la liste sous format Excel">
+                    <button @click="exporterExcel" class="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition shadow-sm" title="Télécharger la liste (CSV, ouvrable dans Excel)">
                         <i class="fa-solid fa-file-excel text-sm"></i> Exporter
                     </button>
 
                     <!-- Bouton Importer -->
-                    <button @click="openImportModal" class="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition shadow-sm" title="Mettre à jour la base de données par fichier Excel">
+                    <button @click="openImportModal" class="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition shadow-sm" title="Mettre à jour la base de données par fichier CSV">
                         <i class="fa-solid fa-file-import text-sm"></i> Importer
                     </button>
 
@@ -256,11 +256,11 @@ const submitImport = () => {
                 </div>
             </div>
 
-            <!-- Modal d'Importation Excel -->
+            <!-- Modal d'Importation CSV -->
             <div v-if="showImportModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
                 <div class="bg-white rounded-2xl max-w-md w-full p-6 space-y-6 shadow-2xl">
                     <div class="flex items-center justify-between border-b border-slate-100 pb-4">
-                        <h3 class="text-base font-black text-slate-900">Importer un fichier Excel</h3>
+                        <h3 class="text-base font-black text-slate-900">Importer un fichier CSV</h3>
                         <button @click="showImportModal = false" class="text-slate-400 hover:text-slate-600">
                             <i class="fa-solid fa-xmark text-lg"></i>
                         </button>
@@ -268,11 +268,11 @@ const submitImport = () => {
 
                     <form @submit.prevent="submitImport" class="space-y-4">
                         <div>
-                            <label class="block text-xs font-semibold text-slate-600 mb-2">Sélectionner un fichier Excel (.xlsx, .xls, .csv)</label>
-                            <input 
-                                type="file" 
-                                @change="handleFileChange" 
-                                accept=".xlsx, .xls, .csv" 
+                            <label class="block text-xs font-semibold text-slate-600 mb-2">Sélectionner un fichier CSV (.csv)</label>
+                            <input
+                                type="file"
+                                @change="handleFileChange"
+                                accept=".csv,text/csv"
                                 required
                                 class="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs p-2 focus:border-blue-600 text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                             />
@@ -282,8 +282,14 @@ const submitImport = () => {
                         </div>
 
                         <div class="p-3 bg-blue-50/50 border border-blue-100 rounded-xl text-[11px] text-blue-800 space-y-1">
-                            <p class="font-bold"><i class="fa-solid fa-circle-info mr-1"></i> Structure attendue du fichier Excel :</p>
-                            <p class="text-slate-600">En-têtes conseillés en 1ère ligne : <strong>marque</strong>, <strong>modele</strong>, <strong>designation_piece</strong>, <strong>reference</strong>, <strong>prix_kagnan_ht</strong>.</p>
+                            <p class="font-bold"><i class="fa-solid fa-circle-info mr-1"></i> Structure attendue du fichier :</p>
+                            <p class="text-slate-600">
+                                En-têtes en 1ère ligne : <strong>Marque</strong>, <strong>Modèle</strong>, <strong>Désignation Pièce</strong> (obligatoire),
+                                <strong>Référence</strong>, <strong>Prix Kagnan HT</strong>, <strong>Famille</strong>, <strong>Sous-famille</strong>.
+                            </p>
+                            <p class="text-slate-500">
+                                Une ligne ayant la même référence qu'une pièce existante la met à jour. Dans Excel : « Enregistrer sous » → « CSV (séparateur : point-virgule) ».
+                            </p>
                         </div>
 
                         <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
