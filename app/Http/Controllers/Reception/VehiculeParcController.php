@@ -7,6 +7,7 @@ use App\Models\Intervention;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Illuminate\Validation\Rule;
 
 class VehiculeParcController extends Controller
 {
@@ -74,4 +75,89 @@ class VehiculeParcController extends Controller
         // Redirige vers le tableau de bord général pour y voir s'afficher le dossier
         return redirect()->route('dashboard')->with('success', 'Dossier transmis avec succès à l\'administration !');
     }
+
+    /** Seuls la réception et l'admin peuvent modifier les infos. */
+private function autoriserModification(): void
+{
+    abort_unless(in_array(auth()->user()->role, ['admin', 'receptionniste']), 403);
+}
+
+private function messagesModification(): array
+{
+    return [
+        'required' => 'Le champ « :attribute » est obligatoire.',
+        'email' => "L'adresse e-mail n'est pas valide.",
+        'integer' => 'Le champ « :attribute » doit être un nombre entier.',
+        'date' => 'Le champ « :attribute » doit être une date valide.',
+        'unique' => 'Cette immatriculation est déjà utilisée par un autre véhicule.',
+        'max.string' => 'Le champ « :attribute » ne doit pas dépasser :max caractères.',
+    ];
+}
+
+/** Modifie le véhicule (et le kilométrage d'entrée de ce dossier). */
+public function updateVehicule(Request $request, $id)
+{
+    $this->autoriserModification();
+
+    $intervention = Intervention::duSiege()->with('vehicule')->findOrFail($id);
+    $vehicule = $intervention->vehicule;
+
+    // Normalisation avant validation (la vérification d'unicité se fait sur la valeur en majuscules)
+    $request->merge([
+        'immatriculation' => strtoupper(trim((string) $request->immatriculation)),
+        'vin' => $request->filled('vin') ? strtoupper(trim($request->vin)) : null,
+    ]);
+
+    $data = $request->validate([
+        'immatriculation' => ['required', 'string', 'max:50', Rule::unique('vehicules', 'immatriculation')->ignore($vehicule->id)],
+        'marque' => 'nullable|string|max:100',
+        'modele' => 'nullable|string|max:100',
+        'vin' => 'nullable|string|max:100',
+        'kilometrage' => 'required|integer|min:0',
+        'expiration_assurance' => 'nullable|date',
+        'expiration_sicta' => 'nullable|date',
+    ], $this->messagesModification(), [
+        'immatriculation' => 'Immatriculation',
+        'marque' => 'Marque',
+        'modele' => 'Modèle',
+        'vin' => 'Numéro de châssis (VIN)',
+        'kilometrage' => 'Kilométrage',
+        'expiration_assurance' => 'Expiration assurance',
+        'expiration_sicta' => 'Expiration SICTA',
+    ]);
+
+    $vehicule->update(collect($data)->except('kilometrage')->all());
+    $intervention->update(['kilometrage' => $data['kilometrage']]);
+
+    return back()->with('success', 'Informations du véhicule mises à jour.');
+}
+
+/** Modifie le client / propriétaire du véhicule. */
+public function updateClient(Request $request, $id)
+{
+    $this->autoriserModification();
+
+    $intervention = Intervention::duSiege()->with('vehicule.client')->findOrFail($id);
+    $client = $intervention->vehicule->client;
+    abort_unless($client, 404);
+
+    $data = $request->validate([
+        'nom' => 'required|string|max:255',
+        'prenom' => 'nullable|string|max:255',
+        'telephone' => 'required|string|max:50',
+        'email' => 'nullable|email|max:255',
+        'adresse' => 'nullable|string',
+    ], $this->messagesModification(), [
+        'nom' => 'Nom',
+        'prenom' => 'Prénom',
+        'telephone' => 'Téléphone',
+        'email' => 'E-mail',
+        'adresse' => 'Adresse',
+    ]);
+
+    $client->update($data);
+
+    return back()->with('success', 'Informations du client mises à jour.');
+}
+
 }

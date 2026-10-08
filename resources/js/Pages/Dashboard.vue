@@ -1,11 +1,45 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, usePage, Link, router } from '@inertiajs/vue3';
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref, onMounted, watch } from 'vue';
 
 const props = defineProps({
-    interventionsAtelier: Array,
+    interventionsAtelier: Object, // résultat paginé Laravel : { data, from, to, total, current_page, last_page, prev_page_url, next_page_url }
+    filters: { type: Object, default: () => ({}) },
+    statuts: { type: Array, default: () => [] },
 });
+
+// Recherche et filtre de statut du tableau « Dossiers en cours / Atelier »
+const search = ref(props.filters.search || '');
+const statut = ref(props.filters.statut || '');
+
+const applyFilters = () => {
+    router.get(
+        route('dashboard'),
+        {
+            search: search.value.trim() || undefined,
+            statut: statut.value || undefined,
+        },
+        { preserveState: true, preserveScroll: true, replace: true }
+    );
+};
+
+// Petit délai pour ne pas interroger le serveur à chaque lettre tapée
+let searchTimer = null;
+watch(search, () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(applyFilters, 300);
+});
+watch(statut, applyFilters);
+
+// Libellés lisibles des statuts
+const statutLabels = {
+    reception: 'Sur le parc',
+    atelier: 'En atelier',
+    en_cours: 'En réparation',
+    attente_accord: 'Attente accord devis',
+};
+const getStatutLabel = (st) => statutLabels[st] || (st || '').replace(/_/g, ' ');
 
 const page = usePage();
 const user = computed(() => page.props.auth.user);
@@ -150,7 +184,29 @@ const logout = () => {
                                 <span>Dossiers en cours / Atelier</span>
                             </h4>
 
-                            <div v-if="interventionsAtelier && interventionsAtelier.length > 0" class="overflow-x-auto rounded-2xl border border-gray-200 shadow-xs">
+                            <!-- Recherche + filtre par statut -->
+                            <div class="flex flex-col md:flex-row gap-3">
+                                <div class="w-full relative">
+                                    <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-[#8A8D8F]">
+                                        <i class="fa-solid fa-magnifying-glass"></i>
+                                    </span>
+                                    <input
+                                        v-model="search"
+                                        type="text"
+                                        placeholder="Rechercher par N° OT, nom du client, immatriculation, marque, modèle..."
+                                        class="w-full pl-11 pr-4 py-3 text-sm bg-[#F8FAFC] border border-gray-200 rounded-2xl focus:ring-2 focus:ring-[#E11D48] focus:border-[#E11D48] transition text-[#0B0F19] placeholder:text-[#8A8D8F]"
+                                    />
+                                </div>
+                                <select
+                                    v-model="statut"
+                                    class="w-full md:w-64 py-3 px-4 text-sm bg-[#F8FAFC] border border-gray-200 rounded-2xl focus:ring-2 focus:ring-[#E11D48] focus:border-[#E11D48] text-[#0B0F19]"
+                                >
+                                    <option value="">Tous les statuts</option>
+                                    <option v-for="st in statuts" :key="st" :value="st">{{ getStatutLabel(st) }}</option>
+                                </select>
+                            </div>
+
+                            <div v-if="interventionsAtelier?.data?.length > 0" class="overflow-x-auto rounded-2xl border border-gray-200 shadow-xs">
                                 <table class="min-w-full divide-y divide-gray-200">
                                     <thead>
                                         <tr class="bg-[#F8FAFC] text-left text-xs font-extrabold text-[#8A8D8F] uppercase tracking-wider">
@@ -162,7 +218,7 @@ const logout = () => {
                                         </tr>
                                     </thead>
                                     <tbody class="divide-y divide-gray-100 bg-white text-sm">
-                                        <tr v-for="item in interventionsAtelier" :key="item.id" class="hover:bg-gray-50/60 transition">
+                                        <tr v-for="item in interventionsAtelier.data" :key="item.id" class="hover:bg-gray-50/60 transition">
                                             <td class="px-5 py-4 whitespace-nowrap">
                                                 <span class="font-extrabold text-[#0B0F19]">{{ item.numero_ot || 'N/A' }}</span>
                                                 <div class="text-xs text-[#8A8D8F] font-medium">{{ item.date_reception }}</div>
@@ -178,7 +234,7 @@ const logout = () => {
                                             </td>
                                             <td class="px-5 py-4 whitespace-nowrap flex items-center gap-4">
                                                 <span class="px-3 py-1 text-xs font-black rounded-lg bg-[#E11D48]/10 text-[#E11D48] border border-[#E11D48]/20 uppercase tracking-wide">
-                                                    {{ item.statut }}
+                                                    {{ getStatutLabel(item.statut) }}
                                                 </span>
                                                 <Link :href="route('parc.show', item.id)" class="text-[#0B0F19] font-extrabold hover:text-[#E11D48] transition inline-flex items-center gap-1.5 text-xs">
                                                     <span>Consulter</span>
@@ -190,7 +246,35 @@ const logout = () => {
                                 </table>
                             </div>
                             <div v-else class="text-center py-10 text-[#8A8D8F] text-sm bg-[#F8FAFC] rounded-2xl border border-dashed border-gray-200 font-medium">
-                                Aucun dossier en cours pour le moment.
+                                {{ (search || statut) ? 'Aucun dossier ne correspond à votre recherche.' : 'Aucun dossier pour le moment.' }}
+                            </div>
+
+                            <!-- Pagination -->
+                            <div v-if="interventionsAtelier?.total > 0" class="flex flex-col sm:flex-row items-center justify-between gap-3">
+                                <p class="text-xs text-[#8A8D8F] font-medium">
+                                    Affichage de {{ interventionsAtelier.from }} à {{ interventionsAtelier.to }} sur {{ interventionsAtelier.total }} dossier(s)
+                                </p>
+                                <div class="flex items-center gap-2">
+                                    <Link
+                                        v-if="interventionsAtelier.prev_page_url"
+                                        :href="interventionsAtelier.prev_page_url"
+                                        preserve-scroll
+                                        class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-[#0B0F19] text-xs font-bold rounded-xl transition"
+                                    >
+                                        <i class="fa-solid fa-chevron-left text-[10px] mr-1"></i> Précédent
+                                    </Link>
+                                    <span class="px-3 text-xs font-bold text-[#0B0F19]">
+                                        Page {{ interventionsAtelier.current_page }} / {{ interventionsAtelier.last_page }}
+                                    </span>
+                                    <Link
+                                        v-if="interventionsAtelier.next_page_url"
+                                        :href="interventionsAtelier.next_page_url"
+                                        preserve-scroll
+                                        class="px-4 py-2 bg-[#0B0F19] hover:bg-gray-800 text-white text-xs font-bold rounded-xl transition"
+                                    >
+                                        Suivant <i class="fa-solid fa-chevron-right text-[10px] ml-1"></i>
+                                    </Link>
+                                </div>
                             </div>
                         </div>
 

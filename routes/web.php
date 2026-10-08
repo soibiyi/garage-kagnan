@@ -13,6 +13,7 @@ use App\Http\Controllers\Mecanicien\MecanicienController;
 use App\Http\Controllers\Administrative\StockController;
 use App\Http\Controllers\ChargeClientController; 
 use App\Http\Controllers\Administrative\FactureController;
+use Illuminate\Http\Request;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -24,20 +25,41 @@ Route::get('/', function () {
 });
 
 // Route du dashboard avec redirection automatique pour l'admin
-Route::get('/dashboard', function () {
+// Route du dashboard avec redirection automatique pour l'admin
+Route::get('/dashboard', function (Request $request) {
     if (auth()->user()->role === 'admin') {
         return redirect()->route('admin.users.index');
     }
 
-    $interventionsAtelier = Intervention::duSiege()->with(['vehicule.client', 'receptionniste', 'mecanicien'])
-        ->whereIn('statut', ['atelier', 'en_cours', 'attente_accord'])
+    $search = trim((string) $request->query('search', ''));
+    $statut = $request->query('statut', '');
+
+    // Tous les dossiers du siège, quel que soit leur statut, 10 par page
+    $interventionsAtelier = Intervention::duSiege()
+        ->with(['vehicule.client', 'receptionniste', 'mecanicien'])
+        ->when($statut !== '', fn ($q) => $q->where('statut', $statut))
+        ->when($search !== '', function ($q) use ($search) {
+            $like = '%' . $search . '%';
+            $q->where(function ($q) use ($like) {
+                $q->where('numero_ot', 'like', $like)
+                  ->orWhereHas('vehicule', function ($v) use ($like) {
+                      $v->where('immatriculation', 'like', $like)
+                        ->orWhere('marque', 'like', $like)
+                        ->orWhere('modele', 'like', $like)
+                        ->orWhereHas('client', fn ($c) => $c
+                            ->where('nom', 'like', $like)
+                            ->orWhere('prenom', 'like', $like));
+                  });
+            });
+        })
         ->latest('date_reception')
-        ->get();
+        ->paginate(10)
+        ->withQueryString();
 
     $users = \App\Models\User::all();
-    
+
     $stats = [
-        'chiffre_affaires' => '0 FCFA', 
+        'chiffre_affaires' => '0 FCFA',
         // Compteurs limités aux véhicules / clients ayant un dossier dans le siège de l'utilisateur
         'nombre_voitures' => \App\Models\Vehicule::whereHas('interventions', fn ($q) => $q->duSiege())->count(),
         'nombre_clients' => \App\Models\Client::whereHas('vehicules.interventions', fn ($q) => $q->duSiege())->count(),
@@ -45,11 +67,13 @@ Route::get('/dashboard', function () {
 
     return Inertia::render('Dashboard', [
         'interventionsAtelier' => $interventionsAtelier,
+        'filters' => ['search' => $search, 'statut' => $statut],
+        // Statuts réellement présents, pour alimenter le menu de filtre
+        'statuts' => Intervention::duSiege()->distinct()->orderBy('statut')->pluck('statut'),
         'users' => $users,
         'stats' => $stats,
     ]);
 })->middleware(['auth', 'verified'])->name('dashboard');
-
 // Routes de profil (Breeze)
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -93,6 +117,8 @@ Route::middleware(['auth'])->prefix('parc')->name('parc.')->group(function () {
     Route::get('/', [VehiculeParcController::class, 'index'])->name('index');
     Route::get('/{id}', [VehiculeParcController::class, 'show'])->name('show');
     Route::patch('/{id}/avancer', [VehiculeParcController::class, 'updateProgress'])->name('progress'); 
+    Route::patch('/{id}/vehicule', [VehiculeParcController::class, 'updateVehicule'])->name('vehicule.update');
+Route::patch('/{id}/client', [VehiculeParcController::class, 'updateClient'])->name('client.update');
 });
 
 // ==========================================

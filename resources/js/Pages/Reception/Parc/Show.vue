@@ -1,7 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link, usePage } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { Head, Link, usePage, useForm } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import {
     faCar,
@@ -12,6 +12,7 @@ import {
     faCamera,
     faCheck,
     faXmark,
+    faPen,
 } from '@fortawesome/free-solid-svg-icons';
 
 const props = defineProps({
@@ -27,6 +28,82 @@ const isMecanicien = computed(() => {
     // Si tu utilises un champ 'role' simple sur l'user ou un tableau de rôles
     return user?.role === 'mecanicien' || user?.roles?.some(r => r.name === 'mecanicien');
 });
+
+// ====== MODIFICATION DES INFOS VÉHICULE / PROPRIÉTAIRE ======
+// Seuls la réception et l'admin peuvent modifier (le serveur revérifie aussi)
+const canEdit = computed(() => ['admin', 'receptionniste'].includes(page.props.auth.user?.role));
+
+const inputClass = 'w-full rounded-xl border-gray-200 bg-gray-50 text-sm py-2 px-3 focus:border-indigo-500 focus:ring-indigo-500';
+
+// Les champs date doivent être au format AAAA-MM-JJ pour <input type="date">
+const dateOnly = (v) => (v ? String(v).substring(0, 10) : '');
+
+const vehiculeFields = [
+    { key: 'immatriculation', label: 'Immatriculation *', type: 'text', required: true },
+    { key: 'marque', label: 'Marque', type: 'text' },
+    { key: 'modele', label: 'Modèle', type: 'text' },
+    { key: 'vin', label: 'Numéro de châssis (VIN)', type: 'text' },
+    { key: 'kilometrage', label: "Kilométrage à l'entrée (km) *", type: 'number', required: true },
+    { key: 'expiration_assurance', label: 'Expiration assurance', type: 'date' },
+    { key: 'expiration_sicta', label: 'Expiration SICTA', type: 'date' },
+];
+
+const clientFields = [
+    { key: 'nom', label: 'Nom *', type: 'text', required: true },
+    { key: 'prenom', label: 'Prénom', type: 'text' },
+    { key: 'telephone', label: 'Téléphone *', type: 'text', required: true },
+    { key: 'email', label: 'E-mail', type: 'email' },
+    { key: 'adresse', label: 'Adresse', type: 'text' },
+];
+
+// --- Véhicule ---
+const editVehicule = ref(false);
+const vehiculeForm = useForm({
+    immatriculation: '', marque: '', modele: '', vin: '',
+    kilometrage: '', expiration_assurance: '', expiration_sicta: '',
+});
+
+const startEditVehicule = () => {
+    const v = props.intervention.vehicule || {};
+    vehiculeForm.immatriculation = v.immatriculation || '';
+    vehiculeForm.marque = v.marque || '';
+    vehiculeForm.modele = v.modele || '';
+    vehiculeForm.vin = v.vin || '';
+    vehiculeForm.kilometrage = props.intervention.kilometrage ?? '';
+    vehiculeForm.expiration_assurance = dateOnly(v.expiration_assurance);
+    vehiculeForm.expiration_sicta = dateOnly(v.expiration_sicta);
+    vehiculeForm.clearErrors();
+    editVehicule.value = true;
+};
+
+const saveVehicule = () => {
+    vehiculeForm.patch(route('parc.vehicule.update', props.intervention.id), {
+        preserveScroll: true,
+        onSuccess: () => { editVehicule.value = false; },
+    });
+};
+
+// --- Client / propriétaire ---
+const editClient = ref(false);
+const clientForm = useForm({ nom: '', prenom: '', telephone: '', email: '', adresse: '' });
+
+const startEditClient = () => {
+    const c = props.intervention.vehicule?.client || {};
+    clientForm.nom = c.nom || '';
+    clientForm.prenom = c.prenom || '';
+    clientForm.telephone = c.telephone || '';
+    clientForm.email = c.email || '';
+    clientForm.adresse = c.adresse || '';
+    clientForm.clearErrors();
+    editClient.value = true;
+};
+
+const saveClient = () => {
+    clientForm.patch(route('parc.client.update', props.intervention.id), {
+        preserveScroll: true,
+        onSuccess: () => { editClient.value = false; },
+    });
+};
 
 // Lien de retour dynamique selon le rôle
 const backUrl = computed(() => {
@@ -140,8 +217,17 @@ const equipmentsList = [
                             <h3 class="text-base font-bold text-gray-900 border-b pb-3 flex items-center gap-2">
                                 <font-awesome-icon :icon="faCar" class="text-indigo-500 text-sm" />
                                 Véhicule Concerné
+                                <button
+                                    v-if="canEdit && !editVehicule"
+                                    type="button"
+                                    @click="startEditVehicule"
+                                    class="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-lg transition"
+                                >
+                                    <font-awesome-icon :icon="faPen" class="text-[10px]" />
+                                    Modifier
+                                </button>
                             </h3>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                            <div v-if="!editVehicule" class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                                 <div>
                                     <span class="text-gray-400 block text-xs">Immatriculation</span>
                                     <span class="font-extrabold text-gray-900 uppercase text-base">{{ intervention.vehicule?.immatriculation }}</span>
@@ -167,6 +253,29 @@ const equipmentsList = [
                                     <span class="font-medium text-gray-700">{{ intervention.vehicule?.expiration_sicta || 'N/A' }}</span>
                                 </div>
                             </div>
+                            <!-- Formulaire de modification -->
+                            <form v-else @submit.prevent="saveVehicule" class="space-y-4">
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                                    <div v-for="f in vehiculeFields" :key="f.key">
+                                        <label class="text-gray-500 block text-xs mb-1">{{ f.label }}</label>
+                                        <input
+                                            v-model="vehiculeForm[f.key]"
+                                            :type="f.type"
+                                            :required="f.required"
+                                            :class="inputClass"
+                                        />
+                                        <div v-if="vehiculeForm.errors[f.key]" class="text-red-600 text-xs font-semibold mt-1">{{ vehiculeForm.errors[f.key] }}</div>
+                                    </div>
+                                </div>
+                                <div class="flex justify-end gap-2 pt-2">
+                                    <button type="button" @click="editVehicule = false" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition">
+                                        Annuler
+                                    </button>
+                                    <button type="submit" :disabled="vehiculeForm.processing" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition disabled:opacity-50">
+                                        Enregistrer
+                                    </button>
+                                </div>
+                            </form>
                         </div>
 
                         <!-- 2. INFORMATIONS CLIENT -->
@@ -174,8 +283,17 @@ const equipmentsList = [
                             <h3 class="text-base font-bold text-gray-900 border-b pb-3 flex items-center gap-2">
                                 <font-awesome-icon :icon="faUser" class="text-indigo-500 text-sm" />
                                 Client / Propriétaire
+                                <button
+                                    v-if="canEdit && !editClient"
+                                    type="button"
+                                    @click="startEditClient"
+                                    class="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-lg transition"
+                                >
+                                    <font-awesome-icon :icon="faPen" class="text-[10px]" />
+                                    Modifier
+                                </button>
                             </h3>
-                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                            <div v-if="!editClient" class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                                 <div>
                                     <span class="text-gray-400 block text-xs">Nom & Prénom</span>
                                     <span class="font-bold text-gray-900">{{ intervention.vehicule?.client?.nom }} {{ intervention.vehicule?.client?.prenom }}</span>
@@ -193,6 +311,32 @@ const equipmentsList = [
                                     <span class="text-gray-700">{{ intervention.vehicule?.client?.adresse || 'Non renseignée' }}</span>
                                 </div>
                             </div>
+                            <!-- Formulaire de modification -->
+                            <form v-else @submit.prevent="saveClient" class="space-y-4">
+                                <p class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                    Ces informations sont partagées : elles seront modifiées pour tous les véhicules et dossiers de ce client.
+                                </p>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                                    <div v-for="f in clientFields" :key="f.key">
+                                        <label class="text-gray-500 block text-xs mb-1">{{ f.label }}</label>
+                                        <input
+                                            v-model="clientForm[f.key]"
+                                            :type="f.type"
+                                            :required="f.required"
+                                            :class="inputClass"
+                                        />
+                                        <div v-if="clientForm.errors[f.key]" class="text-red-600 text-xs font-semibold mt-1">{{ clientForm.errors[f.key] }}</div>
+                                    </div>
+                                </div>
+                                <div class="flex justify-end gap-2 pt-2">
+                                    <button type="button" @click="editClient = false" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition">
+                                        Annuler
+                                    </button>
+                                    <button type="submit" :disabled="clientForm.processing" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition disabled:opacity-50">
+                                        Enregistrer
+                                    </button>
+                                </div>
+                            </form>
                         </div>
 
                         <!-- 3. CARBURANT & TRAITEMENT -->
