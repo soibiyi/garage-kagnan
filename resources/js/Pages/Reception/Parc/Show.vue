@@ -67,6 +67,19 @@ const imageUrl = (path) => {
     return `/storage/${path.replace(/^\/+/, '')}`;
 };
 
+// Photos supplémentaires (jusqu'à 6, en plus des 4 photos obligatoires)
+const photosSupplementaires = computed(() => {
+    const brut = props.intervention?.photos_supplementaires;
+    if (!brut) return [];
+    if (Array.isArray(brut)) return brut.filter(Boolean);
+    try {
+        const decode = JSON.parse(brut);
+        return Array.isArray(decode) ? decode.filter(Boolean) : [];
+    } catch (e) {
+        return [];
+    }
+});
+
 // Liste des équipements pour affichage dynamique propre
 const equipmentsList = [
     { key: 'allume_cigare', label: 'Allume-cigare' },
@@ -267,6 +280,23 @@ const equipmentsList = [
                                     </div>
                                     <div v-else class="aspect-video bg-gray-50 rounded-lg flex items-center justify-center text-gray-400 text-[10px] border border-dashed border-gray-200">
                                         Non disponible
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Photos supplémentaires (facultatives) -->
+                            <div v-if="photosSupplementaires.length" class="pt-3 border-t border-gray-100 space-y-2">
+                                <span class="font-semibold text-gray-600 uppercase text-[10px] block">
+                                    Photos supplémentaires ({{ photosSupplementaires.length }})
+                                </span>
+                                <div class="grid grid-cols-2 gap-3 text-xs">
+                                    <div
+                                        v-for="photo in photosSupplementaires"
+                                        :key="photo"
+                                        class="aspect-video bg-gray-100 rounded-lg overflow-hidden border border-gray-200"
+                                    >
+                                        <a :href="imageUrl(photo)" target="_blank">
+                                            <img :src="imageUrl(photo)" alt="Photo supplémentaire" class="w-full h-full object-cover hover:scale-105 transition" />
+                                        </a>
                                     </div>
                                 </div>
                             </div>

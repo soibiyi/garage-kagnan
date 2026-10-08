@@ -21,6 +21,20 @@ class DossierController extends Controller
         abort_unless($dossier->estVisiblePar(auth()->user()), 404);
     }
 
+    /**
+     * Redirection après une action sur les devis (création, modification, validation) :
+     * le chargé de suivi client retourne sur son propre dashboard,
+     * les autres rôles reviennent à la liste d'origine.
+     */
+    private function redirectApresAction(string $message, string $routeParDefaut = 'administration.facturation.index')
+    {
+        $route = auth()->user()->role === 'charge_client'
+            ? 'dashboard'
+            : $routeParDefaut;
+
+        return redirect()->route($route)->with('success', $message);
+    }
+
     public function index()
     {
         $dossiers = Intervention::duSiege()->with(['vehicule.client', 'mecanicien', 'receptionniste'])
@@ -88,9 +102,8 @@ class DossierController extends Controller
             $dossier->update(['statut' => 'accepte']);
         });
 
-        // Redirection vers la liste d'attente (le dossier n'y apparaîtra plus)
-        return redirect()->route('administration.facturation.index')
-            ->with('success', 'Choix du client enregistré avec succès. Le dossier a basculé dans les devis validés.');
+        // Redirection : dashboard du chargé de suivi client, sinon liste d'attente
+        return $this->redirectApresAction('Choix du client enregistré avec succès. Le dossier a basculé dans les devis validés.');
     }
 
     public function show(Intervention $dossier)
@@ -135,8 +148,7 @@ class DossierController extends Controller
             $dossier->update(['statut' => 'attente_accord']);
         });
 
-        return redirect()->route('administration.dossiers.index')
-            ->with('success', 'Devis enregistré avec succès.');
+        return $this->redirectApresAction('Devis enregistré avec succès.', 'administration.dossiers.index');
     }
 
     /**
@@ -194,8 +206,7 @@ class DossierController extends Controller
             $devis->touch();
         });
 
-        return redirect()->route('administration.facturation.index')
-            ->with('success', 'Devis modifié avec succès.');
+        return $this->redirectApresAction('Devis modifié avec succès.');
     }
 
     // NOUVELLE MÉTHODE : Vue globale de tous les devis pour l'administration
@@ -363,8 +374,7 @@ class DossierController extends Controller
             $this->creerLignesDevis($devis, $request->lignes);
         });
 
-        return redirect()->route('administration.devis.directs.index')
-            ->with('success', 'Devis direct enregistré avec succès.');
+        return $this->redirectApresAction('Devis direct enregistré avec succès.', 'administration.devis.directs.index');
     }
 
     public function rechercherPieces(Request $request, ?Intervention $dossier = null)

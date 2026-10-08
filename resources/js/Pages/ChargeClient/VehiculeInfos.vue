@@ -133,6 +133,19 @@ const photos = [
     { champ: 'photo_gauche', label: 'Gauche' },
     { champ: 'photo_droite', label: 'Droite' },
 ];
+
+// Photos supplémentaires de la fiche affichée (jusqu'à 6, en plus des 4 photos obligatoires)
+const photosSupplementaires = computed(() => {
+    const brut = fiche.value?.photos_supplementaires;
+    if (!brut) return [];
+    if (Array.isArray(brut)) return brut.filter(Boolean);
+    try {
+        const decode = JSON.parse(brut);
+        return Array.isArray(decode) ? decode.filter(Boolean) : [];
+    } catch (e) {
+        return [];
+    }
+});
 </script>
 
 <template>
@@ -415,6 +428,30 @@ const photos = [
                                         >
                                             Non disponible
                                         </div>
+                                    </div>
+                                </div>
+
+                                <!-- Photos supplémentaires (facultatives) -->
+                                <div v-if="photosSupplementaires.length" class="space-y-2 border-t border-gray-100 pt-3">
+                                    <span class="block text-[10px] font-bold uppercase text-gray-600">
+                                        Photos supplémentaires ({{ photosSupplementaires.length }})
+                                    </span>
+                                    <div class="grid grid-cols-2 gap-3 text-xs">
+                                        <a
+                                            v-for="(photo, index) in photosSupplementaires"
+                                            :key="photo"
+                                            :href="imageUrl(photo)"
+                                            target="_blank"
+                                            rel="noopener"
+                                            class="block aspect-video overflow-hidden rounded-lg border border-gray-200 bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E11D48]/40"
+                                        >
+                                            <img
+                                                :src="imageUrl(photo)"
+                                                :alt="`Photo supplémentaire ${index + 1} du véhicule`"
+                                                loading="lazy"
+                                                class="h-full w-full object-cover transition duration-300 hover:scale-105 motion-reduce:transition-none"
+                                            />
+                                        </a>
                                     </div>
                                 </div>
                             </section>

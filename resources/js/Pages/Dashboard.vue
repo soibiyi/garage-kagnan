@@ -387,6 +387,48 @@ const logout = () => {
                                     <i class="fa-solid fa-arrow-right text-xs"></i>
                                 </span>
                             </Link>
+
+                            <!-- En attente de devis (mêmes routes que l'administration) -->
+                            <Link :href="route('administration.dossiers.index')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#E11D48] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs">
+                                <div class="space-y-1.5">
+                                    <div class="flex items-center gap-2.5 text-[#E11D48]">
+                                        <i class="fa-solid fa-file-pen text-base"></i>
+                                        <h4 class="font-extrabold text-[#0B0F19] group-hover:text-[#E11D48] transition">En Attente de Devis</h4>
+                                    </div>
+                                    <p class="text-xs text-[#8A8D8F] font-medium">Chiffrages pièces et main-d'œuvre à transformer.</p>
+                                </div>
+                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs shrink-0">
+                                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                                </span>
+                            </Link>
+
+                            <!-- Devis en attente de validation (mêmes routes que l'administration) -->
+                            <Link :href="route('administration.facturation.index')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#E11D48] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs">
+                                <div class="space-y-1.5">
+                                    <div class="flex items-center gap-2.5 text-[#E11D48]">
+                                        <i class="fa-solid fa-receipt text-base"></i>
+                                        <h4 class="font-extrabold text-[#0B0F19] group-hover:text-[#E11D48] transition">Devis en Attente de Validation</h4>
+                                    </div>
+                                    <p class="text-xs text-[#8A8D8F] font-medium">Modifier les devis, saisir les choix du client et enregistrer.</p>
+                                </div>
+                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs shrink-0">
+                                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                                </span>
+                            </Link>
+
+                            <!-- Devis Direct (mêmes routes que l'administration) -->
+                            <Link :href="route('administration.devis.directs.index')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#E11D48] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs">
+                                <div class="space-y-1.5">
+                                    <div class="flex items-center gap-2.5 text-[#E11D48]">
+                                        <i class="fa-solid fa-file-invoice-dollar text-base"></i>
+                                        <h4 class="font-extrabold text-[#0B0F19] group-hover:text-[#E11D48] transition">Devis Direct</h4>
+                                    </div>
+                                    <p class="text-xs text-[#8A8D8F] font-medium">Création et gestion des devis directs (Comptoir).</p>
+                                </div>
+                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs shrink-0">
+                                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                                </span>
+                            </Link>
                         </div>
                     </div>
                 </div>

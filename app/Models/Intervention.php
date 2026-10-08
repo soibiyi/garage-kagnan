@@ -15,6 +15,7 @@ class Intervention extends Model
 
     protected $casts = [
         'date_reception' => 'datetime',
+        'photos_supplementaires' => 'array',
     ];
 
     /**

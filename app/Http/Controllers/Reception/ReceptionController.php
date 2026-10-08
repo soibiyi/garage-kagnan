@@ -32,6 +32,56 @@ class ReceptionController extends Controller
         return $prefix . str_pad($dernier + 1, 3, '0', STR_PAD_LEFT);
     }
 
+    /** Messages d'erreur de validation en français. */
+    private function messagesValidation(): array
+    {
+        return [
+            'required' => 'Le champ « :attribute » est obligatoire.',
+            'required_without' => 'Le champ « :attribute » est obligatoire.',
+            'email' => "L'adresse e-mail n'est pas valide.",
+            'integer' => 'Le champ « :attribute » doit être un nombre entier.',
+            'date' => 'Le champ « :attribute » doit être une date valide.',
+            'exists' => 'Le champ « :attribute » est invalide.',
+            'in' => 'Le champ « :attribute » est invalide.',
+            'image' => 'Le fichier « :attribute » doit être une image (jpg, png, webp...).',
+            'uploaded' => "La photo « :attribute » n'a pas pu être envoyée (fichier trop lourd ou envoi interrompu).",
+            'max.file' => 'La photo « :attribute » est trop lourde (5 Mo maximum).',
+            'max.string' => 'Le champ « :attribute » ne doit pas dépasser :max caractères.',
+            'max.array' => 'Vous ne pouvez pas ajouter plus de :max photos supplémentaires (10 photos au maximum au total).',
+        ];
+    }
+
+    /** Noms lisibles des champs dans les messages d'erreur. */
+    private function attributsValidation(): array
+    {
+        return [
+            'client_id' => 'client',
+            'nom' => 'Nom',
+            'prenom' => 'Prénom',
+            'telephone' => 'Téléphone',
+            'email' => 'E-mail',
+            'adresse' => 'Adresse',
+            'immatriculation' => 'Immatriculation',
+            'marque' => 'Marque',
+            'modele' => 'Modèle',
+            'vin' => 'Numéro de châssis (VIN)',
+            'expiration_assurance' => 'Expiration assurance',
+            'expiration_sicta' => 'Expiration SICTA',
+            'siege' => 'Siège',
+            'date_reception' => 'Date de réception',
+            'kilometrage' => 'Kilométrage actuel',
+            'personne_a_contacter' => 'Personne à contacter',
+            'niveau_carburant' => 'Niveau de carburant',
+            'intervalle_niveau_carburant' => 'Précision niveau / jauge',
+            'photo_avant' => 'Face Avant',
+            'photo_arriere' => 'Face Arrière',
+            'photo_gauche' => 'Côté Gauche',
+            'photo_droite' => 'Côté Droit',
+            'photos_supplementaires' => 'photos supplémentaires',
+            'photos_supplementaires.*' => 'photo supplémentaire',
+        ];
+    }
+
     // Affiche le formulaire de nouvelle réception avec génération automatique du numéro OT
     public function create()
     {
@@ -107,11 +157,16 @@ class ReceptionController extends Controller
             'intervalle_niveau_carburant' => 'nullable|string|max:191',
             'remarques_eventuelles' => 'nullable|string',
 
-            'photo_avant' => 'nullable|image|max:5120',
-            'photo_arriere' => 'nullable|image|max:5120',
-            'photo_gauche' => 'nullable|image|max:5120',
-            'photo_droite' => 'nullable|image|max:5120',
-        ]);
+            // 4 photos obligatoires (5 Mo max chacune)
+            'photo_avant' => 'required|image|max:5120',
+            'photo_arriere' => 'required|image|max:5120',
+            'photo_gauche' => 'required|image|max:5120',
+            'photo_droite' => 'required|image|max:5120',
+
+            // Jusqu'à 6 photos supplémentaires facultatives : 10 photos au maximum au total
+            'photos_supplementaires' => 'nullable|array|max:6',
+            'photos_supplementaires.*' => 'image|max:5120',
+        ], $this->messagesValidation(), $this->attributsValidation());
 
         // Siège : celui du compte connecté, sinon (admin) celui choisi dans le formulaire.
         // Déterminé en premier car il sert aussi à contrôler et à rattacher le client.
@@ -171,6 +226,12 @@ class ReceptionController extends Controller
             }
         }
 
+        // Photos supplémentaires (facultatives)
+        $photosSupplementaires = [];
+        foreach ($request->file('photos_supplementaires', []) as $photo) {
+            $photosSupplementaires[] = $photo->store('interventions/photos', 'public');
+        }
+
         // --- TRAITEMENT DE LA DATE ET DE L'HEURE EXACTE ---
         $dateBase = !empty($validated['date_reception']) 
             ? Carbon::parse($validated['date_reception'])->format('Y-m-d') 
@@ -217,6 +278,7 @@ class ReceptionController extends Controller
             'photo_arriere' => $photoPaths['photo_arriere'],
             'photo_gauche' => $photoPaths['photo_gauche'],
             'photo_droite' => $photoPaths['photo_droite'],
+            'photos_supplementaires' => $photosSupplementaires ?: null,
         ]);
 
         return redirect()->route('dashboard')->with('success', "Fiche de réception enregistrée. N° OT : {$numeroOt}");

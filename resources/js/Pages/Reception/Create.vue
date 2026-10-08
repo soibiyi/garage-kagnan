@@ -1,7 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, Link } from '@inertiajs/vue3';
-import { ref, computed, watch, onUnmounted } from 'vue';
+import { ref, computed, watch, onUnmounted, nextTick } from 'vue';
 
 const props = defineProps({
     clients: Array,
@@ -35,6 +35,19 @@ const showCameraModal = ref(false);
 const currentCameraField = ref(null);
 const videoRef = ref(null);
 const mediaStream = ref(null);
+
+// Photos : 4 obligatoires + photos supplémentaires facultatives (10 photos maximum au total)
+const PHOTOS_OBLIGATOIRES = {
+    photo_avant: 'Face Avant',
+    photo_arriere: 'Face Arrière',
+    photo_gauche: 'Côté Gauche',
+    photo_droite: 'Côté Droit',
+};
+const MAX_PHOTOS_TOTAL = 10;
+const MAX_PHOTOS_SUP = MAX_PHOTOS_TOTAL - Object.keys(PHOTOS_OBLIGATOIRES).length; // 6
+const extraPreviews = ref([]);
+const extraFileInput = ref(null);
+const photoMessage = ref('');
 
 // Clients du siège concerné uniquement (siège de l'utilisateur connecté,
 // ou siège choisi dans le formulaire si l'utilisateur n'est rattaché à aucun siège)
@@ -140,6 +153,7 @@ const form = useForm({
     photo_arriere: null,
     photo_gauche: null,
     photo_droite: null,
+    photos_supplementaires: [],
 });
 
 watch(() => form.siege, (code) => {
@@ -159,6 +173,12 @@ watch(() => form.siege, (code) => {
 });
 
 const nextStep = () => {
+    // On ne passe à l'étape suivante que si les champs obligatoires de l'étape sont remplis
+    if (!validateStep(currentStep.value)) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+    }
+
     if (currentStep.value < totalSteps) {
         currentStep.value++;
         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -173,48 +193,314 @@ const prevStep = () => {
 };
 
 /* ------------------------------------------------------------------ */
+/* Validation des champs obligatoires, étape par étape                 */
+/* ------------------------------------------------------------------ */
+const FIELD_LABELS = {
+    nom: 'Nom',
+    prenom: 'Prénom',
+    telephone: 'Téléphone',
+    email: 'E-mail',
+    adresse: 'Adresse',
+    immatriculation: 'Immatriculation',
+    marque: 'Marque',
+    modele: 'Modèle',
+    vin: 'Numéro de châssis (VIN)',
+    expiration_assurance: 'Expiration assurance',
+    expiration_sicta: 'Expiration SICTA',
+    siege: 'Siège',
+    date_reception: 'Date de réception',
+    kilometrage: 'Kilométrage actuel',
+    personne_a_contacter: 'Personne à contacter',
+    niveau_carburant: 'Niveau de carburant',
+    intervalle_niveau_carburant: 'Précision niveau / jauge',
+};
+
+// Étape (1 à 4) à laquelle appartient chaque champ, pour afficher l'erreur au bon endroit
+const STEP_DE_CHAMP = {
+    client_id: 1, nom: 1, prenom: 1, telephone: 1, email: 1, adresse: 1, type_client: 1,
+    immatriculation: 2, marque: 2, modele: 2, vin: 2, expiration_assurance: 2, expiration_sicta: 2,
+    siege: 3, numero_ot: 3, date_reception: 3, kilometrage: 3, personne_a_contacter: 3,
+    niveau_carburant: 3, intervalle_niveau_carburant: 3, circuit: 3,
+    photo_avant: 4, photo_arriere: 4, photo_gauche: 4, photo_droite: 4,
+    remarques_eventuelles: 4,
+};
+
+const stepOfField = (field) => {
+    if (STEP_DE_CHAMP[field]) return STEP_DE_CHAMP[field];
+    if (field.startsWith('photos_supplementaires')) return 4;
+    return null;
+};
+
+const estRempli = (value) => value !== null && value !== undefined && String(value).trim() !== '';
+
+// Retourne { champ: message } pour une étape donnée (objet vide = étape valide)
+const stepErrors = (step) => {
+    const e = {};
+    const exiger = (field) => {
+        if (!estRempli(form[field])) {
+            e[field] = `Le champ « ${FIELD_LABELS[field]} » est obligatoire.`;
+        }
+    };
+
+    if (step === 1) {
+        if (isNewClientMode.value) {
+            ['nom', 'prenom', 'telephone', 'email', 'adresse'].forEach(exiger);
+            if (!e.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+                e.email = "L'adresse e-mail n'est pas valide.";
+            }
+        } else if (!form.client_id) {
+            e.client_id = 'Sélectionnez un client existant ou créez-en un nouveau.';
+        }
+    }
+
+    if (step === 2) {
+        ['immatriculation', 'marque', 'modele', 'vin', 'expiration_assurance', 'expiration_sicta'].forEach(exiger);
+    }
+
+    if (step === 3) {
+        if (!props.siege) exiger('siege');
+        ['date_reception', 'kilometrage', 'personne_a_contacter', 'niveau_carburant', 'intervalle_niveau_carburant'].forEach(exiger);
+        if (!e.kilometrage && (!Number.isInteger(Number(form.kilometrage)) || Number(form.kilometrage) < 0)) {
+            e.kilometrage = 'Le kilométrage doit être un nombre entier positif.';
+        }
+    }
+
+    if (step === 4) {
+        Object.entries(PHOTOS_OBLIGATOIRES).forEach(([key, label]) => {
+            if (!form[key]) e[key] = `La photo « ${label} » est obligatoire.`;
+        });
+    }
+
+    return e;
+};
+
+// Les erreurs d'une étape ne s'affichent qu'une fois qu'on a essayé de la valider,
+// puis disparaissent d'elles-mêmes dès que le champ est corrigé.
+const attempted = ref({ 1: false, 2: false, 3: false, 4: false });
+
+const clientErrors = computed(() => {
+    const all = {};
+    for (let s = 1; s <= totalSteps; s++) {
+        if (attempted.value[s]) Object.assign(all, stepErrors(s));
+    }
+    return all;
+});
+
+const err = (field) => clientErrors.value[field] || form.errors[field];
+
+const validateStep = (step) => {
+    attempted.value[step] = true;
+    return Object.keys(stepErrors(step)).length === 0;
+};
+
+// Messages à afficher dans l'encadré rouge en haut de l'étape courante
+const currentStepMessages = computed(() => {
+    const champs = new Set([...Object.keys(clientErrors.value), ...Object.keys(form.errors)]);
+    const messages = [];
+    champs.forEach((champ) => {
+        const step = stepOfField(champ);
+        if (step !== null && step !== currentStep.value) return;
+        const message = err(champ);
+        if (message && !messages.includes(message)) messages.push(message);
+    });
+    return messages;
+});
+
+const goToStep = (step) => {
+    currentStep.value = step;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+/* ------------------------------------------------------------------ */
+/* Compression des photos (évite de dépasser la limite de taille)      */
+/* ------------------------------------------------------------------ */
+const MAX_DIMENSION = 1600;           // plus grand côté, en pixels
+const JPEG_QUALITY = 0.8;
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 Mo : même limite que le serveur
+
+const dimensionsReduites = (w, h) => {
+    const ratio = Math.min(1, MAX_DIMENSION / Math.max(w, h));
+    return [Math.round(w * ratio), Math.round(h * ratio)];
+};
+
+const canvasVersFichier = (canvas, nom) => new Promise((resolve) => {
+    canvas.toBlob(
+        (blob) => resolve(blob ? new File([blob], nom, { type: 'image/jpeg' }) : null),
+        'image/jpeg',
+        JPEG_QUALITY
+    );
+});
+
+// Redimensionne et recompresse une image de la galerie ; renvoie l'original si l'opération échoue
+const compresserFichier = async (file) => {
+    let url = null;
+    try {
+        url = URL.createObjectURL(file);
+        const img = await new Promise((resolve, reject) => {
+            const i = new Image();
+            i.onload = () => resolve(i);
+            i.onerror = reject;
+            i.src = url;
+        });
+        const [w, h] = dimensionsReduites(img.naturalWidth, img.naturalHeight);
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const nom = (file.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg';
+        const compresse = await canvasVersFichier(canvas, nom);
+        return compresse && compresse.size < file.size ? compresse : file;
+    } catch (e) {
+        return file;
+    } finally {
+        if (url) URL.revokeObjectURL(url);
+    }
+};
+
+// Vérifie que c'est bien une image, la compresse, puis contrôle le poids final
+const preparerPhoto = async (file) => {
+    if (!file || !file.type || !file.type.startsWith('image/')) {
+        photoMessage.value = "Le fichier choisi n'est pas une image.";
+        return null;
+    }
+    const prete = await compresserFichier(file);
+    if (prete.size > MAX_FILE_SIZE) {
+        photoMessage.value = `Photo trop lourde (${(prete.size / 1048576).toFixed(1)} Mo) : maximum 5 Mo par photo.`;
+        return null;
+    }
+    return prete;
+};
+
+/* ------------------------------------------------------------------ */
+/* Photos obligatoires et supplémentaires                              */
+/* ------------------------------------------------------------------ */
+const totalPhotos = computed(() =>
+    Object.keys(PHOTOS_OBLIGATOIRES).filter((k) => form[k]).length + form.photos_supplementaires.length
+);
+const peutAjouterSup = computed(() => form.photos_supplementaires.length < MAX_PHOTOS_SUP);
+
+const definirPhoto = async (field, file) => {
+    photoMessage.value = '';
+    const prete = await preparerPhoto(file);
+    if (!prete) return;
+
+    if (photoPreviews.value[field]) URL.revokeObjectURL(photoPreviews.value[field]);
+    form[field] = prete;
+    photoPreviews.value[field] = URL.createObjectURL(prete);
+    form.clearErrors(field);
+};
+
+const ajouterPhotosSup = async (files) => {
+    photoMessage.value = '';
+    const restantes = MAX_PHOTOS_SUP - form.photos_supplementaires.length;
+    if (restantes <= 0) {
+        photoMessage.value = `Maximum atteint : ${MAX_PHOTOS_TOTAL} photos au total.`;
+        return;
+    }
+
+    const liste = Array.from(files);
+    const aTraiter = liste.slice(0, restantes);
+    const tropNombreuses = liste.length > restantes;
+
+    for (const file of aTraiter) {
+        if (form.photos_supplementaires.length >= MAX_PHOTOS_SUP) break;
+        const prete = await preparerPhoto(file);
+        if (!prete) continue;
+        form.photos_supplementaires.push(prete);
+        extraPreviews.value.push(URL.createObjectURL(prete));
+    }
+
+    if (tropNombreuses) {
+        photoMessage.value = `Seules ${aTraiter.length} photo(s) ont été ajoutées : maximum ${MAX_PHOTOS_TOTAL} photos au total.`;
+    }
+};
+
+const removePhoto = (field) => {
+    if (photoPreviews.value[field]) URL.revokeObjectURL(photoPreviews.value[field]);
+    form[field] = null;
+    photoPreviews.value[field] = null;
+};
+
+const removeExtraPhoto = (index) => {
+    URL.revokeObjectURL(extraPreviews.value[index]);
+    extraPreviews.value.splice(index, 1);
+    form.photos_supplementaires.splice(index, 1);
+    photoMessage.value = '';
+};
+
+/* ------------------------------------------------------------------ */
 /* Gestion de la Caméra en Direct (Live WebCam / Mobile)               */
 /* ------------------------------------------------------------------ */
+const cameraLabel = computed(() =>
+    currentCameraField.value === 'extra'
+        ? `Photo supplémentaire ${form.photos_supplementaires.length + 1}`
+        : (PHOTOS_OBLIGATOIRES[currentCameraField.value] || '')
+);
+
 const openLiveCamera = async (field) => {
+    photoMessage.value = '';
+
+    if (field === 'extra' && !peutAjouterSup.value) {
+        photoMessage.value = `Maximum atteint : ${MAX_PHOTOS_TOTAL} photos au total.`;
+        return;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+        photoMessage.value = "Caméra indisponible sur ce navigateur (la page doit être ouverte en HTTPS).";
+        return;
+    }
+
     currentCameraField.value = field;
     showCameraModal.value = true;
+    await nextTick();
 
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
             video: { facingMode: { ideal: 'environment' } }, // Priorité caméra arrière
             audio: false
         });
+
+        // La modale a été fermée pendant l'autorisation : on libère la caméra
+        if (!showCameraModal.value) {
+            stream.getTracks().forEach(track => track.stop());
+            return;
+        }
+
         mediaStream.value = stream;
         if (videoRef.value) {
             videoRef.value.srcObject = stream;
         }
-    } catch (err) {
-        alert("Impossible d'accéder à la caméra. Vérifiez les autorisations de votre navigateur.");
+    } catch (erreurCamera) {
         closeCameraModal();
+        photoMessage.value = "Impossible d'accéder à la caméra. Vérifiez les autorisations de votre navigateur.";
     }
 };
 
-const capturePhotoFromLive = () => {
-    if (!videoRef.value) return;
-
+const capturePhotoFromLive = async () => {
     const video = videoRef.value;
+    if (!video || !video.videoWidth) return;
+
+    // Image réduite dès la capture : pas de photo de plusieurs Mo envoyée au serveur
+    const [w, h] = dimensionsReduites(video.videoWidth, video.videoHeight);
     const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext('2d').drawImage(video, 0, 0, w, h);
 
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const field = currentCameraField.value;
+    const file = await canvasVersFichier(canvas, `${field}_${Date.now()}.jpg`);
+    closeCameraModal();
 
-    canvas.toBlob((blob) => {
-        if (blob) {
-            const field = currentCameraField.value;
-            const file = new File([blob], `${field}_${Date.now()}.jpg`, { type: 'image/jpeg' });
-            
-            form[field] = file;
-            photoPreviews.value[field] = URL.createObjectURL(file);
-            closeCameraModal();
-        }
-    }, 'image/jpeg', 0.85);
+    if (!file) {
+        photoMessage.value = 'La capture a échoué, veuillez réessayer.';
+        return;
+    }
+
+    if (field === 'extra') {
+        await ajouterPhotosSup([file]);
+    } else {
+        await definirPhoto(field, file);
+    }
 };
 
 const closeCameraModal = () => {
@@ -229,6 +515,8 @@ const closeCameraModal = () => {
 // Nettoyage automatique au démontage
 onUnmounted(() => {
     closeCameraModal();
+    Object.values(photoPreviews.value).forEach((url) => url && URL.revokeObjectURL(url));
+    extraPreviews.value.forEach((url) => URL.revokeObjectURL(url));
 });
 
 /* ------------------------------------------------------------------ */
@@ -240,22 +528,40 @@ const triggerFileInput = (field) => {
     }
 };
 
-const handleFileUpload = (event, field) => {
+const handleFileUpload = async (event, field) => {
     const file = event.target.files[0];
-    if (file) {
-        form[field] = file;
-        photoPreviews.value[field] = URL.createObjectURL(file);
-    }
+    event.target.value = ''; // permet de re-choisir le même fichier
+    if (file) await definirPhoto(field, file);
 };
 
-const removePhoto = (field) => {
-    form[field] = null;
-    photoPreviews.value[field] = null;
+const handleExtraUpload = async (event) => {
+    const files = Array.from(event.target.files); // copie avant de vider l'input
+    event.target.value = '';
+    if (files.length) await ajouterPhotosSup(files);
 };
 
+/* ------------------------------------------------------------------ */
+/* Envoi du formulaire                                                */
+/* ------------------------------------------------------------------ */
 const submit = () => {
+    // On contrôle toutes les étapes ; si l'une est incomplète, on y renvoie l'utilisateur
+    for (let s = 1; s <= totalSteps; s++) {
+        if (!validateStep(s)) {
+            goToStep(s);
+            return;
+        }
+    }
+
+    form.clearErrors();
     form.post(route('reception.store'), {
         preserveScroll: true,
+        forceFormData: true,
+        onError: (errors) => {
+            // Erreur renvoyée par le serveur : on ouvre l'étape du premier champ en cause
+            const steps = Object.keys(errors).map(stepOfField).filter((s) => s !== null);
+            if (steps.length) goToStep(Math.min(...steps));
+            else window.scrollTo({ top: 0, behavior: 'smooth' });
+        },
     });
 };
 </script>
@@ -296,7 +602,18 @@ const submit = () => {
                     </div>
                 </div>
 
-                <form @submit.prevent="submit" class="space-y-6">
+                <form @submit.prevent="submit" novalidate class="space-y-6">
+
+                    <!-- ENCADRÉ D'ERREURS DE L'ÉTAPE EN COURS -->
+                    <div v-if="currentStepMessages.length" class="p-5 bg-red-50 border border-red-200 rounded-2xl space-y-1.5" role="alert">
+                        <p class="text-sm font-black text-[#E11D48] flex items-center gap-2">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                            <span>Veuillez corriger les points suivants :</span>
+                        </p>
+                        <ul class="list-disc pl-6 text-xs font-bold text-[#E11D48] space-y-0.5">
+                            <li v-for="message in currentStepMessages" :key="message">{{ message }}</li>
+                        </ul>
+                    </div>
 
                     <!-- ========================================== -->
                     <!-- ÉTAPE 1 : CLIENT -->
@@ -414,22 +731,27 @@ const submit = () => {
                                 <div>
                                     <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Nom *</label>
                                     <input type="text" v-model="form.nom" required class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]" placeholder="Nom" />
+                                    <p v-if="err('nom')" class="mt-1 text-xs font-bold text-[#E11D48]">{{ err('nom') }}</p>
                                 </div>
                                 <div>
                                     <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Prénom *</label>
                                     <input type="text" v-model="form.prenom" required class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]" placeholder="Prénom" />
+                                    <p v-if="err('prenom')" class="mt-1 text-xs font-bold text-[#E11D48]">{{ err('prenom') }}</p>
                                 </div>
                                 <div>
                                     <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Téléphone *</label>
                                     <input type="text" v-model="form.telephone" required class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]" placeholder="0700000000" />
+                                    <p v-if="err('telephone')" class="mt-1 text-xs font-bold text-[#E11D48]">{{ err('telephone') }}</p>
                                 </div>
                                 <div>
                                     <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">E-mail *</label>
                                     <input type="email" v-model="form.email" required class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]" placeholder="email@example.com" />
+                                    <p v-if="err('email')" class="mt-1 text-xs font-bold text-[#E11D48]">{{ err('email') }}</p>
                                 </div>
                                 <div class="sm:col-span-2">
                                     <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Adresse *</label>
                                     <textarea v-model="form.adresse" rows="2" required class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]"></textarea>
+                                    <p v-if="err('adresse')" class="mt-1 text-xs font-bold text-[#E11D48]">{{ err('adresse') }}</p>
                                 </div>
                             </div>
                         </div>
@@ -451,27 +773,32 @@ const submit = () => {
                             <div>
                                 <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Immatriculation *</label>
                                 <input type="text" v-model="form.immatriculation" required class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 uppercase shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]" placeholder="AB-123-CD" />
-                                <div v-if="form.errors.immatriculation" class="text-[#E11D48] text-xs font-bold mt-1">{{ form.errors.immatriculation }}</div>
+                                <div v-if="err('immatriculation')" class="text-[#E11D48] text-xs font-bold mt-1">{{ err('immatriculation') }}</div>
                             </div>
                             <div>
                                 <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Marque *</label>
                                 <input type="text" v-model="form.marque" required class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]" placeholder="Toyota" />
+                                <p v-if="err('marque')" class="mt-1 text-xs font-bold text-[#E11D48]">{{ err('marque') }}</p>
                             </div>
                             <div>
                                 <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Modèle *</label>
                                 <input type="text" v-model="form.modele" required class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]" placeholder="Corolla" />
+                                <p v-if="err('modele')" class="mt-1 text-xs font-bold text-[#E11D48]">{{ err('modele') }}</p>
                             </div>
                             <div class="sm:col-span-3">
                                 <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Numéro de Châssis (VIN) *</label>
                                 <input type="text" v-model="form.vin" required class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 uppercase shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]" placeholder="17 caractères" />
+                                <p v-if="err('vin')" class="mt-1 text-xs font-bold text-[#E11D48]">{{ err('vin') }}</p>
                             </div>
                             <div>
                                 <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Expiration Assurance *</label>
                                 <input type="date" v-model="form.expiration_assurance" required class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]" />
+                                <p v-if="err('expiration_assurance')" class="mt-1 text-xs font-bold text-[#E11D48]">{{ err('expiration_assurance') }}</p>
                             </div>
                             <div>
                                 <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Expiration SICTA (Visite tech.) *</label>
                                 <input type="date" v-model="form.expiration_sicta" required class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]" />
+                                <p v-if="err('expiration_sicta')" class="mt-1 text-xs font-bold text-[#E11D48]">{{ err('expiration_sicta') }}</p>
                             </div>
                         </div>
                     </div>
@@ -498,7 +825,7 @@ const submit = () => {
                                 <div v-else class="w-full rounded-2xl border border-gray-200 bg-gray-100 p-3.5 text-sm font-bold text-gray-600">
                                     {{ siege }} — {{ $page.props.sieges[siege] }}
                                 </div>
-                                <p v-if="form.errors.siege" class="mt-1 text-xs text-red-600 font-medium">{{ form.errors.siege }}</p>
+                                <p v-if="err('siege')" class="mt-1 text-xs font-bold text-[#E11D48]">{{ err('siege') }}</p>
                             </div>
 
                             <div>
@@ -510,16 +837,19 @@ const submit = () => {
                             <div>
                                 <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Date de réception *</label>
                                 <input type="date" v-model="form.date_reception" required class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]" />
+                                <p v-if="err('date_reception')" class="mt-1 text-xs font-bold text-[#E11D48]">{{ err('date_reception') }}</p>
                             </div>
 
                             <div>
                                 <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Kilométrage actuel (km) *</label>
                                 <input type="number" v-model="form.kilometrage" required class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]" placeholder="45000" />
+                                <p v-if="err('kilometrage')" class="mt-1 text-xs font-bold text-[#E11D48]">{{ err('kilometrage') }}</p>
                             </div>
 
                             <div>
                                 <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Personne à contacter *</label>
                                 <input type="text" v-model="form.personne_a_contacter" required class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]" placeholder="Nom ou téléphone" />
+                                <p v-if="err('personne_a_contacter')" class="mt-1 text-xs font-bold text-[#E11D48]">{{ err('personne_a_contacter') }}</p>
                             </div>
 
                             <div>
@@ -531,11 +861,13 @@ const submit = () => {
                                     <option value="3/4">3/4</option>
                                     <option value="Plein">Plein</option>
                                 </select>
+                                <p v-if="err('niveau_carburant')" class="mt-1 text-xs font-bold text-[#E11D48]">{{ err('niveau_carburant') }}</p>
                             </div>
 
                             <div>
                                 <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Précision niveau / Jauge *</label>
                                 <input type="text" v-model="form.intervalle_niveau_carburant" required class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]" placeholder="ex: Exactement la moitié" />
+                                <p v-if="err('intervalle_niveau_carburant')" class="mt-1 text-xs font-bold text-[#E11D48]">{{ err('intervalle_niveau_carburant') }}</p>
                             </div>
 
                             <div class="sm:col-span-2">
@@ -588,9 +920,9 @@ const submit = () => {
                         <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
                             
                             <div 
-                                v-for="(label, key) in { photo_avant: 'Face Avant', photo_arriere: 'Face Arrière', photo_gauche: 'Côté Gauche', photo_droite: 'Côté Droit' }" 
+                                v-for="(label, key) in PHOTOS_OBLIGATOIRES" 
                                 :key="key"
-                                class="border-2 border-dashed border-gray-200 bg-[#F8FAFC] rounded-2xl p-5 hover:border-[#E11D48] transition flex flex-col justify-between"
+                                :class="['border-2 border-dashed bg-[#F8FAFC] rounded-2xl p-5 hover:border-[#E11D48] transition flex flex-col justify-between', err(key) ? 'border-[#E11D48]' : 'border-gray-200']"
                             >
                                 <div class="mb-3 flex justify-between items-center">
                                     <span class="text-xs font-black text-[#0B0F19] uppercase tracking-wider block">{{ label }} *</span>
@@ -641,8 +973,80 @@ const submit = () => {
                                     accept="image/*" 
                                     class="hidden" 
                                 />
+                                <p v-if="err(key)" class="mt-2 text-xs font-bold text-[#E11D48]">{{ err(key) }}</p>
                             </div>
 
+                        </div>
+
+                        <!-- Photos supplémentaires (facultatives) -->
+                        <div class="pt-6 border-t border-gray-100 space-y-4">
+                            <div class="flex flex-wrap justify-between items-center gap-2">
+                                <div>
+                                    <h4 class="text-sm font-black text-[#0B0F19]">
+                                        Photos supplémentaires <span class="text-[#8A8D8F] font-medium">(facultatif)</span>
+                                    </h4>
+                                    <p class="text-xs text-[#8A8D8F] font-medium mt-0.5">
+                                        Rayures, dégâts, tableau de bord… {{ MAX_PHOTOS_TOTAL }} photos au maximum au total (les 4 photos obligatoires comprises).
+                                    </p>
+                                </div>
+                                <span
+                                    :class="['text-[11px] font-black px-2.5 py-1 rounded-lg border', totalPhotos >= MAX_PHOTOS_TOTAL ? 'bg-red-50 text-[#E11D48] border-red-200' : 'bg-gray-50 text-[#0B0F19] border-gray-200']"
+                                >
+                                    {{ totalPhotos }}/{{ MAX_PHOTOS_TOTAL }} photos
+                                </span>
+                            </div>
+
+                            <p v-if="photoMessage" class="text-xs font-bold text-[#E11D48] bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                                {{ photoMessage }}
+                            </p>
+
+                            <div v-if="extraPreviews.length" class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                <div
+                                    v-for="(src, index) in extraPreviews"
+                                    :key="src"
+                                    class="relative h-32 rounded-xl overflow-hidden border border-gray-200 bg-slate-900"
+                                >
+                                    <img :src="src" alt="Photo supplémentaire" class="w-full h-full object-cover" />
+                                    <button
+                                        type="button"
+                                        @click="removeExtraPhoto(index)"
+                                        class="absolute top-2 right-2 bg-rose-600 text-white rounded-full p-1.5 shadow-md hover:bg-rose-700 transition"
+                                        title="Supprimer la photo"
+                                    >
+                                        <i class="fa-solid fa-xmark text-xs w-4 h-4 flex items-center justify-center"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    :disabled="!peutAjouterSup"
+                                    @click="openLiveCamera('extra')"
+                                    class="px-3 py-2.5 bg-[#E11D48] hover:bg-[#BE123C] text-white text-[11px] font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                    <i class="fa-solid fa-camera text-xs"></i>
+                                    <span>Prendre une photo</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    :disabled="!peutAjouterSup"
+                                    @click="extraFileInput?.click()"
+                                    class="px-3 py-2.5 bg-white border border-gray-300 hover:bg-gray-100 text-[#0B0F19] text-[11px] font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                    <i class="fa-solid fa-images text-xs text-blue-600"></i>
+                                    <span>Galerie (plusieurs)</span>
+                                </button>
+                            </div>
+
+                            <input
+                                type="file"
+                                ref="extraFileInput"
+                                @change="handleExtraUpload"
+                                accept="image/*"
+                                multiple
+                                class="hidden"
+                            />
                         </div>
 
                         <div class="pt-4 border-t border-gray-100">
@@ -693,7 +1097,7 @@ const submit = () => {
         <div v-if="showCameraModal" class="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-between p-4 sm:p-6">
             <div class="w-full max-w-xl flex justify-between items-center text-white pb-2">
                 <span class="text-xs font-black uppercase tracking-wider">
-                    Capture en direct : {{ currentCameraField?.replace('photo_', 'Face ') }}
+                    Capture en direct : {{ cameraLabel }}
                 </span>
                 <button @click="closeCameraModal" class="text-white hover:text-rose-500 text-xl p-2">
                     <i class="fa-solid fa-xmark"></i>
