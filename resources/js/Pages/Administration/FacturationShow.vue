@@ -573,16 +573,10 @@ const retour = () => {
                                 <p class="font-bold text-gray-900 tracking-wide">PAYER UNE AVANCE DE 70% AVANT TRAVAUX</p>
                             </div>
 
-                            <!-- Signatures -->
-                            <div class="grid grid-cols-2 gap-8 text-xs text-center font-bold pt-1 mb-3">
-                                <div>
-                                    <p class="mb-8 text-gray-700 uppercase tracking-wider">CLIENT</p>
-                                    <div class="border-b border-gray-400 w-44 mx-auto"></div>
-                                </div>
-                                <div>
-                                    <p class="mb-8 text-gray-700 uppercase tracking-wider">PRESTATAIRE</p>
-                                    <div class="border-b border-gray-400 w-44 mx-auto"></div>
-                                </div>
+                            <!-- Mises en garde -->
+                            <div class="text-[10px] leading-snug text-gray-700 mb-3 space-y-1">
+                                <p><span class="font-bold text-[#E11D48]">(*)</span> Ce devis est valable <span class="font-semibold">15 jours</span> à compter de sa réception. Passé ce délai sans réaction de votre part, il ne sera plus valable et les prix des pièces pourront être révisés.</p>
+                                <p><span class="font-bold text-[#E11D48]">(**)</span> Si, <span class="font-semibold">3 jours</span> après la réception de ce devis, nous n'avons reçu aucune réponse de votre part et que votre véhicule se trouve toujours dans notre garage sous notre responsabilité, des frais de gardiennage de <span class="font-semibold">3 000 F CFA par jour</span> vous seront facturés.</p>
                             </div>
 
                             <!-- Pied de page légal -->
@@ -741,16 +735,10 @@ const retour = () => {
                             <p class="font-bold text-gray-900 tracking-wide">PAYER UNE AVANCE DE 70% AVANT TRAVAUX</p>
                         </div>
 
-                        <!-- Signatures -->
-                        <div class="grid grid-cols-2 gap-8 text-xs text-center font-bold pt-1 mb-3">
-                            <div>
-                                <p class="mb-8 text-gray-700 uppercase tracking-wider">CLIENT</p>
-                                <div class="border-b border-gray-400 w-44 mx-auto"></div>
-                            </div>
-                            <div>
-                                <p class="mb-8 text-gray-700 uppercase tracking-wider">PRESTATAIRE</p>
-                                <div class="border-b border-gray-400 w-44 mx-auto"></div>
-                            </div>
+                        <!-- Mises en garde -->
+                        <div class="text-[10px] leading-snug text-gray-700 mb-3 space-y-1">
+                            <p><span class="font-bold text-[#E11D48]">(*)</span> Ce devis est valable <span class="font-semibold">15 jours</span> à compter de sa réception. Passé ce délai sans réaction de votre part, il ne sera plus valable et les prix des pièces pourront être révisés.</p>
+                            <p><span class="font-bold text-[#E11D48]">(**)</span> Si, <span class="font-semibold">3 jours</span> après la réception de ce devis, nous n'avons reçu aucune réponse de votre part et que votre véhicule se trouve toujours dans notre garage sous notre responsabilité, des frais de gardiennage de <span class="font-semibold">3 000 F CFA par jour</span> vous seront facturés.</p>
                         </div>
 
                         <!-- Pied de page -->
