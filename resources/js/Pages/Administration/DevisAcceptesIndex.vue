@@ -15,7 +15,7 @@ const search = ref(props.filters?.search || '');
 
 watch(search, (value) => {
     router.get(
-        route('administration.devis.acceptes.index'), // Assurez-vous que c'est bien le nom de votre route
+        route('administration.devis.acceptes'),
         { search: value },
         { preserveState: true, replace: true }
     );
@@ -52,10 +52,10 @@ const backText = computed(() => {
                 <div>
                     <h2 class="text-xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
                         <i class="fa-solid fa-clipboard-check text-[#E11D48]"></i>
-                        <span>Devis Validés par le Client (Circuit Normal)</span>
+                        <span>Devis Validés par le Client</span>
                     </h2>
                     <p class="text-xs text-gray-500 mt-1">
-                        Liste des dossiers (circuit normal) dont l'accord client a été enregistré et prêts pour la suite.
+                        Liste des dossiers (circuit normal et devis directs) dont l'accord client a été enregistré et prêts pour la suite.
                     </p>
                 </div>
 
@@ -94,7 +94,7 @@ const backText = computed(() => {
                             <i class="fa-solid fa-folder-closed text-xl"></i>
                         </div>
                         <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wider">Aucun devis validé</h3>
-                        <p class="text-xs text-gray-500 mt-1">Il n'y a pas de dossier en circuit normal correspondant à votre recherche.</p>
+                        <p class="text-xs text-gray-500 mt-1">Aucun devis validé ne correspond à votre recherche.</p>
                     </div>
 
                     <div v-else class="overflow-x-auto">
@@ -127,13 +127,35 @@ const backText = computed(() => {
                                         </span>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right">
-                                        <Link 
-                                            :href="route('administration.facturation.show', dossier.id)" 
-                                            class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#E11D48] hover:bg-rose-700 text-white font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-[11px]"
-                                        >
-                                            <span>Voir Infos</span>
-                                            <i class="fa-solid fa-arrow-right text-[10px]"></i>
-                                        </Link>
+                                        <div class="inline-flex items-center gap-2">
+                                            <!-- Modifiable uniquement tant qu'aucun paiement n'a été enregistré -->
+                                            <template v-if="!dossier.a_paiement">
+                                                <Link
+                                                    :href="route('administration.devis.edit', dossier.id)"
+                                                    class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-[11px]"
+                                                    title="Ajouter ou supprimer des lignes, cocher ou décocher les choix du client"
+                                                >
+                                                    <i class="fa-solid fa-pen text-[10px]"></i>
+                                                    <span>Modifier</span>
+                                                </Link>
+                                            </template>
+                                            <span
+                                                v-else
+                                                class="inline-flex items-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-500 border border-gray-200 font-bold uppercase tracking-wider rounded-lg text-[10px]"
+                                                title="Un paiement a déjà été enregistré : ce devis ne peut plus être modifié"
+                                            >
+                                                <i class="fa-solid fa-lock text-[10px]"></i>
+                                                <span>Paiement enregistré</span>
+                                            </span>
+
+                                            <Link
+                                                :href="route('administration.facturation.show', dossier.id)"
+                                                class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#E11D48] hover:bg-rose-700 text-white font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-[11px]"
+                                            >
+                                                <span>Voir Infos</span>
+                                                <i class="fa-solid fa-arrow-right text-[10px]"></i>
+                                            </Link>
+                                        </div>
                                     </td>
                                 </tr>
                             </tbody>

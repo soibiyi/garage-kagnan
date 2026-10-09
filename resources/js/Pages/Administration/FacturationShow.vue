@@ -1,12 +1,40 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, useForm, router } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
+import axios from 'axios';
 import { FAMILLES, FAMILLE_PAR_DEFAUT } from '@/constants/familles.js';
 
 const props = defineProps({
     dossier: Object,
+    // Modification d'un devis déjà accepté (aucun paiement) : lignes modifiables + cases à cocher
+    modeEdition: { type: Boolean, default: false },
 });
+
+// Détection automatique de la Famille & Sous-famille selon les mots-clés (comme dans le formulaire de devis)
+const detecterFamilleEtSousFamille = (designation) => {
+    if (!designation || designation.trim().length === 0) {
+        return { famille: FAMILLE_PAR_DEFAUT, sousFamille: '' };
+    }
+
+    const texte = designation.toLowerCase();
+
+    for (const [familleNom, sousFamillesList] of Object.entries(FAMILLES)) {
+        for (const sousFamille of sousFamillesList) {
+            if (texte.includes(sousFamille.toLowerCase()) || texte.includes(familleNom.toLowerCase())) {
+                return { famille: familleNom, sousFamille };
+            }
+        }
+    }
+
+    return { famille: FAMILLE_PAR_DEFAUT, sousFamille: '' };
+};
+
+// Lignes affichées : copie modifiable en mode édition, lignes du devis sinon
+const lignesLocales = ref((props.dossier?.devis?.lignes || []).map((l) => ({ ...l })));
+const lignesDevis = computed(() =>
+    props.modeEdition ? lignesLocales.value : (props.dossier?.devis?.lignes || [])
+);
 
 // Formulaire pour la sélection des lignes acceptées
 const form = useForm({
@@ -17,11 +45,11 @@ const form = useForm({
 
 // Organiser et grouper les lignes par famille selon l'ordre prédéfini dans familles.js
 const lignesGroupesParFamille = computed(() => {
-    if (!props.dossier?.devis?.lignes) return [];
+    if (!lignesDevis.value.length) return [];
 
     const groupes = {};
     
-    props.dossier.devis.lignes.forEach(ligne => {
+    lignesDevis.value.forEach(ligne => {
         const familleNom = ligne.famille || FAMILLE_PAR_DEFAUT;
         if (!groupes[familleNom]) {
             groupes[familleNom] = [];
@@ -80,13 +108,152 @@ const calculerTotaux = (lignes) => {
 };
 
 const totauxCoches = computed(() =>
-    calculerTotaux((props.dossier?.devis?.lignes || []).filter(l => form.lignes_acceptees.includes(l.id)))
+    calculerTotaux(lignesDevis.value.filter(l => form.lignes_acceptees.includes(l.id)))
 );
 const totauxAcceptes = computed(() =>
     calculerTotaux((props.dossier?.devis?.lignes || []).filter(l => l.is_accepted))
 );
 
+// --- Mode édition : ajout / suppression de lignes ---
+let idTemporaire = 0;
+const nouvelleLigne = ref({ designation: '', reference_piece: '', quantite: 1, pu_net: 0, remise: 0, ne_pas_appliquer_tva: false, famille: null, sous_famille: null });
+const erreurAjout = ref('');
+
+// Saisie automatique : recherche dans le stock selon la désignation, la marque et le modèle du véhicule
+const resultatsPieces = ref([]);
+const suggestionsVisibles = ref(false);
+const chargementPieces = ref(false);
+let minuteurRecherche = null;
+
+const rechercherPiecesStock = async () => {
+    const requete = (nouvelleLigne.value.designation || '').trim();
+    suggestionsVisibles.value = true;
+
+    if (!requete) {
+        resultatsPieces.value = [];
+        return;
+    }
+
+    chargementPieces.value = true;
+    try {
+        const response = await axios.get(route('administration.dossiers.rechercher-pieces', props.dossier.id), {
+            params: {
+                marque: props.dossier.vehicule?.marque || '',
+                modele: props.dossier.vehicule?.modele || '',
+                q: requete,
+            },
+        });
+        resultatsPieces.value = response.data;
+    } catch (error) {
+        console.error('Erreur lors de la recherche des pièces :', error);
+        resultatsPieces.value = [];
+    } finally {
+        chargementPieces.value = false;
+    }
+};
+
+const surSaisieDesignation = () => {
+    // Saisie manuelle : on oublie la famille issue d'une pièce choisie précédemment
+    nouvelleLigne.value.famille = null;
+    nouvelleLigne.value.sous_famille = null;
+    clearTimeout(minuteurRecherche);
+    minuteurRecherche = setTimeout(rechercherPiecesStock, 250);
+};
+
+const selectionnerPiece = (piece) => {
+    const n = nouvelleLigne.value;
+    n.designation = piece.designation_piece || '';
+    n.reference_piece = piece.reference || '';
+    n.pu_net = parseFloat(piece.prix_kagnan_ht) || parseFloat(piece.prix_marche_ht) || 0;
+    n.famille = piece.famille || null;
+    n.sous_famille = piece.sous_famille || null;
+
+    suggestionsVisibles.value = false;
+    resultatsPieces.value = [];
+};
+
+const fermerSuggestions = () => {
+    setTimeout(() => { suggestionsVisibles.value = false; }, 200);
+};
+
+const ajouterLigne = () => {
+    const n = nouvelleLigne.value;
+    const quantite = Number(n.quantite);
+    const puNet = Number(n.pu_net);
+    const remise = Math.min(Math.max(Number(n.remise) || 0, 0), 100);
+
+    if (!n.designation || !n.designation.trim()) {
+        erreurAjout.value = 'La désignation est obligatoire.';
+        return;
+    }
+    if (!(quantite >= 0) || !(puNet >= 0)) {
+        erreurAjout.value = 'La quantité et le prix unitaire doivent être des nombres positifs.';
+        return;
+    }
+    erreurAjout.value = '';
+
+    const detection = detecterFamilleEtSousFamille(n.designation);
+    const ht = quantite * puNet * (1 - remise / 100);
+    const ttc = n.ne_pas_appliquer_tva ? ht : ht * 1.18;
+    const id = --idTemporaire; // identifiant temporaire (négatif) tant que la ligne n'est pas enregistrée
+
+    lignesLocales.value.push({
+        id,
+        designation: n.designation.trim(),
+        reference_piece: n.reference_piece || '',
+        famille: n.famille || detection.famille,
+        sous_famille: n.famille ? (n.sous_famille || '') : detection.sousFamille,
+        quantite,
+        pu_net: puNet,
+        remise,
+        ne_pas_appliquer_tva: !!n.ne_pas_appliquer_tva,
+        montant_ht: ht,
+        montant_ttc: ttc,
+    });
+
+    // Une ligne ajoutée est acceptée d'office (on peut la décocher ensuite)
+    form.lignes_acceptees = [...form.lignes_acceptees, id];
+
+    nouvelleLigne.value = { designation: '', reference_piece: '', quantite: 1, pu_net: 0, remise: 0, ne_pas_appliquer_tva: false, famille: null, sous_famille: null };
+    resultatsPieces.value = [];
+    suggestionsVisibles.value = false;
+};
+
+const supprimerLigne = (ligne) => {
+    if (lignesLocales.value.length <= 1) return; // un devis garde au moins une ligne
+    lignesLocales.value = lignesLocales.value.filter((l) => l.id !== ligne.id);
+    form.lignes_acceptees = form.lignes_acceptees.filter((id) => id !== ligne.id);
+};
+
 const submitValidation = () => {
+    // Devis déjà accepté : on enregistre les lignes ET les cases cochées en une seule fois
+    if (props.modeEdition) {
+        const devis = props.dossier.devis;
+        const pfActive = devis.petite_fourniture_active === null || devis.petite_fourniture_active === undefined
+            ? true : !!devis.petite_fourniture_active;
+        const pfMontant = devis.petite_fourniture_montant === null || devis.petite_fourniture_montant === undefined
+            ? null : Math.round(Number(devis.petite_fourniture_montant));
+
+        form.transform(() => ({
+            lignes: lignesLocales.value.map((l) => ({
+                quantite: l.quantite,
+                designation: l.designation,
+                reference_piece: l.reference_piece || null,
+                famille: l.famille || null,
+                sous_famille: l.sous_famille || null,
+                pu_net: l.pu_net,
+                remise: l.remise ?? 0,
+                ne_pas_appliquer_tva: !!l.ne_pas_appliquer_tva,
+                is_accepted: form.lignes_acceptees.includes(l.id),
+            })),
+            petite_fourniture_active: pfActive,
+            petite_fourniture_montant: pfMontant,
+        })).put(route('administration.devis.update', props.dossier.id), {
+            preserveScroll: true,
+        });
+        return;
+    }
+
     form.post(route('administration.facturation.valider-devis', props.dossier.id), {
         preserveScroll: true,
     });
@@ -124,7 +291,7 @@ const retour = () => {
                 <div class="flex items-center gap-2">
                     <h2 class="text-xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
                         <i class="fa-solid fa-file-invoice text-[#E11D48]"></i>
-                        <span>Validation Devis / Facturation - OT : {{ dossier.numero_ot || dossier.id }}</span>
+                        <span>{{ modeEdition ? 'Modification du Devis' : 'Validation Devis / Facturation' }} - OT : {{ dossier.numero_ot || dossier.id }}</span>
                     </h2>
                 </div>
                 <div class="flex items-center space-x-3">
@@ -161,7 +328,7 @@ const retour = () => {
                 <div v-else>
                     
                     <!-- MODE 1 : DEVIS EN ATTENTE (Saisie du choix client) -->
-                    <form v-if="dossier.devis.statut === 'en_attente'" @submit.prevent="submitValidation">
+                    <form v-if="dossier.devis.statut === 'en_attente' || modeEdition" @submit.prevent="submitValidation">
                         <div class="invoice-sheet bg-white shadow-2xl shadow-gray-200/50 sm:rounded-2xl p-8 border border-gray-100 print:shadow-none print:border-none print:p-2 text-gray-800">
                             
                             <!-- En-tête -->
@@ -226,13 +393,14 @@ const retour = () => {
                                             <th class="border-r border-gray-900 p-1 w-16">Remise</th>
                                             <th class="border-r border-gray-900 p-1 w-20">TVA</th>
                                             <th class="p-1 w-24">Montant HT</th>
+                                            <th v-if="modeEdition" class="border-l border-gray-900 p-1 w-10 print:hidden">Suppr.</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         <template v-for="groupe in lignesGroupesParFamille" :key="groupe.famille">
                                             <!-- EN-TÊTE DE LA FAMILLE -->
                                             <tr class="bg-gray-200/80 border-y border-gray-900 font-bold">
-                                                <td colspan="7" class="px-3 py-1 text-gray-900 uppercase tracking-wider text-[11px]">
+                                                <td :colspan="modeEdition ? 8 : 7" class="px-3 py-1 text-gray-900 uppercase tracking-wider text-[11px]">
                                                     <i class="fa-solid fa-layer-group text-slate-600 mr-1.5"></i>
                                                     <span>{{ groupe.famille }}</span>
                                                 </td>
@@ -262,31 +430,116 @@ const retour = () => {
                                                     <span v-else class="text-gray-600">18%</span>
                                                 </td>
                                                 <td class="p-1 text-right font-bold text-gray-900">{{ Number(ligne.montant_ht).toLocaleString() }} F</td>
+                                                <td v-if="modeEdition" class="border-l border-gray-900 p-1 print:hidden">
+                                                    <button
+                                                        type="button"
+                                                        @click="supprimerLigne(ligne)"
+                                                        :disabled="lignesLocales.length <= 1"
+                                                        class="w-6 h-6 bg-rose-50 hover:bg-rose-500 text-rose-500 hover:text-white rounded flex items-center justify-center mx-auto border border-rose-200 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                                                        title="Supprimer la ligne"
+                                                    >
+                                                        <i class="fa-solid fa-trash-can text-[10px]"></i>
+                                                    </button>
+                                                </td>
                                             </tr>
                                         </template>
                                     </tbody>
                                 </table>
                             </div>
 
+                            <!-- Ajout d'une ligne (modification d'un devis accepté) -->
+                            <div v-if="modeEdition" class="mb-3 print:hidden border border-dashed border-gray-300 rounded-lg p-3 bg-white">
+                                <p class="text-xs font-bold uppercase tracking-wider text-gray-700 mb-2 flex items-center gap-2">
+                                    <i class="fa-solid fa-plus text-[#E11D48] text-[11px]"></i>
+                                    <span>Ajouter une ligne</span>
+                                </p>
+                                <div class="grid grid-cols-2 md:grid-cols-12 gap-2 text-xs">
+                                    <div class="col-span-2 md:col-span-5 relative">
+                                        <label class="block text-[10px] font-semibold text-gray-500 mb-0.5">Désignation * <span class="font-normal text-gray-400">(recherche dans le stock)</span></label>
+                                        <input
+                                            type="text"
+                                            v-model="nouvelleLigne.designation"
+                                            @input="surSaisieDesignation"
+                                            @focus="rechercherPiecesStock"
+                                            @blur="fermerSuggestions"
+                                            @keydown.enter.prevent="ajouterLigne"
+                                            placeholder="Ex: Plaquettes de frein"
+                                            autocomplete="off"
+                                            class="w-full rounded-lg border-gray-300 text-xs uppercase p-2 focus:border-[#E11D48] focus:ring-[#E11D48]"
+                                        />
+
+                                        <!-- Suggestions de pièces du stock (prix selon la marque / le modèle du véhicule) -->
+                                        <div v-if="suggestionsVisibles && resultatsPieces.length > 0" class="absolute left-0 right-0 z-[999] mt-1 bg-white border border-gray-200 rounded-lg shadow-2xl max-h-48 overflow-y-auto">
+                                            <div
+                                                v-for="piece in resultatsPieces"
+                                                :key="piece.id"
+                                                @mousedown.prevent="selectionnerPiece(piece)"
+                                                class="px-3 py-2 hover:bg-gray-100 cursor-pointer text-xs border-b border-gray-100 last:border-none flex justify-between items-center gap-3"
+                                            >
+                                                <div>
+                                                    <span class="font-bold text-gray-800 uppercase">{{ piece.designation_piece }}</span>
+                                                    <span v-if="piece.reference" class="text-[10px] text-gray-400 block">Réf: {{ piece.reference }}</span>
+                                                </div>
+                                                <span class="font-mono text-[#E11D48] font-semibold whitespace-nowrap">{{ piece.prix_kagnan_ht || piece.prix_marche_ht || 0 }} F</span>
+                                            </div>
+                                        </div>
+                                        <p v-else-if="suggestionsVisibles && chargementPieces" class="absolute left-0 mt-1 text-[10px] text-gray-400">Recherche...</p>
+                                    </div>
+                                    <div class="col-span-2 md:col-span-3">
+                                        <label class="block text-[10px] font-semibold text-gray-500 mb-0.5">Réf. pièce</label>
+                                        <input type="text" v-model="nouvelleLigne.reference_piece" @keydown.enter.prevent="ajouterLigne" class="w-full rounded-lg border-gray-300 text-xs p-2 focus:border-[#E11D48] focus:ring-[#E11D48]" />
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <label class="block text-[10px] font-semibold text-gray-500 mb-0.5">Quantité</label>
+                                        <input type="number" min="0" step="any" v-model="nouvelleLigne.quantite" @keydown.enter.prevent="ajouterLigne" class="w-full rounded-lg border-gray-300 text-xs p-2 focus:border-[#E11D48] focus:ring-[#E11D48]" />
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <label class="block text-[10px] font-semibold text-gray-500 mb-0.5">PU Net</label>
+                                        <input type="number" min="0" step="any" v-model="nouvelleLigne.pu_net" @keydown.enter.prevent="ajouterLigne" class="w-full rounded-lg border-gray-300 text-xs p-2 focus:border-[#E11D48] focus:ring-[#E11D48]" />
+                                    </div>
+                                    <div class="md:col-span-2">
+                                        <label class="block text-[10px] font-semibold text-gray-500 mb-0.5">Remise (%)</label>
+                                        <input type="number" min="0" max="100" step="any" v-model="nouvelleLigne.remise" @keydown.enter.prevent="ajouterLigne" class="w-full rounded-lg border-gray-300 text-xs p-2 focus:border-[#E11D48] focus:ring-[#E11D48]" />
+                                    </div>
+                                    <label class="col-span-2 md:col-span-3 flex items-end gap-1.5 pb-2 text-gray-600 font-medium">
+                                        <input type="checkbox" v-model="nouvelleLigne.ne_pas_appliquer_tva" class="rounded border-gray-300 text-[#E11D48] focus:ring-[#E11D48]" />
+                                        <span>Exonéré de TVA</span>
+                                    </label>
+                                    <div class="col-span-2 md:col-span-2 flex items-end">
+                                        <button type="button" @click="ajouterLigne" class="w-full px-3 py-2 bg-gray-800 hover:bg-gray-900 text-white font-bold uppercase tracking-wider rounded-lg transition text-[11px]">
+                                            Ajouter
+                                        </button>
+                                    </div>
+                                </div>
+                                <p v-if="erreurAjout" class="mt-2 text-[11px] font-bold text-[#E11D48]">{{ erreurAjout }}</p>
+                            </div>
+
                             <!-- Actions -->
                             <div class="mb-4 flex justify-between items-center print:hidden bg-gray-50 p-3 rounded-lg border border-gray-200">
-                                <span class="text-xs text-gray-600 font-medium">Cochez les lignes acceptées par le client puis enregistrez pour valider la facture définitive.</span>
+                                <span class="text-xs text-gray-600 font-medium">
+                                    {{ modeEdition
+                                        ? 'Ajoutez ou supprimez des lignes, cochez celles acceptées par le client puis enregistrez : tout est enregistré en une seule fois.'
+                                        : 'Cochez les lignes acceptées par le client puis enregistrez pour valider la facture définitive.' }}
+                                </span>
                                 <button 
                                     type="submit" 
                                     :disabled="form.processing"
                                     class="px-4 py-2 bg-[#E11D48] hover:bg-rose-700 text-white font-bold uppercase tracking-wider rounded-lg shadow transition text-xs"
                                 >
-                                    Enregistrer le choix du client
+                                    {{ modeEdition ? 'Enregistrer les modifications' : 'Enregistrer le choix du client' }}
                                 </button>
+                            </div>
+                            <div v-if="modeEdition && Object.keys(form.errors).length" class="mb-4 print:hidden bg-rose-50 border border-rose-200 text-[#E11D48] text-xs font-bold rounded-lg p-3">
+                                {{ Object.values(form.errors)[0] }}
                             </div>
 
                             <!-- Totaux -->
-                            <div class="flex justify-end mb-3" v-if="dossier.devis.lignes && dossier.devis.lignes.length > 0">
+                            <div class="flex justify-end mb-3" v-if="lignesDevis.length > 0">
                                 <div class="w-72 border border-gray-900 text-xs rounded-lg overflow-hidden shadow-sm">
                                     <div class="flex justify-between border-b border-gray-900 px-3 py-1 bg-gray-50">
                                         <span class="font-semibold text-gray-700">Total HT (Accepté)</span>
                                         <span class="font-medium">
-                                            {{ dossier.devis.lignes.filter(l => form.lignes_acceptees.includes(l.id)).reduce((acc, l) => acc + Number(l.montant_ht), 0).toLocaleString() }} F
+                                            {{ lignesDevis.filter(l => form.lignes_acceptees.includes(l.id)).reduce((acc, l) => acc + Number(l.montant_ht), 0).toLocaleString() }} F
                                         </span>
                                     </div>
                                     <div class="flex justify-between border-b border-gray-900 px-3 py-1 bg-white">
@@ -298,7 +551,7 @@ const retour = () => {
                                     <div class="flex justify-between border-b border-gray-900 px-3 py-1 bg-white">
                                         <span class="font-semibold text-gray-700">TVA Totale</span>
                                         <span class="font-medium">
-                                            {{ dossier.devis.lignes.filter(l => form.lignes_acceptees.includes(l.id)).reduce((acc, l) => acc + (Number(l.montant_ttc) - Number(l.montant_ht)), 0).toLocaleString() }} F
+                                            {{ lignesDevis.filter(l => form.lignes_acceptees.includes(l.id)).reduce((acc, l) => acc + (Number(l.montant_ttc) - Number(l.montant_ht)), 0).toLocaleString() }} F
                                         </span>
                                     </div>
                                     <div class="flex justify-between border-b border-gray-900 px-3 py-1 bg-gray-50">

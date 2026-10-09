@@ -7,6 +7,7 @@ use App\Models\Intervention;
 use App\Models\Devis;
 use App\Models\LigneDevis;
 use App\Models\Facture;
+use App\Models\Paiement;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
@@ -77,6 +78,13 @@ class DossierController extends Controller
     {
         $this->autoriser($dossier);
 
+        $etaitAccepte = $dossier->statut === 'accepte';
+
+        // Devis déjà accepté : on ne change plus le choix du client dès qu'un paiement existe
+        if ($etaitAccepte && $this->aDejaUnPaiement($dossier)) {
+            return back()->with('error', 'Un paiement a déjà été enregistré : le choix du client ne peut plus être modifié.');
+        }
+
         $request->validate([
             'lignes_acceptees' => 'array',
             'lignes_acceptees.*' => 'exists:lignes_devis,id',
@@ -104,7 +112,9 @@ class DossierController extends Controller
         });
 
         // Redirection : dashboard du chargé de suivi client, sinon liste d'attente
-        return $this->redirectApresAction('Choix du client enregistré avec succès. Le dossier a basculé dans les devis validés.');
+        return $etaitAccepte
+            ? $this->redirectApresAction('Choix du client mis à jour avec succès.', 'administration.devis.acceptes')
+            : $this->redirectApresAction('Choix du client enregistré avec succès. Le dossier a basculé dans les devis validés.');
     }
 
     public function show(Intervention $dossier)
@@ -155,17 +165,36 @@ class DossierController extends Controller
         return $this->redirectApresAction('Devis enregistré avec succès.', 'administration.dossiers.index');
     }
 
+    /** Le dossier a-t-il déjà reçu au moins un versement (même un premier versement partiel) ? */
+    private function aDejaUnPaiement(Intervention $dossier): bool
+    {
+        return Paiement::whereIn(
+            'facture_id',
+            Facture::where('intervention_id', $dossier->id)->select('id')
+        )->exists();
+    }
+
     /**
-     * Seul un devis encore en attente de validation client peut être modifié.
+     * Un devis peut être modifié :
+     *  - tant qu'il est en attente de validation client ;
+     *  - ou une fois accepté, mais seulement si AUCUN paiement n'a encore été enregistré.
      */
     private function verifierDevisModifiable(Intervention $dossier): void
     {
-        abort_unless(
-            $dossier->statut === 'attente_accord'
-                && $dossier->devis
-                && $dossier->devis->statut === 'en_attente',
+        $enAttente = $dossier->statut === 'attente_accord'
+            && $dossier->devis
+            && $dossier->devis->statut === 'en_attente';
+
+        $accepte = $dossier->statut === 'accepte'
+            && $dossier->devis
+            && $dossier->devis->statut === 'accepte';
+
+        abort_unless($enAttente || $accepte, 403, 'Ce devis ne peut plus être modifié.');
+
+        abort_if(
+            $accepte && $this->aDejaUnPaiement($dossier),
             403,
-            'Ce devis ne peut plus être modifié.'
+            'Un paiement a déjà été enregistré : ce devis ne peut plus être modifié.'
         );
     }
 
@@ -176,6 +205,14 @@ class DossierController extends Controller
         $this->verifierDevisModifiable($dossier);
 
         $dossier->load(['vehicule.client', 'mecanicien', 'receptionniste', 'devis.lignes']);
+
+        // Devis déjà accepté : même page que « Traiter » (cases à cocher), avec ajout / suppression de lignes
+        if ($dossier->statut === 'accepte') {
+            return Inertia::render('Administration/FacturationShow', [
+                'dossier' => $dossier,
+                'modeEdition' => true,
+            ]);
+        }
 
         return Inertia::render('Administration/DossierShow', [
             'dossier' => $dossier,
@@ -191,6 +228,7 @@ class DossierController extends Controller
 
         $request->validate([
             'lignes' => 'required|array|min:1',
+            'lignes.*.is_accepted' => 'nullable|boolean',
             'lignes.*.quantite' => 'required|numeric|min:0',
             'lignes.*.designation' => 'required|string',
             'lignes.*.pu_net' => 'required|numeric|min:0',
@@ -203,15 +241,36 @@ class DossierController extends Controller
             'petite_fourniture_montant' => 'nullable|integer|min:0',
         ]);
 
-        DB::transaction(function () use ($request, $dossier) {
+        // Devis déjà accepté (sans paiement) : il reste accepté, le dossier reste dans les devis validés
+        $etaitAccepte = $dossier->statut === 'accepte';
+
+        $lignes = $request->lignes;
+
+        if ($etaitAccepte) {
+            // Cases cochées / décochées envoyées avec les lignes (une ligne sans valeur est acceptée)
+            foreach ($lignes as $k => $ligne) {
+                $lignes[$k]['is_accepted'] = (bool) ($ligne['is_accepted'] ?? true);
+            }
+        } else {
+            // Devis en attente : l'acceptation se fait plus tard sur la page de facturation
+            foreach ($lignes as $k => $ligne) {
+                unset($lignes[$k]['is_accepted']);
+            }
+        }
+
+        DB::transaction(function () use ($request, $dossier, $lignes) {
             $devis = $dossier->devis;
 
-            // Le client n'a encore rien validé : on peut remplacer les lignes
+            // Aucun paiement (ou devis non encore validé) : on peut remplacer les lignes
             $devis->lignes()->delete();
-            $this->creerLignesDevis($devis, $request->lignes);
+            $this->creerLignesDevis($devis, $lignes);
             $this->appliquerPetiteFourniture($devis, $request);
             $devis->touch();
         });
+
+        if ($etaitAccepte) {
+            return $this->redirectApresAction('Devis modifié avec succès.', 'administration.devis.acceptes');
+        }
 
         return $this->redirectApresAction('Devis modifié avec succès.');
     }
@@ -229,14 +288,13 @@ class DossierController extends Controller
         ]);
     }
 
-    // NOUVELLE VUE : Devis validés par le client (filtrés par circuit normal et recherche)
+    // NOUVELLE VUE : Devis validés par le client (circuit normal et devis directs, avec recherche)
     public function devisAcceptesIndex(Request $request)
     {
         $search = $request->input('search');
 
         $dossiers = Intervention::duSiege()->with(['vehicule.client', 'devis.lignes', 'mecanicien'])
-            ->where('statut', 'accepte')
-            ->where('circuit', 'normal') // On filtre par circuit normal
+            ->where('statut', 'accepte') // circuit normal ET devis directs
             ->when($search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
                     // Recherche par numéro d'OT
@@ -250,6 +308,16 @@ class DossierController extends Controller
             })
             ->latest()
             ->get();
+
+        // Dossiers ayant déjà au moins un versement : leur devis n'est plus modifiable
+        $facturesPayees = Paiement::whereIn(
+            'facture_id',
+            Facture::whereIn('intervention_id', $dossiers->pluck('id'))->select('id')
+        )->pluck('facture_id')->unique();
+
+        $dossiersPayes = Facture::whereIn('id', $facturesPayees)->pluck('intervention_id');
+
+        $dossiers->each(fn ($d) => $d->setAttribute('a_paiement', $dossiersPayes->contains($d->id)));
 
         return Inertia::render('Administration/DevisAcceptesIndex', [
             'dossiers' => $dossiers,
@@ -477,7 +545,12 @@ class DossierController extends Controller
             $famille = !empty($ligne['famille']) ? $ligne['famille'] : null;
             $sousFamille = ($famille && !empty($ligne['sous_famille'])) ? $ligne['sous_famille'] : null;
 
-            LigneDevis::create([
+            // Renseigné uniquement lors de la modification d'un devis déjà accepté
+            $acceptation = array_key_exists('is_accepted', $ligne)
+                ? ['is_accepted' => (bool) $ligne['is_accepted']]
+                : [];
+
+            LigneDevis::create($acceptation + [
                 'devis_id' => $devis->id,
                 'quantite' => $qte,
                 'designation' => $ligne['designation'],
