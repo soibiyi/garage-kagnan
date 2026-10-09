@@ -319,9 +319,12 @@ class DossierController extends Controller
         $request->validate([
             'vehicule_id' => 'nullable|exists:vehicules,id',
             'nouveau_client_nom' => 'required_without:vehicule_id|nullable|string|max:255',
-            'nouveau_client_prenom' => 'nullable|string|max:255',
+            'nouveau_client_prenom' => 'required_without:vehicule_id|nullable|string|max:255',
+            'nouveau_client_telephone' => 'nullable|string|max:50',
             'nouvelle_marque' => 'required_without:vehicule_id|nullable|string|max:255',
             'nouveau_modele' => 'required_without:vehicule_id|nullable|string|max:255',
+            'nouvelle_immatriculation' => 'nullable|string|max:50',
+            'kilometrage' => 'nullable|integer|min:0',
             'remarques' => 'nullable|string',
             'lignes' => 'required|array|min:1',
             'lignes.*.quantite' => 'required|numeric|min:0',
@@ -334,6 +337,13 @@ class DossierController extends Controller
             'lignes.*.sous_famille' => 'nullable|string|max:100',
             'petite_fourniture_active' => 'nullable|boolean',
             'petite_fourniture_montant' => 'nullable|integer|min:0',
+        ], [
+            'nouveau_client_nom.required_without' => 'Le nom du client est obligatoire.',
+            'nouveau_client_prenom.required_without' => 'Le prénom du client est obligatoire.',
+            'nouvelle_marque.required_without' => 'La marque du véhicule est obligatoire.',
+            'nouveau_modele.required_without' => 'Le modèle du véhicule est obligatoire.',
+            'kilometrage.integer' => 'Le kilométrage doit être un nombre entier.',
+            'kilometrage.min' => 'Le kilométrage ne peut pas être négatif.',
         ]);
 
         $user = auth()->user();
@@ -346,29 +356,42 @@ class DossierController extends Controller
             $vehiculeId = $request->vehicule_id;
 
             if (!$vehiculeId) {
-                $client = \App\Models\Client::firstOrCreate(
-                    ['nom' => $request->nouveau_client_nom],
-                    [
-                        'prenom' => $request->nouveau_client_prenom ?? '', 
-                        'telephone' => $request->nouveau_client_telephone ?? '00000000'
-                    ]
-                );
+                // Immatriculation facultative : si elle existe déjà, on réutilise ce véhicule
+                $immat = $request->filled('nouvelle_immatriculation')
+                    ? strtoupper(trim($request->nouvelle_immatriculation))
+                    : null;
 
-                $vehicule = \App\Models\Vehicule::create([
-                    'client_id' => $client->id,
-                    'marque' => $request->nouvelle_marque,
-                    'modele' => $request->nouveau_modele,
-                    'immatriculation' => 'TEMP-' . uniqid(),
-                ]);
+                $vehiculeExistant = $immat
+                    ? \App\Models\Vehicule::where('immatriculation', $immat)->first()
+                    : null;
 
-                $vehiculeId = $vehicule->id;
+                if ($vehiculeExistant) {
+                    $vehiculeId = $vehiculeExistant->id;
+                } else {
+                    $client = \App\Models\Client::firstOrCreate(
+                        ['nom' => $request->nouveau_client_nom],
+                        [
+                            'prenom' => $request->nouveau_client_prenom ?? '',
+                            'telephone' => $request->nouveau_client_telephone ?: '00000000',
+                        ]
+                    );
+
+                    $vehicule = \App\Models\Vehicule::create([
+                        'client_id' => $client->id,
+                        'marque' => $request->nouvelle_marque,
+                        'modele' => $request->nouveau_modele,
+                        'immatriculation' => $immat ?: 'TEMP-' . uniqid(),
+                    ]);
+
+                    $vehiculeId = $vehicule->id;
+                }
             }
 
             $dossier = Intervention::create([
                 'vehicule_id' => $vehiculeId,
                 'circuit' => 'devis_direct',
                 'siege' => $siege,
-                'kilometrage' => 0, 
+                'kilometrage' => (int) $request->input('kilometrage', 0),
                 'date_reception' => now(),
                 'receptionniste_id' => auth()->id(),
                 'statut' => 'attente_accord',

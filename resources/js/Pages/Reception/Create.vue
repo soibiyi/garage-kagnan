@@ -244,8 +244,9 @@ const stepErrors = (step) => {
 
     if (step === 1) {
         if (isNewClientMode.value) {
-            ['nom', 'prenom', 'telephone', 'email', 'adresse'].forEach(exiger);
-            if (!e.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+            ['nom', 'prenom', 'telephone'].forEach(exiger);
+            // E-mail facultatif : on ne vérifie le format que s'il est renseigné
+            if (estRempli(form.email) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
                 e.email = "L'adresse e-mail n'est pas valide.";
             }
         } else if (!form.client_id) {
@@ -259,7 +260,7 @@ const stepErrors = (step) => {
 
     if (step === 3) {
         if (!props.siege) exiger('siege');
-        ['date_reception', 'kilometrage', 'personne_a_contacter', 'niveau_carburant', 'intervalle_niveau_carburant'].forEach(exiger);
+        ['date_reception', 'kilometrage', 'niveau_carburant'].forEach(exiger);
         if (!e.kilometrage && (!Number.isInteger(Number(form.kilometrage)) || Number(form.kilometrage) < 0)) {
             e.kilometrage = 'Le kilométrage doit être un nombre entier positif.';
         }
@@ -744,13 +745,13 @@ const submit = () => {
                                     <p v-if="err('telephone')" class="mt-1 text-xs font-bold text-[#E11D48]">{{ err('telephone') }}</p>
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">E-mail *</label>
-                                    <input type="email" v-model="form.email" required class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]" placeholder="email@example.com" />
+                                    <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">E-mail</label>
+                                    <input type="email" v-model="form.email" class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]" placeholder="email@example.com" />
                                     <p v-if="err('email')" class="mt-1 text-xs font-bold text-[#E11D48]">{{ err('email') }}</p>
                                 </div>
                                 <div class="sm:col-span-2">
-                                    <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Adresse *</label>
-                                    <textarea v-model="form.adresse" rows="2" required class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]"></textarea>
+                                    <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Adresse</label>
+                                    <textarea v-model="form.adresse" rows="2" class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]"></textarea>
                                     <p v-if="err('adresse')" class="mt-1 text-xs font-bold text-[#E11D48]">{{ err('adresse') }}</p>
                                 </div>
                             </div>
@@ -847,8 +848,8 @@ const submit = () => {
                             </div>
 
                             <div>
-                                <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Personne à contacter *</label>
-                                <input type="text" v-model="form.personne_a_contacter" required class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]" placeholder="Nom ou téléphone" />
+                                <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Personne à contacter</label>
+                                <input type="text" v-model="form.personne_a_contacter" class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]" placeholder="Nom ou téléphone" />
                                 <p v-if="err('personne_a_contacter')" class="mt-1 text-xs font-bold text-[#E11D48]">{{ err('personne_a_contacter') }}</p>
                             </div>
 
@@ -865,8 +866,8 @@ const submit = () => {
                             </div>
 
                             <div>
-                                <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Précision niveau / Jauge *</label>
-                                <input type="text" v-model="form.intervalle_niveau_carburant" required class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]" placeholder="ex: Exactement la moitié" />
+                                <label class="block text-xs font-black text-[#0B0F19] uppercase tracking-wider mb-2">Précision niveau / Jauge</label>
+                                <input type="text" v-model="form.intervalle_niveau_carburant" class="w-full rounded-2xl border-gray-200 bg-[#F8FAFC] text-sm p-3.5 shadow-xs focus:border-[#E11D48] focus:ring-[#E11D48]" placeholder="ex: Exactement la moitié" />
                                 <p v-if="err('intervalle_niveau_carburant')" class="mt-1 text-xs font-bold text-[#E11D48]">{{ err('intervalle_niveau_carburant') }}</p>
                             </div>
 

@@ -119,6 +119,7 @@ Route::middleware(['auth'])->prefix('parc')->name('parc.')->group(function () {
     Route::patch('/{id}/avancer', [VehiculeParcController::class, 'updateProgress'])->name('progress'); 
     Route::patch('/{id}/vehicule', [VehiculeParcController::class, 'updateVehicule'])->name('vehicule.update');
 Route::patch('/{id}/client', [VehiculeParcController::class, 'updateClient'])->name('client.update');
+Route::delete('/{id}', [VehiculeParcController::class, 'destroy'])->name('destroy');
 });
 
 // ==========================================

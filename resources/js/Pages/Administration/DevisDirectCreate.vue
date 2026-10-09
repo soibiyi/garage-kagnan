@@ -42,8 +42,11 @@ const form = useForm({
     vehicule_id: '',
     nouveau_client_nom: '',
     nouveau_client_prenom: '', 
+    nouveau_client_telephone: '',
     nouvelle_marque: '',
     nouveau_modele: '',
+    nouvelle_immatriculation: '',
+    kilometrage: '',
     remarques: '',
     petite_fourniture_active: true,
     petite_fourniture_montant: '',
@@ -233,20 +236,39 @@ const submitDevis = () => {
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                             <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Nom du Client</label>
-                                <input type="text" v-model="form.nouveau_client_nom" placeholder="Ex: Kouassi" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Nom du Client <span class="text-[#E11D48]">*</span></label>
+                                <input type="text" v-model="form.nouveau_client_nom" required placeholder="Ex: Kouassi" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+                                <p v-if="form.errors.nouveau_client_nom" class="mt-1 text-[11px] font-bold text-[#E11D48]">{{ form.errors.nouveau_client_nom }}</p>
                             </div>
                             <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Prénom du Client</label>
-                                <input type="text" v-model="form.nouveau_client_prenom" placeholder="Ex: Jean" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Prénom du Client <span class="text-[#E11D48]">*</span></label>
+                                <input type="text" v-model="form.nouveau_client_prenom" required placeholder="Ex: Jean" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+                                <p v-if="form.errors.nouveau_client_prenom" class="mt-1 text-[11px] font-bold text-[#E11D48]">{{ form.errors.nouveau_client_prenom }}</p>
                             </div>
                             <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Marque du Véhicule</label>
-                                <input type="text" v-model="form.nouvelle_marque" placeholder="Ex: Toyota" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Numéro de téléphone</label>
+                                <input type="text" v-model="form.nouveau_client_telephone" placeholder="Ex: 0700000000" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+                                <p v-if="form.errors.nouveau_client_telephone" class="mt-1 text-[11px] font-bold text-[#E11D48]">{{ form.errors.nouveau_client_telephone }}</p>
                             </div>
                             <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Modèle du Véhicule</label>
-                                <input type="text" v-model="form.nouveau_modele" placeholder="Ex: Corolla" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Marque du Véhicule <span class="text-[#E11D48]">*</span></label>
+                                <input type="text" v-model="form.nouvelle_marque" required placeholder="Ex: Toyota" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+                                <p v-if="form.errors.nouvelle_marque" class="mt-1 text-[11px] font-bold text-[#E11D48]">{{ form.errors.nouvelle_marque }}</p>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Modèle du Véhicule <span class="text-[#E11D48]">*</span></label>
+                                <input type="text" v-model="form.nouveau_modele" required placeholder="Ex: Corolla" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+                                <p v-if="form.errors.nouveau_modele" class="mt-1 text-[11px] font-bold text-[#E11D48]">{{ form.errors.nouveau_modele }}</p>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Immatriculation</label>
+                                <input type="text" v-model="form.nouvelle_immatriculation" placeholder="Ex: 1234 AB 01" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+                                <p v-if="form.errors.nouvelle_immatriculation" class="mt-1 text-[11px] font-bold text-[#E11D48]">{{ form.errors.nouvelle_immatriculation }}</p>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Kilométrage</label>
+                                <input type="number" min="0" v-model="form.kilometrage" placeholder="Ex: 45000" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+                                <p v-if="form.errors.kilometrage" class="mt-1 text-[11px] font-bold text-[#E11D48]">{{ form.errors.kilometrage }}</p>
                             </div>
                         </div>
                     </div>

@@ -3,9 +3,13 @@
 namespace App\Http\Controllers\Reception;
 
 use App\Http\Controllers\Controller;
+use App\Models\Facture;
 use App\Models\Intervention;
+use App\Models\Paiement;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Illuminate\Validation\Rule;
 
@@ -158,6 +162,56 @@ public function updateClient(Request $request, $id)
     $client->update($data);
 
     return back()->with('success', 'Informations du client mises à jour.');
+}
+
+/**
+ * Supprime UN dossier (une intervention) : sa facture et ses paiements, son devis et ses lignes,
+ * ses photos. Le véhicule et le client ne sont jamais supprimés : un client qui possède
+ * d'autres véhicules / dossiers les garde intacts.
+ */
+public function destroy($id)
+{
+    $this->autoriserModification();
+
+    $intervention = Intervention::duSiege()->with('devis')->findOrFail($id);
+
+    // Photos à effacer du disque (après la suppression en base)
+    $photos = collect([
+        $intervention->photo_avant,
+        $intervention->photo_arriere,
+        $intervention->photo_gauche,
+        $intervention->photo_droite,
+    ]);
+
+    $supp = $intervention->photos_supplementaires;
+    if (is_string($supp)) {
+        $supp = json_decode($supp, true);
+    }
+    $photos = $photos->merge((array) $supp)->filter()->unique()->values();
+
+    $numeroOt = $intervention->numero_ot;
+
+    DB::transaction(function () use ($intervention) {
+        // Facture et paiements de ce dossier
+        if ($facture = Facture::where('intervention_id', $intervention->id)->first()) {
+            Paiement::where('facture_id', $facture->id)->delete();
+            $facture->delete();
+        }
+
+        // Devis et lignes de ce dossier
+        if ($intervention->devis) {
+            $intervention->devis->lignes()->delete();
+            $intervention->devis->delete();
+        }
+
+        $intervention->delete();
+    });
+
+    foreach ($photos as $chemin) {
+        Storage::disk('public')->delete($chemin);
+    }
+
+    return back()->with('success', 'Le dossier ' . ($numeroOt ?: '') . ' a été supprimé.');
 }
 
 }

@@ -70,6 +70,32 @@ onMounted(() => {
     }
 });
 
+// Suppression d'un dossier (un seul véhicule / une seule intervention)
+const dossierASupprimer = ref(null);
+const suppressionEnCours = ref(false);
+
+const demanderSuppression = (item) => {
+    dossierASupprimer.value = item;
+};
+
+const annulerSuppression = () => {
+    if (suppressionEnCours.value) return;
+    dossierASupprimer.value = null;
+};
+
+const confirmerSuppression = () => {
+    if (!dossierASupprimer.value || suppressionEnCours.value) return;
+
+    suppressionEnCours.value = true;
+    router.delete(route('parc.destroy', dossierASupprimer.value.id), {
+        preserveScroll: true,
+        onFinish: () => {
+            suppressionEnCours.value = false;
+            dossierASupprimer.value = null;
+        },
+    });
+};
+
 // Méthode de déconnexion avec nettoyage de session
 const logout = () => {
     sessionStorage.removeItem('dashboard_loaded');
@@ -240,6 +266,14 @@ const logout = () => {
                                                     <span>Consulter</span>
                                                     <i class="fa-solid fa-arrow-right text-[10px]"></i>
                                                 </Link>
+                                                <button
+                                                    type="button"
+                                                    @click="demanderSuppression(item)"
+                                                    class="text-[#8A8D8F] font-extrabold hover:text-[#E11D48] transition inline-flex items-center gap-1.5 text-xs"
+                                                >
+                                                    <i class="fa-solid fa-trash text-[10px]"></i>
+                                                    <span>Supprimer</span>
+                                                </button>
                                             </td>
                                         </tr>
                                     </tbody>
@@ -517,6 +551,30 @@ const logout = () => {
                     </div>
                 </div>
 
+            </div>
+        </div>
+
+        <!-- MODALE : CONFIRMATION DE SUPPRESSION D'UN DOSSIER -->
+        <div v-if="dossierASupprimer" class="fixed inset-0 z-50 flex items-center justify-center bg-[#0B0F19]/60 px-4" @click.self="annulerSuppression">
+            <div class="w-full max-w-md bg-white rounded-3xl border border-gray-200 shadow-xl p-6 space-y-4">
+                <h3 class="text-lg font-black text-[#0B0F19]">Supprimer ce dossier ?</h3>
+                <p class="text-sm text-gray-600 font-medium">
+                    Dossier <span class="font-extrabold text-[#0B0F19]">{{ dossierASupprimer.numero_ot || 'N/A' }}</span> —
+                    {{ dossierASupprimer.vehicule?.marque }} {{ dossierASupprimer.vehicule?.modele }}
+                    ({{ dossierASupprimer.vehicule?.immatriculation }}).
+                </p>
+                <p class="text-xs text-[#E11D48] font-bold bg-[#E11D48]/5 border border-[#E11D48]/20 rounded-xl p-3">
+                    Cette action est définitive : la fiche de réception, les photos, le devis et la facture (avec ses paiements) de ce dossier seront supprimés.
+                    Le client et ses autres véhicules ne sont pas touchés.
+                </p>
+                <div class="flex justify-end gap-3 pt-2">
+                    <button type="button" @click="annulerSuppression" :disabled="suppressionEnCours" class="px-4 py-2 text-xs font-bold rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition">
+                        Annuler
+                    </button>
+                    <button type="button" @click="confirmerSuppression" :disabled="suppressionEnCours" class="px-4 py-2 text-xs font-bold rounded-xl bg-[#E11D48] text-white hover:bg-[#BE123C] transition disabled:opacity-60">
+                        {{ suppressionEnCours ? 'Suppression...' : 'Oui, supprimer' }}
+                    </button>
+                </div>
             </div>
         </div>
     </AuthenticatedLayout>
