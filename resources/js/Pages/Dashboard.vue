@@ -534,6 +534,20 @@ const logout = () => {
                                 </span>
                             </Link>
 
+                            <!-- Devis Acceptés (mêmes routes que l'administration) -->
+                            <Link :href="route('administration.devis.acceptes')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#E11D48] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs">
+                                <div class="space-y-1.5">
+                                    <div class="flex items-center gap-2.5 text-[#E11D48]">
+                                        <i class="fa-solid fa-clipboard-check text-base"></i>
+                                        <h4 class="font-extrabold text-[#0B0F19] group-hover:text-[#E11D48] transition">Devis Acceptés</h4>
+                                    </div>
+                                    <p class="text-xs text-[#8A8D8F] font-medium">Devis validés par le client : modifier les lignes et les choix du client tant qu'aucun paiement n'est enregistré.</p>
+                                </div>
+                                <span class="w-10 h-10 rounded-xl bg-white border border-gray-200 flex items-center justify-center text-[#E11D48] group-hover:bg-[#E11D48] group-hover:text-white group-hover:border-[#E11D48] transition-all shadow-xs shrink-0">
+                                    <i class="fa-solid fa-arrow-right text-xs"></i>
+                                </span>
+                            </Link>
+
                             <!-- Devis Direct (mêmes routes que l'administration) -->
                             <Link :href="route('administration.devis.directs.index')" class="p-6 bg-[#F8FAFC] rounded-2xl border border-gray-200/80 hover:border-[#E11D48] hover:bg-white transition-all duration-300 flex items-center justify-between group shadow-xs">
                                 <div class="space-y-1.5">
