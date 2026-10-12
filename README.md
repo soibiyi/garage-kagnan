@@ -42,32 +42,113 @@ Application web de **gestion de garage** : réception des véhicules, suivi des 
 
 ## Architecture
 
+Chaque contrôleur renvoie une page Inertia : Laravel gère la logique et les données, Vue gère l'affichage, sans API séparée.
+
 ```mermaid
 flowchart TD
-  Nav[Navigateur] --> Web[routes/web.php + AdminMiddleware]
-  Web --> Auth[Auth / Profil]
-  Web --> Rec[Réception + Parc]
-  Web --> Meca[Mécanicien]
-  Web --> CC[Chargé client]
-  Web --> Adm[Administratif]
-  Web --> Admin[Admin utilisateurs + CA]
 
-  Rec --> Client
-  Rec --> Vehicule
-  Rec --> Intervention
-  Meca --> Intervention
-  CC --> Client
-  CC --> Vehicule
-  CC --> InteractionClient
-  Adm --> Devis --> LigneDevis
-  Adm --> Facture --> Paiement
-  Adm --> Stock
-  Admin --> User
+subgraph group_access["Access and interface"]
+  node_routes["Web routes<br/>[web.php]"]
+  node_auth["Authentication"]
+  node_registration["Registration"]
+  node_profile["User profile"]
+  node_inertia["Inertia bridge"]
+  node_vue["Vue pages"]
+end
 
-  Web --> Inertia[Inertia + pages Vue]
+subgraph group_workshop["Workshop operations"]
+  node_reception["Vehicle reception"]
+  node_fleet["Vehicle fleet"]
+  node_mechanic["Mechanic workflow"]
+  node_dossiers["Intervention dossiers"]
+end
+
+subgraph group_customer["Customer relations"]
+  node_clientwork["Client relations"]
+  node_interactions["Client interactions"]
+end
+
+subgraph group_admin["Administration"]
+  node_quotes["Quotes and lines"]
+  node_smallparts["Small-supply pricing"]
+  node_billing["Invoicing and payments"]
+  node_stock["Stock management"]
+  node_users["User administration<br/>[UserController.php]"]
+end
+
+subgraph group_domain["Domain data"]
+  node_clients[("Clients<br/>[Client.php]")]
+  node_vehicles[("Vehicles<br/>[Vehicule.php]")]
+  node_interventions[("Interventions<br/>[Intervention.php]")]
+  node_devis[("Quotes<br/>[Devis.php]")]
+  node_quote_lines[("Quote lines<br/>[LigneDevis.php]")]
+  node_invoices[("Invoices<br/>[Facture.php]")]
+  node_payments[("Payments<br/>[Paiement.php]")]
+  node_stockdata[("Stock records<br/>[Stock.php]")]
+  node_usersdata[("User accounts<br/>[User.php]")]
+end
+
+node_browser(("Staff browser"))
+
+node_browser -->|"requests"| node_routes
+node_routes -->|"routes to"| node_auth
+node_routes -->|"routes to"| node_registration
+node_routes -.->|"routes to"| node_profile
+node_routes -->|"routes to"| node_reception
+node_routes -->|"routes to"| node_fleet
+node_routes -->|"routes to"| node_mechanic
+node_routes -->|"routes to"| node_clientwork
+node_routes -->|"routes to"| node_dossiers
+node_routes -->|"routes to"| node_users
+node_routes -->|"routes to"| node_quotes
+node_routes -->|"routes to"| node_billing
+node_routes -->|"routes to"| node_stock
+node_routes -->|"uses middleware"| node_inertia
+node_auth -->|"renders through"| node_inertia
+node_registration -->|"creates account"| node_usersdata
+node_reception -->|"creates and reads"| node_clients
+node_reception -->|"creates and reads"| node_vehicles
+node_reception -->|"creates dossier"| node_interventions
+node_mechanic -->|"reads assignments"| node_interventions
+node_fleet -->|"reads dossiers"| node_interventions
+node_dossiers -->|"updates dossiers"| node_interventions
+node_dossiers -->|"creates and updates"| node_devis
+node_dossiers -->|"creates lines"| node_quote_lines
+node_dossiers -->|"calculates charges"| node_smallparts
+node_dossiers -->|"checks invoices"| node_invoices
+node_dossiers -->|"checks payments"| node_payments
+node_quotes -->|"manages quotes"| node_devis
+node_quotes -->|"manages lines"| node_quote_lines
+node_quotes -->|"applies pricing"| node_smallparts
+node_clientwork -->|"reads client records"| node_clients
+node_clientwork -->|"reads vehicle records"| node_vehicles
+node_clientwork -->|"reads and updates"| node_interventions
+node_clientwork -->|"records interactions"| node_interactions
+node_users -->|"manages accounts"| node_usersdata
+node_users -->|"queries revenue"| node_invoices
+node_users -->|"aggregates revenue"| node_payments
+node_billing -->|"manages invoices"| node_invoices
+node_billing -->|"records payments"| node_payments
+node_stock -.->|"manages stock"| node_stockdata
+node_inertia -->|"renders pages"| node_vue
+node_vehicles -->|"belongs to"| node_clients
+node_vehicles -->|"has many"| node_interventions
+node_interventions -->|"has quote"| node_devis
+node_devis -->|"contains"| node_quote_lines
+node_interventions -->|"has invoice"| node_invoices
+node_invoices -->|"has payments"| node_payments
+
+classDef toneBlue fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#172554
+classDef toneAmber fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#78350f
+classDef toneMint fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
+classDef toneRose fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px,color:#881337
+classDef toneIndigo fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#312e81
+class node_routes,node_auth,node_registration,node_profile,node_inertia,node_vue,node_browser toneBlue
+class node_reception,node_fleet,node_mechanic,node_dossiers toneAmber
+class node_clientwork,node_interactions toneMint
+class node_quotes,node_smallparts,node_billing,node_stock,node_users toneRose
+class node_clients,node_vehicles,node_interventions,node_devis,node_quote_lines,node_invoices,node_payments,node_stockdata,node_usersdata toneIndigo
 ```
-
-Chaque contrôleur renvoie une page Inertia : le serveur Laravel gère la logique et les données, Vue gère l'affichage, sans API séparée.
 
 ## Modèle de données
 
@@ -76,11 +157,10 @@ erDiagram
   CLIENT ||--o{ VEHICULE : possede
   CLIENT ||--o{ INTERACTION_CLIENT : a
   VEHICULE ||--o{ INTERVENTION : subit
-  INTERVENTION ||--o{ DEVIS : genere
+  INTERVENTION ||--o| DEVIS : a
   DEVIS ||--o{ LIGNE_DEVIS : contient
-  DEVIS ||--o| FACTURE : donne
+  INTERVENTION ||--o| FACTURE : a
   FACTURE ||--o{ PAIEMENT : recoit
-  USER ||--o{ INTERACTION_CLIENT : saisit
 ```
 
 Modèles : `Client`, `Vehicule`, `Intervention`, `Devis`, `LigneDevis`, `Facture`, `Paiement`, `Stock`, `InteractionClient`, `User`.
@@ -201,7 +281,7 @@ tests/                  Tests Feature et Unit
 
 ## Auteurs
 
-Projet développé  **EN EQUIPE** : [@soibiyi](https://github.com/soibiyi), [@cheick](https://github.com/suuuperhackerhumann), ange836 et Ayo Mark.
+Projet développé par l'équipe **soibiyi** : [@soibiyi](https://github.com/soibiyi),[@cheick](https://github.com/suuuperhackerhumann), ange836 et Ayo Mark.
 
 ## Licence
 
