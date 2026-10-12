@@ -1,59 +1,208 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Garage Kagnan
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Application web de **gestion de garage** : réception des véhicules, suivi des interventions, devis, facturation, stock, relation client et pilotage administratif, avec prise en charge de **plusieurs sièges**.
 
-## About Laravel
+[![Architecture diagram of soibiyi/garage-kagnan](https://gitdiagram.com/soibiyi/garage-kagnan/diagram.png)](https://gitdiagram.com/soibiyi/garage-kagnan?utm_source=readme&utm_medium=picture)
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Sommaire
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- [Fonctionnalités](#fonctionnalités)
+- [Stack technique](#stack-technique)
+- [Architecture](#architecture)
+- [Modèle de données](#modèle-de-données)
+- [Installation](#installation)
+- [Lancement avec Docker](#lancement-avec-docker)
+- [Tests](#tests)
+- [Workflow Git](#workflow-git)
+- [Structure du projet](#structure-du-projet)
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Fonctionnalités
 
-## Learning Laravel
+| Module | Description |
+|---|---|
+| **Authentification** | Connexion, inscription, réinitialisation du mot de passe, vérification d'e-mail, profil (Laravel Breeze). |
+| **Réception** | Enregistrement du client et du véhicule, création de l'intervention, photos (y compris photos supplémentaires), gestion du parc. |
+| **Mécanicien** | Vue dédiée aux interventions en cours. |
+| **Chargé client** | Fiches clients et véhicules, historique des interventions, relances, suivi des interactions. |
+| **Devis** | Devis directs, modification, acceptation (ligne par ligne), historique, petites fournitures et remises. |
+| **Facturation** | Factures, paiements, export natif des factures. |
+| **Stock** | Articles, familles et sous-familles, contrôle du stock. |
+| **Administration** | Gestion des utilisateurs, tableau de bord, chiffre d'affaires par zone. |
+| **Multi-sièges** | Filtre et sélecteur de siège, données rattachées à un siège (`config/sieges.php`). |
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+## Stack technique
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+- **Backend** : Laravel (PHP), Eloquent, migrations, seeders
+- **Frontend** : Vue.js 3 avec Inertia.js, Tailwind CSS, Vite
+- **Authentification** : Laravel Breeze
+- **Base de données** : MySQL
+- **Routes côté JS** : Ziggy
+- **Déploiement** : Docker (PHP + Nginx), configuration de production incluse
+- **Qualité** : PHPUnit, StyleCI, GitHub Actions (tests, changelog)
 
-## Laravel Sponsors
+## Architecture
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+```mermaid
+flowchart TD
+  Nav[Navigateur] --> Web[routes/web.php + AdminMiddleware]
+  Web --> Auth[Auth / Profil]
+  Web --> Rec[Réception + Parc]
+  Web --> Meca[Mécanicien]
+  Web --> CC[Chargé client]
+  Web --> Adm[Administratif]
+  Web --> Admin[Admin utilisateurs + CA]
 
-### Premium Partners
+  Rec --> Client
+  Rec --> Vehicule
+  Rec --> Intervention
+  Meca --> Intervention
+  CC --> Client
+  CC --> Vehicule
+  CC --> InteractionClient
+  Adm --> Devis --> LigneDevis
+  Adm --> Facture --> Paiement
+  Adm --> Stock
+  Admin --> User
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+  Web --> Inertia[Inertia + pages Vue]
+```
 
-## Contributing
+Chaque contrôleur renvoie une page Inertia : le serveur Laravel gère la logique et les données, Vue gère l'affichage, sans API séparée.
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Modèle de données
 
-## Code of Conduct
+```mermaid
+erDiagram
+  CLIENT ||--o{ VEHICULE : possede
+  CLIENT ||--o{ INTERACTION_CLIENT : a
+  VEHICULE ||--o{ INTERVENTION : subit
+  INTERVENTION ||--o{ DEVIS : genere
+  DEVIS ||--o{ LIGNE_DEVIS : contient
+  DEVIS ||--o| FACTURE : donne
+  FACTURE ||--o{ PAIEMENT : recoit
+  USER ||--o{ INTERACTION_CLIENT : saisit
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Modèles : `Client`, `Vehicule`, `Intervention`, `Devis`, `LigneDevis`, `Facture`, `Paiement`, `Stock`, `InteractionClient`, `User`.
 
-## Security Vulnerabilities
+> Ce schéma est un résumé. Les relations exactes sont définies dans `app/Models` et `database/migrations`.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+## Installation
 
-## License
+### Prérequis
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+- PHP 8.2 ou plus récent, avec Composer
+- Node.js 18 ou plus récent, avec npm
+- MySQL
+
+### Étapes
+
+```bash
+# 1. Cloner le dépôt
+git clone https://github.com/soibiyi/garage-kagnan.git
+cd garage-kagnan
+
+# 2. Installer les dépendances
+composer install
+npm install
+
+# 3. Configurer l'environnement
+cp .env.example .env
+php artisan key:generate
+```
+
+Renseigne ensuite dans `.env` les accès à ta base MySQL (`DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD`).
+
+```bash
+# 4. Créer les tables et le compte administrateur
+php artisan migrate --seed
+
+# 5. Lier le stockage public (photos)
+php artisan storage:link
+
+# 6. Lancer l'application (deux terminaux)
+php artisan serve
+npm run dev
+```
+
+L'application est disponible sur `http://localhost:8000`.
+
+Le compte administrateur est créé par `database/seeders/AdminUserSeeder.php`. **Change son mot de passe dès la première connexion.**
+
+## Lancement avec Docker
+
+Le dépôt contient un `Dockerfile`, un `docker-compose.yml` et la configuration Nginx (`docker/nginx/conf.d/app.conf`).
+
+```bash
+cp .env.example .env
+# Adapter le .env pour la production (APP_ENV=production, APP_DEBUG=false, accès base de données)
+
+docker compose up -d --build
+docker compose exec app php artisan key:generate
+docker compose exec app php artisan migrate --force --seed
+```
+
+> Adapte le nom du service (`app`) à celui défini dans ton `docker-compose.yml`.
+
+Pour la production, pense à :
+- mettre `APP_DEBUG=false`
+- compiler les assets avec `npm run build`
+- activer HTTPS devant Nginx
+- sauvegarder régulièrement la base de données et le dossier des photos
+
+## Tests
+
+```bash
+php artisan test
+```
+
+Les tests sont exécutés automatiquement par GitHub Actions (`.github/workflows/tests.yml`).
+
+## Workflow Git
+
+- `main` : branche stable, déployée
+- `feature/<nom-de-la-tache>` : une branche par fonctionnalité, fusionnée par pull request
+
+Convention de messages de commit conseillée :
+
+```
+feat: ajout du bouton Modifier sur les devis
+fix: correction du nommage PSR-4 de PetiteFourniture
+refactor: renommage de Vehiculeentete.vue en VehiculeEntete.vue
+docs: mise à jour du README
+```
+
+Le fichier `CHANGELOG.md` est mis à jour automatiquement par GitHub Actions.
+
+## Structure du projet
+
+```
+app/
+  Http/
+    Controllers/
+      Admin/            Gestion des utilisateurs
+      Administrative/   Dossiers, factures, stock
+      Auth/             Authentification (Breeze)
+      Mecanicien/       Vue mécanicien
+      Reception/        Réception et parc
+    Middleware/         AdminMiddleware, HandleInertiaRequests
+  Models/               Client, Vehicule, Intervention, Devis, Facture, Stock...
+  Support/              PetiteFourniture
+config/sieges.php       Configuration des sièges
+database/               Migrations et seeders
+docker/nginx/           Configuration Nginx
+resources/js/
+  Components/           Composants Vue réutilisables
+  Layouts/              Mises en page
+  Pages/                Pages Inertia (Admin, Administration, ChargeClient, ...)
+routes/                 web.php, auth.php
+tests/                  Tests Feature et Unit
+```
+
+## Auteurs
+
+Projet développé  **EN EQUIPE** : [@soibiyi](https://github.com/soibiyi), [@cheick](https://github.com/suuuperhackerhumann), ange836 et Ayo Mark.
+
+## Licence
+
+Projet privé développé pour le garage Kagnan. Tous droits réservés.
