@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
-import { Link } from '@inertiajs/vue3';
+import { Link, usePage } from '@inertiajs/vue3';
 import SiegeSwitcher from '@/Components/SiegeSwitcher.vue';
 import VueApexCharts from 'vue3-apexcharts';
 import html2pdf from 'html2pdf.js';
@@ -9,6 +9,9 @@ const props = defineProps({
     annees: { type: Array, default: () => [] },
     siegeFiltre: { type: String, default: null },
 });
+
+const page = usePage();
+const user = computed(() => page.props.auth.user);
 
 // Année sélectionnée
 const anneeSelectionnee = ref(props.annees[0]?.annee ?? null);
@@ -26,7 +29,6 @@ watch(() => props.annees, (liste) => {
 
 const formatMontant = (n) => new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(n || 0) + ' FCFA';
 
-// ---- KPIs ----
 const moyenneMensuelle = computed(() => (donneesAnnee.value ? donneesAnnee.value.total / 12 : 0));
 
 const panierMoyen = computed(() => {
@@ -45,7 +47,6 @@ const variation = computed(() => {
     return ((donneesAnnee.value.total - donneesAnneePrecedente.value.total) / donneesAnneePrecedente.value.total) * 100;
 });
 
-// ---- Tableau avec Poids (%) ----
 const moisAvecPourcentage = computed(() => {
     if (!donneesAnnee.value) return [];
     const totalAn = donneesAnnee.value.total || 1;
@@ -55,7 +56,6 @@ const moisAvecPourcentage = computed(() => {
     }));
 });
 
-// ---- Configuration ApexCharts : Graphique Mensuel (Barres & Courbe de Tendance) ----
 const chartMensuelOptions = computed(() => ({
     chart: {
         type: 'line',
@@ -109,7 +109,6 @@ const chartMensuelSeries = computed(() => {
     ];
 });
 
-// ---- Configuration ApexCharts : Comparaison Pluri-Annuelle ----
 const anneesTriees = computed(() => [...props.annees].sort((a, b) => a.annee - b.annee));
 
 const chartAnnuelOptions = computed(() => ({
@@ -157,7 +156,6 @@ const chartAnnuelSeries = computed(() => [
     { name: 'Total Encaissement', data: anneesTriees.value.map(a => a.total) }
 ]);
 
-// ---- Génération Directe du PDF avec html2pdf.js ----
 const exporterPDF = async () => {
     if (!pdfContainer.value) return;
     isGeneratingPdf.value = true;
@@ -196,7 +194,8 @@ const exporterPDF = async () => {
 
         <!-- Actions -->
         <div class="flex flex-wrap items-center gap-3">
-          <SiegeSwitcher :current="siegeFiltre" />
+          <!-- Le sélecteur de siège global n'est affiché que pour l'admin -->
+          <SiegeSwitcher v-if="user?.role === 'admin'" :current="siegeFiltre" />
           
           <select
             v-if="annees.length"
@@ -221,8 +220,9 @@ const exporterPDF = async () => {
             <span>{{ isGeneratingPdf ? 'Génération...' : 'Télécharger PDF' }}</span>
           </button>
 
+          <!-- Bouton de retour dynamique -->
           <Link
-            :href="route('admin.users.index')"
+            :href="user?.role === 'admin' ? route('admin.users.index') : route('dashboard')"
             class="text-sm font-semibold px-4 py-2.5 rounded-xl border border-gray-300 hover:bg-gray-100 transition shadow-sm bg-white text-gray-900"
           >
             ← Retour
@@ -230,7 +230,7 @@ const exporterPDF = async () => {
         </div>
       </div>
 
-      <!-- Contenu imprimable/exportable -->
+      <!-- Contenu -->
       <div ref="pdfContainer" class="space-y-8 bg-gray-50 p-2 rounded-2xl">
 
         <div v-if="!annees.length" class="bg-white p-12 rounded-2xl border border-gray-200 text-center text-sm text-gray-500 shadow-sm">
@@ -281,7 +281,7 @@ const exporterPDF = async () => {
 
           </div>
 
-          <!-- Graphique ApexCharts 1 : Mensuel -->
+          <!-- Graphique Mensuel -->
           <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
             <div class="flex items-center justify-between mb-4">
               <div>
@@ -301,7 +301,7 @@ const exporterPDF = async () => {
             />
           </div>
 
-          <!-- Graphique ApexCharts 2 : Historique Annuel -->
+          <!-- Graphique Annuel -->
           <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200">
             <h2 class="text-base font-extrabold text-gray-900 mb-1">Comparatif Annuel</h2>
             <p class="text-xs text-gray-500 mb-4">Cliquez sur une barre pour basculer vers l'année correspondante</p>
@@ -314,7 +314,7 @@ const exporterPDF = async () => {
             />
           </div>
 
-          <!-- Tableau Détaillé avec Barres de Poids (%) -->
+          <!-- Tableau Détaillé -->
           <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
             <div class="p-6 border-b border-gray-100 flex items-center justify-between">
               <h2 class="text-base font-extrabold text-gray-900">Rapport Financier Mensuel — {{ anneeSelectionnee }}</h2>

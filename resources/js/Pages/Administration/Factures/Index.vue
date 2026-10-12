@@ -187,12 +187,23 @@ const backText = computed(() => {
                     </p>
                 </div>
 
-                <Link
-                    :href="backUrl"
-                    class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition"
-                >
-                    {{ backText }}
-                </Link>
+                <div class="flex items-center gap-2">
+                    <!-- BOUTON D'EXPORTATION NATIF VERS EXCEL -->
+                    <a
+                        :href="route('administration.factures.export')"
+                        class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition inline-flex items-center gap-2 shadow-xs"
+                    >
+                        <i class="fa-solid fa-file-excel"></i>
+                        <span>Exporter le tableau</span>
+                    </a>
+
+                    <Link
+                        :href="backUrl"
+                        class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition"
+                    >
+                        {{ backText }}
+                    </Link>
+                </div>
             </div>
         </template>
 
@@ -236,7 +247,6 @@ const backText = computed(() => {
 
                     <!-- BOUTONS DE FILTRES -->
                     <div class="flex flex-wrap items-center gap-2">
-                        <!-- FILTRE NON SOLDÉES (Uniquement dossiers normaux non soldés) -->
                         <button
                             type="button"
                             @click="onglet = 'non_soldes'"
@@ -257,7 +267,6 @@ const backText = computed(() => {
                             >{{ dossiersNonSoldes.length }}</span>
                         </button>
 
-                        <!-- FILTRE SOLDÉES (Uniquement dossiers normaux soldés) -->
                         <button
                             type="button"
                             @click="onglet = 'soldes'"
@@ -278,7 +287,6 @@ const backText = computed(() => {
                             >{{ dossiersSoldes.length }}</span>
                         </button>
 
-                        <!-- FILTRE DEVIS DIRECTS (Exclus des onglets non soldées / soldées) -->
                         <button
                             type="button"
                             @click="onglet = 'temp'"
@@ -367,7 +375,6 @@ const backText = computed(() => {
                                                 <i class="fa-solid fa-arrow-right text-[10px]"></i>
                                             </Link>
 
-                                            <!-- Bouton Supprimer (uniquement pour les devis directs) -->
                                             <button
                                                 v-if="estDevisDirect(dossier)"
                                                 type="button"

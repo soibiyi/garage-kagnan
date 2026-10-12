@@ -68,45 +68,42 @@ class UserController extends Controller
     }
 
     // Affiche la liste des utilisateurs via Inertia
-   public function index()
-{
-    $siege = $this->siegeActif();
+    public function index()
+    {
+        $siege = $this->siegeActif();
 
-    // Collaborateurs du siège actif (l'administrateur, commun à tous les sièges, reste visible)
-    $users = User::where(fn ($q) => $q->where('siege', $siege)->orWhere('role', 'admin'))
-        ->latest()
-        ->get();
+        $users = User::where(fn ($q) => $q->where('siege', $siege)->orWhere('role', 'admin'))
+            ->latest()
+            ->get();
 
-    // Totaux des paiements regroupés par mois (12 derniers mois)
-    $totauxParMois = $this->paiementsQuery($siege)->where('date_paiement', '>=', now()->startOfMonth()->subMonths(11))
-        ->get(['montant', 'date_paiement'])
-        ->groupBy(fn ($p) => Carbon::parse($p->date_paiement)->format('Y-m'))
-        ->map(fn ($groupe) => (float) $groupe->sum('montant'));
+        $totauxParMois = $this->paiementsQuery($siege)->where('date_paiement', '>=', now()->startOfMonth()->subMonths(11))
+            ->get(['montant', 'date_paiement'])
+            ->groupBy(fn ($p) => Carbon::parse($p->date_paiement)->format('Y-m'))
+            ->map(fn ($groupe) => (float) $groupe->sum('montant'));
 
-    // Liste des 12 derniers mois (du plus récent au plus ancien), mois sans paiement = 0
-    $chiffreAffairesMensuel = collect(range(0, 11))->map(function ($i) use ($totauxParMois) {
-        $date = now()->startOfMonth()->subMonths($i);
-        $cle = $date->format('Y-m');
+        $chiffreAffairesMensuel = collect(range(0, 11))->map(function ($i) use ($totauxParMois) {
+            $date = now()->startOfMonth()->subMonths($i);
+            $cle = $date->format('Y-m');
 
-        return [
-            'cle' => $cle,
-            'label' => ucfirst($date->locale('fr')->translatedFormat('F Y')),
-            'total' => $totauxParMois[$cle] ?? 0,
+            return [
+                'cle' => $cle,
+                'label' => ucfirst($date->locale('fr')->translatedFormat('F Y')),
+                'total' => $totauxParMois[$cle] ?? 0,
+            ];
+        })->values();
+
+        $stats = [
+            'chiffre_affaires_mensuel' => $chiffreAffairesMensuel,
+            'nombre_voitures' => Vehicule::when($siege, fn ($q) => $q->whereHas('interventions', fn ($i) => $i->where('siege', $siege)))->count(),
+            'nombre_clients' => Client::when($siege, fn ($q) => $q->whereHas('vehicules.interventions', fn ($i) => $i->where('siege', $siege)))->count(),
         ];
-    })->values();
 
-    $stats = [
-        'chiffre_affaires_mensuel' => $chiffreAffairesMensuel,
-        'nombre_voitures' => Vehicule::when($siege, fn ($q) => $q->whereHas('interventions', fn ($i) => $i->where('siege', $siege)))->count(),
-        'nombre_clients' => Client::when($siege, fn ($q) => $q->whereHas('vehicules.interventions', fn ($i) => $i->where('siege', $siege)))->count(),
-    ];
-
-    return Inertia::render('Admin/Users/Index', [
-        'users' => $users,
-        'stats' => $stats,
-        'siegeFiltre' => $siege,
-    ]);
-}
+        return Inertia::render('Admin/Users/Index', [
+            'users' => $users,
+            'stats' => $stats,
+            'siegeFiltre' => $siege,
+        ]);
+    }
 
     // Affiche le formulaire de création
     public function create()
@@ -131,7 +128,6 @@ class UserController extends Controller
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'role' => $request->role,
-            // Le collaborateur est rattaché au siège actif ; l'administrateur n'a pas de siège (accès à tous)
             'siege' => $request->role === 'admin' ? null : $this->siegeActif(),
         ]);
 
@@ -174,7 +170,7 @@ class UserController extends Controller
         return redirect()->route('admin.users.index')->with('success', 'Collaborateur mis à jour avec succès.');
     }
 
-    // Supprimer un utilisateur (avec protection pour ne pas supprimer son propre compte admin)
+    // Supprimer un utilisateur
     public function destroy(User $user)
     {
         $this->verifierAccesCollaborateur($user);
@@ -195,13 +191,11 @@ class UserController extends Controller
     {
         $siege = $this->siegeActif();
 
-        // Interactions des chargés client du siège actif uniquement
         $interactions = InteractionClient::with(['user', 'client', 'vehicule'])
             ->whereHas('user', fn ($q) => $q->where('siege', $siege))
             ->latest()
             ->get();
 
-        // Regroupement d'abord par Chargé Client (user_id), puis par Client (client_id)
         $chargesClients = $interactions->groupBy('user_id')->map(function ($userInteractions) {
             $user = $userInteractions->first()->user;
 
@@ -259,37 +253,44 @@ class UserController extends Controller
     }
 
     /**
- * Historique du chiffre d'affaires par année (avec détail mensuel)
- */
-public function chiffreAffaires()
-{
-    $siege = $this->siegeActif();
+     * Historique du chiffre d'affaires par année (filtré strictement par zone pour l'administratif)
+     */
+    public function chiffreAffaires()
+    {
+        $user = auth()->user();
 
-    // Paiements du siège actif uniquement (aucune comparaison avec les autres sièges)
-    $paiements = $this->paiementsQuery($siege)->get(['montant', 'date_paiement']);
+        // Si l'utilisateur connecté est un administratif, on force son siège assigné
+        if ($user->role === 'administratif') {
+            $siege = $user->siege;
+        } else {
+            // Sinon (ex: admin), on utilise le siège actif de la session
+            $siege = $this->siegeActif();
+        }
 
-    $annees = $paiements
-        ->groupBy(fn ($p) => Carbon::parse($p->date_paiement)->year)
-        ->map(function ($groupe, $annee) {
-            $parMois = $groupe->groupBy(fn ($p) => Carbon::parse($p->date_paiement)->month);
+        $paiements = $this->paiementsQuery($siege)->get(['montant', 'date_paiement']);
 
-            return [
-                'annee' => (int) $annee,
-                'total' => (float) $groupe->sum('montant'),
-                'nombre_paiements' => $groupe->count(),
-                'mois' => collect(range(1, 12))->map(fn ($m) => [
-                    'numero' => $m,
-                    'label' => ucfirst(Carbon::create(2000, $m, 1)->locale('fr')->translatedFormat('F')),
-                    'total' => (float) ($parMois->get($m)?->sum('montant') ?? 0),
-                ])->values(),
-            ];
-        })
-        ->sortByDesc('annee')
-        ->values();
+        $annees = $paiements
+            ->groupBy(fn ($p) => Carbon::parse($p->date_paiement)->year)
+            ->map(function ($groupe, $annee) {
+                $parMois = $groupe->groupBy(fn ($p) => Carbon::parse($p->date_paiement)->month);
 
-    return Inertia::render('Admin/ChiffreAffaires', [
-        'annees' => $annees,
-        'siegeFiltre' => $siege,
-    ]);
-}
+                return [
+                    'annee' => (int) $annee,
+                    'total' => (float) $groupe->sum('montant'),
+                    'nombre_paiements' => $groupe->count(),
+                    'mois' => collect(range(1, 12))->map(fn ($m) => [
+                        'numero' => $m,
+                        'label' => ucfirst(Carbon::create(2000, $m, 1)->locale('fr')->translatedFormat('F')),
+                        'total' => (float) ($parMois->get($m)?->sum('montant') ?? 0),
+                    ])->values(),
+                ];
+            })
+            ->sortByDesc('annee')
+            ->values();
+
+        return Inertia::render('Admin/ChiffreAffaires', [
+            'annees' => $annees,
+            'siegeFiltre' => $siege,
+        ]);
+    }
 }

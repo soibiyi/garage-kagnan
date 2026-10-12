@@ -11,6 +11,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FactureController extends Controller
 {
@@ -94,7 +95,6 @@ class FactureController extends Controller
             ->latest()
             ->get();
 
-        // Une seule requête pour toutes les factures existantes (montant_paye est tenu à jour à chaque versement)
         $factures = Facture::whereIn('intervention_id', $dossiers->pluck('id'))
             ->get()
             ->keyBy('intervention_id');
@@ -108,6 +108,92 @@ class FactureController extends Controller
             'dossiers' => $dossiers,
             'filters' => $request->only(['search']),
         ]);
+    }
+
+    /**
+     * Exportation native au format CSV compatible Excel respectant le modèle de créance.
+     */
+    public function export(Request $request): StreamedResponse
+    {
+        $fileName = 'tableau_de_creance_' . date('Y-m-d') . '.csv';
+
+        $dossiers = Intervention::duSiege()->with(['vehicule.client', 'devis.lignes'])
+            ->where('statut', 'accepte')
+            ->latest()
+            ->get();
+
+        $factures = Facture::whereIn('intervention_id', $dossiers->pluck('id'))
+            ->get()
+            ->keyBy('intervention_id');
+
+        $headers = [
+            "Content-type"        => "text/csv; charset=UTF-8",
+            "Content-Disposition" => "attachment; filename=$fileName",
+            "Pragma"              => "no-cache",
+            "Cache-Control"       => "must-revalidate, post-check=0, pre-check=0",
+            "Expires"             => "0"
+        ];
+
+        $callback = function() use ($dossiers, $factures) {
+            $file = fopen('php://output', 'w');
+            // Ajout du BOM UTF-8 pour la reconnaissance correcte des caractères spéciaux dans Excel
+            fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
+
+            // En-têtes conformes au modèle fourni
+            fputcsv($file, [
+                "Numéro Facture",
+                "Immatriculation",
+                "Client",
+                "Date facture",
+                "CHIFFRE D'AFFAIRE HORS REMISE TTC",
+                "REMISE",
+                "CHIFFRE D'AFFAIRE NET TTC",
+                "ENCAISSEMENT",
+                "CREANCE",
+                "MODE DE PAIEMENT"
+            ], ";");
+
+            foreach ($dossiers as $dossier) {
+                $facture = $factures->get($dossier->id);
+                $paye = $facture ? (int) round((float) $facture->montant_paye) : 0;
+                $resume = $this->resume($dossier, $paye);
+
+                $numeroFacture = $resume['numero'] ?? ($dossier->numero_ot ?? ('#' . $dossier->id));
+                $immatriculation = $dossier->vehicule?->immatriculation ?? '';
+                
+                $clientNom = $dossier->vehicule?->client?->nom ?? '';
+                $clientPrenom = $dossier->vehicule?->client?->prenom ?? $dossier->vehicule?->client?->name ?? '';
+                $client = trim("{$clientNom} {$clientPrenom}") ?: 'N/A';
+
+                $dateFacture = optional($dossier->created_at)->format('d/m/Y') ?? '';
+                $totalTtc = $resume['total_ttc'];
+                $remise = 0; // Ajustable selon votre gestion des remises
+                $netTtc = $totalTtc - $remise;
+                $encaissement = $resume['montant_paye'];
+                $creance = $resume['reste'];
+
+                // Récupération du mode de paiement du dernier versement ou par défaut
+                $dernierPaiement = $facture ? Paiement::where('facture_id', $facture->id)->latest('date_paiement')->first() : null;
+                $modePaiement = $dernierPaiement?->mode_paiement ?? 'ESPECES';
+
+                fputcsv($file, [
+                    $numeroFacture,
+                    $immatriculation,
+                    $client,
+                    $dateFacture,
+                    $totalTtc,
+                    $remise > 0 ? $remise : '',
+                    $netTtc,
+                    $encaissement,
+                    $creance,
+                    $modePaiement
+                ], ";");
+            }
+
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, $headers);
     }
 
     /**
@@ -144,7 +230,6 @@ class FactureController extends Controller
 
     /**
      * Enregistre un versement. La facture est créée au premier versement.
-     * Refuse si la facture est soldée ou si le montant dépasse le reste à payer.
      */
     public function storeEncaissement(Request $request, $id)
     {
@@ -158,7 +243,6 @@ class FactureController extends Controller
         $erreur = null;
 
         DB::transaction(function () use ($request, $id, &$erreur) {
-            // Verrou sur le dossier : évite deux encaissements simultanés qui dépasseraient le total
             $dossier = Intervention::duSiege()->lockForUpdate()->findOrFail($id);
             $dossier->load(['devis.lignes']);
 
@@ -169,7 +253,6 @@ class FactureController extends Controller
                 return;
             }
 
-            // Facture du dossier : créée au premier versement
             $facture = Facture::where('intervention_id', $dossier->id)->first();
 
             if (!$facture) {
@@ -202,11 +285,9 @@ class FactureController extends Controller
                 'montant'        => (int) $request->montant,
                 'mode_paiement'  => $request->mode_paiement,
                 'notes'          => $request->notes,
-                // Date choisie + heure actuelle
                 'date_paiement'  => Carbon::parse($request->date_paiement)->setTimeFrom(now()),
             ])->save();
 
-            // Mise à jour de la facture : total, montant payé et statut
             $nouveauPaye = $dejaPaye + (int) $request->montant;
 
             $facture->forceFill([
@@ -230,7 +311,6 @@ class FactureController extends Controller
     {
         $dossier = Intervention::duSiege()->findOrFail($id);
 
-        // Vérification : autoriser la suppression uniquement si c'est un devis direct
         $isDirect = $dossier->type === 'devis_direct' || $dossier->is_direct || empty($dossier->numero_ot);
 
         if (!$isDirect) {
@@ -238,13 +318,11 @@ class FactureController extends Controller
         }
 
         DB::transaction(function () use ($dossier) {
-            // Suppression de la facture et des paiements associés si existants
             if ($facture = Facture::where('intervention_id', $dossier->id)->first()) {
                 Paiement::where('facture_id', $facture->id)->delete();
                 $facture->delete();
             }
 
-            // Suppression du devis lié
             if ($dossier->devis) {
                 $dossier->devis->lignes()->delete();
                 $dossier->devis->delete();
