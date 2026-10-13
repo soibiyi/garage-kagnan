@@ -11,6 +11,18 @@ const props = defineProps({
     modeEdition: { type: Boolean, default: false },
 });
 
+// Numéro de facture déduit du numéro d'OT :
+//   SGK-02102026/001 (OT)  →  SGK-FAC-02102026/001 (facture)
+const numeroFacture = computed(() => {
+    const ot = props.dossier?.numero_ot;
+    const i = ot ? ot.indexOf('-') : -1;
+    if (i > 0) return `${ot.slice(0, i)}-FAC-${ot.slice(i + 1)}`;
+
+    // Dossier sans OT : ancien format
+    const d = props.dossier?.devis;
+    return d ? `D/1/ADMI/${d.id}/${new Date(d.created_at).getFullYear()}` : '';
+});
+
 // Détection automatique de la Famille & Sous-famille selon les mots-clés (comme dans le formulaire de devis)
 const detecterFamilleEtSousFamille = (designation) => {
     if (!designation || designation.trim().length === 0) {
@@ -339,7 +351,7 @@ const retour = () => {
                                 </div>
                                 <div class="border-2 border-gray-900 p-2 text-right rounded-xl min-w-[220px] bg-gray-50/50">
                                     <p class="text-xs font-bold uppercase bg-gray-200/80 px-2 py-0.5 mb-1 text-center rounded text-gray-900 tracking-wider">Devis / Facture Provisoire</p>
-                                    <p class="text-xs text-gray-700 mb-0.5"><span class="font-semibold text-gray-900">N° :</span> D/1/ADMI/{{ dossier.devis.id }}/{{ new Date(dossier.devis.created_at).getFullYear() }}</p>
+                                    <p class="text-xs text-gray-700 mb-0.5"><span class="font-semibold text-gray-900">N° :</span> {{ numeroFacture }}</p>
                                     <p class="text-xs text-gray-700 mb-0.5"><span class="font-semibold text-gray-900">Date :</span> {{ formatDate(dossier.devis.created_at) }}</p>
                                     <p class="text-xs text-gray-700"><span class="font-semibold text-gray-900">Statut :</span> <span class="capitalize font-semibold text-[#E11D48]">{{ dossier.devis.statut?.replace('_', ' ') }}</span></p>
                                 </div>
@@ -600,7 +612,7 @@ const retour = () => {
                             </div>
                             <div class="border-2 border-gray-900 p-2 text-right rounded-xl min-w-[220px] bg-gray-50/50">
                                 <p class="text-xs font-bold uppercase bg-emerald-100 px-2 py-0.5 mb-1 text-center rounded text-emerald-800 tracking-wider">Devis Validé</p>
-                                <p class="text-xs text-gray-700 mb-0.5"><span class="font-semibold text-gray-900">N° :</span> D/1/ADMI/{{ dossier.devis.id }}/{{ new Date(dossier.devis.created_at).getFullYear() }}</p>
+                                <p class="text-xs text-gray-700 mb-0.5"><span class="font-semibold text-gray-900">N° :</span> {{ numeroFacture }}</p>
                                 <p class="text-xs text-gray-700 mb-0.5"><span class="font-semibold text-gray-900">Date :</span> {{ formatDate(dossier.devis.created_at) }}</p>
                                 <p class="text-xs text-gray-700"><span class="font-semibold text-gray-900">Statut :</span> <span class="capitalize font-semibold text-emerald-600">Accepté</span></p>
                             </div>
