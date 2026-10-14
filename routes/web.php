@@ -28,6 +28,9 @@ Route::get('/dashboard', function (Request $request) {
     if (auth()->user()->role === 'admin') {
         return redirect()->route('admin.users.index');
     }
+    if (auth()->user()->role === 'magasinier') {
+        return redirect()->route('magasinier.pieces.index');
+    }
 
     $search = trim((string) $request->query('search', ''));
     $statut = $request->query('statut', '');
@@ -88,6 +91,13 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/users/interactions', [UserController::class, 'interactionIndex'])->name('users.interactionindex');
     Route::get('/vehicules/status', [UserController::class, 'vehiculesStatus'])->name('vehicules.status');
     Route::get('/chiffre-affaires', [UserController::class, 'chiffreAffaires'])->name('chiffre-affaires');
+    Route::get('/pieces', [StockController::class, 'adminIndex'])->name('pieces.index');
+});
+
+// Routes dédiées au Magasinier
+Route::middleware(['auth', 'verified'])->prefix('magasinier')->name('magasinier.')->group(function () {
+    Route::get('/pieces', [StockController::class, 'magasinierIndex'])->name('pieces.index');
+    Route::put('/pieces/{stock}', [StockController::class, 'magasinierUpdate'])->name('pieces.update');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -147,10 +157,8 @@ Route::middleware(['auth'])->prefix('administration')->name('administration.')->
     Route::get('/stocks/export', [StockController::class, 'export'])->name('stocks.export');
     Route::post('/stocks/import', [StockController::class, 'import'])->name('stocks.import');
 
-    // CHIFFRE D'AFFAIRES POUR L'ADMINISTRATIF
     Route::get('/chiffre-affaires', [UserController::class, 'chiffreAffaires'])->name('chiffre-affaires');
 
-    // FACTURES & ENCAISSEMENT + EXPORT NATIF
     Route::get('/factures/export', [FactureController::class, 'export'])->name('factures.export');
     Route::get('/factures', [FactureController::class, 'index'])->name('factures.index');
     Route::get('/factures/{id}', [FactureController::class, 'show'])->name('factures.show');

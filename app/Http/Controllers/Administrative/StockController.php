@@ -16,7 +16,6 @@ class StockController extends Controller
     {
         $query = Stock::query();
 
-        // Recherche par désignation, référence, marque ou modèle
         if ($request->filled('search')) {
             $search = $request->input('search');
             $query->where(function($q) use ($search) {
@@ -27,12 +26,93 @@ class StockController extends Controller
             });
         }
 
-        $stocks = $query->orderBy('designation_piece', 'asc')->paginate(25)->withQueryString();
+        $stocks = $query->with('sieges')->orderBy('designation_piece', 'asc')->paginate(25)->withQueryString();
 
         return Inertia::render('Administration/Stocks/Index', [
             'stocks' => $stocks,
             'filters' => $request->only(['search'])
         ]);
+    }
+
+    public function adminIndex(Request $request)
+    {
+        $query = Stock::query();
+
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $query->where(function($q) use ($search) {
+                $q->where('designation_piece', 'like', "%{$search}%")
+                  ->orWhere('reference', 'like', "%{$search}%")
+                  ->orWhere('vehicule_correspondant', 'like', "%{$search}%");
+            });
+        }
+
+        $stocks = $query->with('sieges')->orderBy('designation_piece', 'asc')->paginate(25)->withQueryString();
+
+        return Inertia::render('Admin/Pieces/Index', [
+            'stocks' => $stocks,
+            'filters' => $request->only(['search'])
+        ]);
+    }
+
+    public function magasinierIndex(Request $request)
+    {
+        $query = Stock::query();
+
+        if ($request->filled('search')) {
+            $search = $request->input('search');
+            $query->where(function($q) use ($search) {
+                $q->where('designation_piece', 'like', "%{$search}%")
+                  ->orWhere('reference', 'like', "%{$search}%")
+                  ->orWhere('vehicule_correspondant', 'like', "%{$search}%");
+            });
+        }
+
+        $stocks = $query->with('sieges')->orderBy('designation_piece', 'asc')->paginate(25)->withQueryString();
+
+        return Inertia::render('Magasinier/Pieces/Index', [
+            'stocks' => $stocks,
+            'filters' => $request->only(['search'])
+        ]);
+    }
+
+    public function magasinierUpdate(Request $request, Stock $stock)
+    {
+        $validated = $request->validate([
+            'sieges' => 'required|array',
+            'sieges.*.siege' => 'required|string|in:Terminus 27,Zone Industrielle,Yamoussoukro',
+            'sieges.*.quantite_attribuee' => 'required|integer|min:0',
+            'sieges.*.sortie' => 'required|integer|min:0',
+        ]);
+
+        // Vérification 1 : La somme des attributions ne dépasse pas le stock initial global
+        $totalAttribue = collect($validated['sieges'])->sum('quantite_attribuee');
+        if ($totalAttribue > ($stock->quantite ?? 0)) {
+            return redirect()->back()->withErrors([
+                'sieges' => "La somme des attributions par siège ({$totalAttribue}) ne peut pas dépasser la quantité initiale du lot ({$stock->quantite})."
+            ]);
+        }
+
+        // Vérification 2 : Les sorties ne dépassent pas les quantités attribuées par siège
+        foreach ($validated['sieges'] as $ligne) {
+            if ($ligne['sortie'] > $ligne['quantite_attribuee']) {
+                return redirect()->back()->withErrors([
+                    'sieges' => "Pour le siège {$ligne['siege']}, les sorties ({$ligne['sortie']}) ne peuvent pas dépasser la quantité attribuée ({$ligne['quantite_attribuee']})."
+                ]);
+            }
+        }
+
+        foreach ($validated['sieges'] as $ligne) {
+            $stock->sieges()->updateOrCreate(
+                ['siege' => $ligne['siege']],
+                [
+                    'quantite_attribuee' => $ligne['quantite_attribuee'],
+                    'sortie' => $ligne['sortie'],
+                ]
+            );
+        }
+
+        return redirect()->back()->with('success', 'Mouvements et répartitions par siège enregistrés avec succès.');
     }
 
     public function store(Request $request)
@@ -53,9 +133,40 @@ class StockController extends Controller
             'ecart_pourcent' => 'nullable|numeric',
             'prix_ttc_kagnan' => 'nullable|numeric',
             'note' => 'nullable|string|max:255',
+            'date_entree' => 'nullable|date',
+            'quantite' => 'nullable|integer|min:0',
+            'vehicule_correspondant' => 'nullable|string|max:150',
+            'prix_achat' => 'nullable|numeric|min:0',
+            'marge_vente' => 'nullable|numeric|min:0',
+            'sieges' => 'nullable|array',
+            'sieges.*.siege' => 'required_with:sieges|string|in:Terminus 27,Zone Industrielle,Yamoussoukro',
+            'sieges.*.quantite_attribuee' => 'nullable|integer|min:0',
+            'sieges.*.sortie' => 'nullable|integer|min:0',
         ]);
 
-        Stock::create($validated);
+        if (isset($validated['quantite']) && isset($validated['sieges'])) {
+            $totalAttribue = collect($validated['sieges'])->sum('quantite_attribuee');
+            if ($totalAttribue > $validated['quantite']) {
+                return redirect()->back()->withErrors([
+                    'sieges' => "La somme des attributions par siège ({$totalAttribue}) ne peut pas dépasser la quantité initiale du lot ({$validated['quantite']})."
+                ]);
+            }
+        }
+
+        $siegesData = $validated['sieges'] ?? [];
+        unset($validated['sieges']);
+
+        $stock = Stock::create($validated);
+
+        if (!empty($siegesData)) {
+            foreach ($siegesData as $ligne) {
+                $stock->sieges()->create([
+                    'siege' => $ligne['siege'],
+                    'quantite_attribuee' => $ligne['quantite_attribuee'] ?? 0,
+                    'sortie' => $ligne['sortie'] ?? 0,
+                ]);
+            }
+        }
 
         return redirect()->back()->with('success', 'Pièce ajoutée au stock avec succès.');
     }
@@ -78,9 +189,43 @@ class StockController extends Controller
             'ecart_pourcent' => 'nullable|numeric',
             'prix_ttc_kagnan' => 'nullable|numeric',
             'note' => 'nullable|string|max:255',
+            'date_entree' => 'nullable|date',
+            'quantite' => 'nullable|integer|min:0',
+            'vehicule_correspondant' => 'nullable|string|max:150',
+            'prix_achat' => 'nullable|numeric|min:0',
+            'marge_vente' => 'nullable|numeric|min:0',
+            'sieges' => 'nullable|array',
+            'sieges.*.siege' => 'required_with:sieges|string|in:Terminus 27,Zone Industrielle,Yamoussoukro',
+            'sieges.*.quantite_attribuee' => 'nullable|integer|min:0',
+            'sieges.*.sortie' => 'nullable|integer|min:0',
         ]);
 
+        $quantiteTotale = $validated['quantite'] ?? $stock->quantite;
+        if (isset($validated['sieges'])) {
+            $totalAttribue = collect($validated['sieges'])->sum('quantite_attribuee');
+            if ($totalAttribue > $quantiteTotale) {
+                return redirect()->back()->withErrors([
+                    'sieges' => "La somme des attributions par siège ({$totalAttribue}) ne peut pas dépasser la quantité initiale du lot ({$quantiteTotale})."
+                ]);
+            }
+        }
+
+        $siegesData = $validated['sieges'] ?? null;
+        unset($validated['sieges']);
+
         $stock->update($validated);
+
+        if ($siegesData !== null) {
+            foreach ($siegesData as $ligne) {
+                $stock->sieges()->updateOrCreate(
+                    ['siege' => $ligne['siege']],
+                    [
+                        'quantite_attribuee' => $ligne['quantite_attribuee'] ?? 0,
+                        'sortie' => $ligne['sortie'] ?? 0,
+                    ]
+                );
+            }
+        }
 
         return redirect()->back()->with('success', 'Stock mis à jour avec succès.');
     }
@@ -92,10 +237,6 @@ class StockController extends Controller
         return redirect()->back()->with('success', 'Pièce supprimée du stock.');
     }
 
-    /**
-     * Exportation directe du stock au format CSV (compatible Excel).
-     * Colonnes : Marque, Modèle, Désignation Pièce, Référence, Prix Kagnan HT, Famille, Sous-famille.
-     */
     public function export(): StreamedResponse
     {
         $fileName = 'catalogue-stocks-' . date('Y-m-d') . '.csv';
@@ -110,11 +251,8 @@ class StockController extends Controller
 
         return response()->stream(function () {
             $handle = fopen('php://output', 'w');
-
-            // BOM UTF-8 pour conserver les caractères spéciaux sous Excel
             fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
 
-            // En-têtes du fichier
             fputcsv($handle, [
                 'Marque', 'Modèle', 'Désignation Pièce', 'Référence',
                 'Prix Kagnan HT', 'Famille', 'Sous-famille',
@@ -138,166 +276,5 @@ class StockController extends Controller
 
             fclose($handle);
         }, 200, $headers);
-    }
-
-    /**
-     * Importation et mise à jour des pièces via fichier CSV.
-     * Les colonnes sont lues par leur nom d'en-tête (l'ordre n'a pas d'importance).
-     */
-    public function import(Request $request)
-    {
-        $request->validate([
-            'fichier' => 'required|file|mimes:csv,txt|max:10240',
-        ]);
-
-        $content = file_get_contents($request->file('fichier')->getRealPath());
-
-        if ($content === false || $content === '') {
-            return redirect()->back()->with('error', 'Le fichier est vide ou illisible.');
-        }
-
-        // Fichiers "Unicode" d'Excel (UTF-16) => conversion en UTF-8
-        if (str_starts_with($content, "\xFF\xFE") || str_starts_with($content, "\xFE\xFF")) {
-            $content = mb_convert_encoding($content, 'UTF-8', 'UTF-16');
-        }
-        $content = ltrim($content, "\xEF\xBB\xBF"); // BOM UTF-8
-
-        $handle = fopen('php://temp', 'r+');
-        fwrite($handle, $content);
-        rewind($handle);
-
-        // Détection du séparateur sur la première ligne non vide
-        $firstLine = '';
-        while (($line = fgets($handle)) !== false) {
-            if (trim($line) !== '') { $firstLine = $line; break; }
-        }
-        rewind($handle);
-        $counts = [';' => substr_count($firstLine, ';'), ',' => substr_count($firstLine, ','), "\t" => substr_count($firstLine, "\t")];
-        arsort($counts);
-        $delimiter = array_key_first($counts);
-
-        // Variantes d'en-têtes acceptées pour chaque colonne
-        $aliases = [
-            'marque'            => ['marque', 'brand'],
-            'modele'            => ['modele', 'model'],
-            'designation_piece' => ['designation_piece', 'designation', 'designation_de_la_piece', 'designation_de_piece', 'piece', 'libelle', 'article'],
-            'reference'         => ['reference', 'ref', 'refs'],
-            'prix_kagnan_ht'    => ['prix_kagnan_ht', 'prix_kagnan', 'prix_ht', 'prix'],
-            'famille'           => ['famille'],
-            'sous_famille'      => ['sous_famille', 'sousfamille', 'sous_familles'],
-        ];
-
-        // Recherche de la ligne d'en-têtes dans les 10 premières lignes
-        $index = [];
-        $lastHeaders = [];
-        for ($i = 0; $i < 10; $i++) {
-            $row = $this->readRow($handle, $delimiter);
-            if ($row === false) break;
-
-            $normalized = array_map(
-                fn ($h) => Str::slug($this->toUtf8((string) $h), '_'),
-                $row
-            );
-            if (array_filter($normalized)) {
-                $lastHeaders = $normalized;
-            }
-
-            $found = [];
-            foreach ($aliases as $col => $names) {
-                foreach ($normalized as $pos => $name) {
-                    if (in_array($name, $names, true)) {
-                        $found[$col] = $pos;
-                        break;
-                    }
-                }
-            }
-
-            if (isset($found['designation_piece'])) {
-                $index = $found;
-                break;
-            }
-        }
-
-        if (!isset($index['designation_piece'])) {
-            fclose($handle);
-            $lus = implode(' | ', array_filter($lastHeaders)) ?: 'aucun en-tête lisible';
-            return redirect()->back()->with(
-                'error',
-                "Colonne « Désignation Pièce » introuvable. En-têtes lus dans votre fichier : {$lus}"
-            );
-        }
-
-        $crees = 0;
-        $modifies = 0;
-        $ignores = 0;
-
-        DB::transaction(function () use ($handle, $delimiter, $index, &$crees, &$modifies, &$ignores) {
-            while (($data = $this->readRow($handle, $delimiter)) !== false) {
-                if ($data === [null]) {
-                    continue; // ligne vide
-                }
-
-                // Uniquement les colonnes présentes dans le fichier
-                $values = [];
-                foreach ($index as $col => $pos) {
-                    $values[$col] = trim($this->toUtf8((string) ($data[$pos] ?? ''))) ?: null;
-                }
-
-                // La désignation est obligatoire
-                if (empty($values['designation_piece'])) {
-                    $ignores++;
-                    continue;
-                }
-
-                $reference = $values['reference'] ?? null;
-
-                if (!empty($reference)) {
-                    // Même référence : mise à jour, sinon création
-                    $stock = Stock::updateOrCreate(['reference' => $reference], $values);
-                    $stock->wasRecentlyCreated ? $crees++ : $modifies++;
-                } else {
-                    // Pas de référence : toujours un ajout
-                    Stock::create($values);
-                    $crees++;
-                }
-            }
-        });
-
-        fclose($handle);
-
-        return redirect()->back()->with(
-            'success',
-            "Import terminé : {$crees} ajoutée(s), {$modifies} mise(s) à jour, {$ignores} ligne(s) ignorée(s)."
-        );
-    }
-
-    /**
-     * Lit une ligne CSV. Si toute la ligne est dans une seule cellule
-     * (cas d'un CSV ouvert puis réenregistré par Excel sans séparation en colonnes),
-     * la ligne est redécoupée avec le séparateur détecté.
-     */
-    private function readRow($handle, string $delimiter)
-    {
-        $row = fgetcsv($handle, 0, $delimiter);
-
-        if ($row === false) {
-            return false;
-        }
-
-        if (count($row) === 1 && $row[0] !== null && substr_count($row[0], $delimiter) > 0) {
-            return str_getcsv($row[0], $delimiter);
-        }
-
-        return $row;
-    }
-
-    /**
-     * Convertit une valeur en UTF-8 (les CSV enregistrés par Excel sont souvent en Windows-1252).
-     */
-    private function toUtf8(string $value): string
-    {
-        return mb_check_encoding($value, 'UTF-8')
-            ? $value
-            : mb_convert_encoding($value, 'UTF-8', 'Windows-1252');
     }
 }

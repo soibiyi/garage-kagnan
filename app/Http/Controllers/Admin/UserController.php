@@ -113,14 +113,14 @@ class UserController extends Controller
         ]);
     }
 
-    // Enregistre le nouvel utilisateur
+    // Enregistre le nouvel utilisateur (Rôle magasinier ajouté)
     public function store(Request $request)
     {
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:191|unique:users',
             'password' => 'required|string|min:6',
-            'role' => 'required|string|in:admin,receptionniste,mecanicien,administratif,charge_client',
+            'role' => 'required|string|in:admin,receptionniste,mecanicien,administratif,charge_client,magasinier',
         ]);
 
         User::create([
@@ -144,7 +144,7 @@ class UserController extends Controller
         ]);
     }
 
-    // Met à jour les informations du collaborateur
+    // Met à jour les informations du collaborateur (Rôle magasinier pris en compte)
     public function update(Request $request, User $user)
     {
         $this->verifierAccesCollaborateur($user);
@@ -152,7 +152,7 @@ class UserController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => ['required', 'string', 'email', 'max:191', Rule::unique('users')->ignore($user->id)],
-            'role' => 'required|string|in:admin,receptionniste,mecanicien,administratif,charge_client',
+            'role' => 'required|string|in:admin,receptionniste,mecanicien,administratif,charge_client,magasinier',
             'password' => 'nullable|string|min:6',
             'siege' => [Rule::requiredIf($request->role !== 'admin'), 'nullable', Rule::in(array_keys(config('sieges')))],
         ], [
@@ -259,11 +259,9 @@ class UserController extends Controller
     {
         $user = auth()->user();
 
-        // Si l'utilisateur connecté est un administratif, on force son siège assigné
         if ($user->role === 'administratif') {
             $siege = $user->siege;
         } else {
-            // Sinon (ex: admin), on utilise le siège actif de la session
             $siege = $this->siegeActif();
         }
 

@@ -13,7 +13,8 @@ import {
     faHeadset, 
     faUserGroup,
     faChevronDown,
-    faUsers
+    faUsers,
+    faWrench
 } from '@fortawesome/free-solid-svg-icons';
 
 const props = defineProps({
@@ -200,9 +201,9 @@ const logout = () => {
         </div>
       </div>
 
-      <!-- SECTION 2 : Navigation Rapide -->
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <!-- Stock -->
+      <!-- SECTION 2 : Navigation Rapide (Gestion des Stocks & Gestion de Pièces & Suivi) -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- 1. Gestion des Stocks -->
         <Link :href="route('administration.stocks.index')" 
               class="bg-white p-6 rounded-xl shadow-md border border-gray-200 hover:border-[#C8102E] transition group block">
           <div class="flex items-center justify-between mb-2">
@@ -215,7 +216,20 @@ const logout = () => {
           <p class="text-sm" style="color: #8A8D8F;">Accéder au catalogue des pièces détachées et inventaire (commun à tous les sièges).</p>
         </Link>
 
-        <!-- Suivi des Interactions -->
+        <!-- 2. Gestion de Pièces (Nouvelle vue dédiée Admin) -->
+        <Link :href="route('admin.pieces.index')" 
+              class="bg-white p-6 rounded-xl shadow-md border border-gray-200 hover:border-[#C8102E] transition group block">
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-lg font-bold group-hover:text-[#C8102E] transition" style="color: #1A1A1A;">Gestion de Pièces</h3>
+            <span class="w-9 h-9 flex items-center justify-center rounded-lg shrink-0 transition"
+                  style="background-color: #F3F4F6; color: #C8102E;">
+              <font-awesome-icon :icon="faWrench" class="text-base" />
+            </span>
+          </div>
+          <p class="text-sm" style="color: #8A8D8F;">Suivi des entrées, quantités, prix d'achat, marges, sorties et stock en temps réel par siège.</p>
+        </Link>
+
+        <!-- 3. Suivi des Interactions -->
         <Link :href="route('admin.users.interactionindex')" 
               class="bg-white p-6 rounded-xl shadow-md border border-gray-200 hover:border-[#C8102E] transition group block">
           <div class="flex items-center justify-between mb-2">
