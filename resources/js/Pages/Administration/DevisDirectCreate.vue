@@ -68,9 +68,17 @@ const form = useForm({
 const surSaisieDesignation = (ligne, index) => {
     rechercherPiecesStock(ligne, index);
 
+    // Si la famille a été choisie (depuis la base ou à la main), on ne l'écrase pas
+    if (ligne.famille_verrouillee) return;
+
     const res = detecterFamilleEtSousFamille(ligne.designation);
     ligne.famille = res.famille;
     ligne.sous_famille = res.sousFamille;
+};
+
+// Choix manuel dans les listes Famille / Sous-famille : on verrouille la détection auto
+const surChoixManuelFamille = (ligne) => {
+    ligne.famille_verrouillee = true;
 };
 
 // --- LOGIQUE D'AUTOCOMPLÉTION DES PIÈCES ---
@@ -99,15 +107,23 @@ const rechercherPiecesStock = (ligne, index) => {
     });
 };
 
+// Sélection d'une suggestion : pièce du stock, ou famille seule (repli)
 const selectionnerPiece = (ligne, piece) => {
-    ligne.designation = piece.designation_piece || '';
-    ligne.reference_piece = piece.reference || '';
-    ligne.pu_net = piece.prix_kagnan_ht || piece.prix_marche_ht || 0;
+    if (piece.source === 'famille') {
+        // On garde la désignation saisie, on ne touche ni au prix ni à la référence
+        ligne.famille = piece.famille;
+        ligne.sous_famille = piece.sous_famille || '';
+    } else {
+        ligne.designation = piece.designation_piece || '';
+        ligne.reference_piece = piece.reference || '';
+        ligne.pu_net = parseFloat(piece.prix_kagnan_ht) || parseFloat(piece.prix_marche_ht) || 0;
 
-    const res = detecterFamilleEtSousFamille(ligne.designation);
-    ligne.famille = piece.famille || res.famille;
-    ligne.sous_famille = piece.sous_famille || res.sousFamille;
+        const res = detecterFamilleEtSousFamille(ligne.designation);
+        ligne.famille = piece.famille || res.famille;
+        ligne.sous_famille = piece.sous_famille || res.sousFamille;
+    }
 
+    ligne.famille_verrouillee = true;
     activeDropdownIndex.value = null;
     searchResults.value = [];
 };
@@ -187,9 +203,12 @@ watch(petiteFournitureManuelle, (manuel) => {
     if (manuel) form.petite_fourniture_active = true;
 });
 
-// Soumission
+// Soumission : on retire le drapeau interne famille_verrouillee avant l'envoi
 const submitDevis = () => {
-    form.post(route('administration.devis.directs.store'), {
+    form.transform((data) => ({
+        ...data,
+        lignes: data.lignes.map(({ famille_verrouillee, ...ligne }) => ligne),
+    })).post(route('administration.devis.directs.store'), {
         preserveScroll: true,
     });
 };
@@ -318,13 +337,28 @@ const submitDevis = () => {
                                                         v-for="piece in searchResults" 
                                                         :key="piece.id"
                                                         @mousedown.prevent="selectionnerPiece(ligne, piece)"
-                                                        class="px-3 py-2 hover:bg-slate-100 cursor-pointer text-xs border-b border-slate-100 last:border-none flex justify-between items-center"
+                                                        class="px-3 py-2 hover:bg-slate-100 cursor-pointer text-xs border-b border-slate-100 last:border-none flex justify-between items-center gap-3"
                                                     >
-                                                        <div>
-                                                            <span class="font-bold text-slate-800 uppercase">{{ piece.designation_piece }}</span>
-                                                            <span class="text-[10px] text-slate-400 block" v-if="piece.reference">Réf: {{ piece.reference }}</span>
-                                                        </div>
-                                                        <span class="font-mono text-[#E11D48] font-semibold">{{ piece.prix_kagnan_ht || piece.prix_marche_ht || 0 }} F</span>
+                                                        <!-- Pièce du stock -->
+                                                        <template v-if="piece.source !== 'famille'">
+                                                            <div>
+                                                                <span class="font-bold text-slate-800 uppercase">{{ piece.designation_piece }}</span>
+                                                                <span class="text-[10px] text-slate-400 block" v-if="piece.reference">Réf: {{ piece.reference }}</span>
+                                                            </div>
+                                                            <span class="font-mono text-[#E11D48] font-semibold whitespace-nowrap">{{ piece.prix_kagnan_ht || piece.prix_marche_ht || 0 }} F</span>
+                                                        </template>
+
+                                                        <!-- Repli : famille / sous-famille seulement -->
+                                                        <template v-else>
+                                                            <div>
+                                                                <span class="font-bold text-slate-700 flex items-center gap-1.5">
+                                                                    <i class="fa-solid fa-layer-group text-slate-400 text-[10px]"></i>
+                                                                    <span>{{ piece.famille }}</span>
+                                                                </span>
+                                                                <span v-if="piece.sous_famille" class="text-[10px] text-slate-500 block">{{ piece.sous_famille }}</span>
+                                                            </div>
+                                                            <span class="text-[10px] text-slate-400 whitespace-nowrap">Famille uniquement</span>
+                                                        </template>
                                                     </div>
                                                 </div>
                                             </div>
@@ -334,6 +368,7 @@ const submitDevis = () => {
                                         <td class="px-3 py-3 space-y-1">
                                             <select 
                                                 v-model="ligne.famille" 
+                                                @change="surChoixManuelFamille(ligne)"
                                                 class="w-full bg-white border border-slate-300 rounded-lg text-[11px] font-semibold text-slate-800 focus:border-[#E11D48]"
                                             >
                                                 <option :value="FAMILLE_PAR_DEFAUT">{{ FAMILLE_PAR_DEFAUT }}</option>
@@ -345,6 +380,7 @@ const submitDevis = () => {
                                             <select 
                                                 v-if="FAMILLES[ligne.famille]" 
                                                 v-model="ligne.sous_famille" 
+                                                @change="surChoixManuelFamille(ligne)"
                                                 class="w-full bg-slate-50 border border-slate-200 rounded-md text-[10px] text-slate-600"
                                             >
                                                 <option value="">-- Sous-famille --</option>

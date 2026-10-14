@@ -172,13 +172,21 @@ const surSaisieDesignation = () => {
     minuteurRecherche = setTimeout(rechercherPiecesStock, 250);
 };
 
+// Sélection d'une suggestion : pièce du stock, ou famille seule (repli)
 const selectionnerPiece = (piece) => {
     const n = nouvelleLigne.value;
-    n.designation = piece.designation_piece || '';
-    n.reference_piece = piece.reference || '';
-    n.pu_net = parseFloat(piece.prix_kagnan_ht) || parseFloat(piece.prix_marche_ht) || 0;
-    n.famille = piece.famille || null;
-    n.sous_famille = piece.sous_famille || null;
+
+    if (piece.source === 'famille') {
+        // On garde la désignation saisie, on ne touche ni au prix ni à la référence
+        n.famille = piece.famille || null;
+        n.sous_famille = piece.sous_famille || null;
+    } else {
+        n.designation = piece.designation_piece || '';
+        n.reference_piece = piece.reference || '';
+        n.pu_net = parseFloat(piece.prix_kagnan_ht) || parseFloat(piece.prix_marche_ht) || 0;
+        n.famille = piece.famille || null;
+        n.sous_famille = piece.sous_famille || null;
+    }
 
     suggestionsVisibles.value = false;
     resultatsPieces.value = [];
@@ -480,7 +488,7 @@ const retour = () => {
                                             class="w-full rounded-lg border-gray-300 text-xs uppercase p-2 focus:border-[#E11D48] focus:ring-[#E11D48]"
                                         />
 
-                                        <!-- Suggestions de pièces du stock (prix selon la marque / le modèle du véhicule) -->
+                                        <!-- Suggestions : pièces du stock (prix selon le véhicule) ou famille seule -->
                                         <div v-if="suggestionsVisibles && resultatsPieces.length > 0" class="absolute left-0 right-0 z-[999] mt-1 bg-white border border-gray-200 rounded-lg shadow-2xl max-h-48 overflow-y-auto">
                                             <div
                                                 v-for="piece in resultatsPieces"
@@ -488,11 +496,26 @@ const retour = () => {
                                                 @mousedown.prevent="selectionnerPiece(piece)"
                                                 class="px-3 py-2 hover:bg-gray-100 cursor-pointer text-xs border-b border-gray-100 last:border-none flex justify-between items-center gap-3"
                                             >
-                                                <div>
-                                                    <span class="font-bold text-gray-800 uppercase">{{ piece.designation_piece }}</span>
-                                                    <span v-if="piece.reference" class="text-[10px] text-gray-400 block">Réf: {{ piece.reference }}</span>
-                                                </div>
-                                                <span class="font-mono text-[#E11D48] font-semibold whitespace-nowrap">{{ piece.prix_kagnan_ht || piece.prix_marche_ht || 0 }} F</span>
+                                                <!-- Pièce du stock -->
+                                                <template v-if="piece.source !== 'famille'">
+                                                    <div>
+                                                        <span class="font-bold text-gray-800 uppercase">{{ piece.designation_piece }}</span>
+                                                        <span v-if="piece.reference" class="text-[10px] text-gray-400 block">Réf: {{ piece.reference }}</span>
+                                                    </div>
+                                                    <span class="font-mono text-[#E11D48] font-semibold whitespace-nowrap">{{ piece.prix_kagnan_ht || piece.prix_marche_ht || 0 }} F</span>
+                                                </template>
+
+                                                <!-- Repli : famille / sous-famille seulement -->
+                                                <template v-else>
+                                                    <div>
+                                                        <span class="font-bold text-gray-700 flex items-center gap-1.5">
+                                                            <i class="fa-solid fa-layer-group text-gray-400 text-[10px]"></i>
+                                                            <span>{{ piece.famille }}</span>
+                                                        </span>
+                                                        <span v-if="piece.sous_famille" class="text-[10px] text-gray-500 block">{{ piece.sous_famille }}</span>
+                                                    </div>
+                                                    <span class="text-[10px] text-gray-400 whitespace-nowrap">Famille uniquement</span>
+                                                </template>
                                             </div>
                                         </div>
                                         <p v-else-if="suggestionsVisibles && chargementPieces" class="absolute left-0 mt-1 text-[10px] text-gray-400">Recherche...</p>

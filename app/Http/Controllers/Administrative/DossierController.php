@@ -480,41 +480,81 @@ class DossierController extends Controller
         return $this->redirectApresAction('Devis direct enregistré avec succès.', 'administration.devis.directs.index');
     }
 
-    public function rechercherPieces(Request $request, ?Intervention $dossier = null)
-    {
-        if ($dossier) {
-            $this->autoriser($dossier);
-        }
-
-        $marque = $request->input('marque');
-        $modele = $request->input('modele');
-
-        if ($dossier && $dossier->vehicule) {
-            $marque = $marque ?: $dossier->vehicule->marque;
-            $modele = $modele ?: $dossier->vehicule->modele;
-        }
-
-        $query = $request->input('q', ''); 
-
-        $stocks = Stock::query()
-            ->when($marque, function ($q) use ($marque) {
-                $q->where('marque', 'LIKE', "%{$marque}%");
-            })
-            ->when($modele, function ($q) use ($modele) {
-                $q->where('modele', 'LIKE', "%{$modele}%");
-            })
-            ->when($query, function ($q) use ($query) {
-                $q->where(function($sub) use ($query) {
-                    $sub->where('designation_piece', 'LIKE', "%{$query}%")
-                        ->orWhere('reference', 'LIKE', "%{$query}%");
-                });
-            })
-            ->limit(15)
-            ->get();
-
-        return response()->json($stocks);
+    /**
+ * Autocomplétion des pièces pour les devis (dossier et devis direct).
+ *
+ * Niveau 1 : pièces du stock correspondant au véhicule (marque / modèle),
+ *            par désignation ou référence.
+ * Niveau 2 : si aucune pièce pour ce véhicule, familles / sous-familles trouvées
+ *            en base pour cette désignation (tous véhicules), sans prix ni référence.
+ *
+ * Chaque résultat porte un champ "source" : 'vehicule' ou 'famille'.
+ */
+public function rechercherPieces(Request $request, ?Intervention $dossier = null)
+{
+    if ($dossier) {
+        $this->autoriser($dossier);
     }
 
+    $marque = $request->input('marque');
+    $modele = $request->input('modele');
+
+    if ($dossier && $dossier->vehicule) {
+        $marque = $marque ?: $dossier->vehicule->marque;
+        $modele = $modele ?: $dossier->vehicule->modele;
+    }
+
+    $query = trim((string) $request->input('q', ''));
+
+    // Niveau 1 : pièces du stock pour ce véhicule
+    $stocks = Stock::query()
+        ->when($marque, function ($q) use ($marque) {
+            $q->where('marque', 'LIKE', "%{$marque}%");
+        })
+        ->when($modele, function ($q) use ($modele) {
+            $q->where('modele', 'LIKE', "%{$modele}%");
+        })
+        ->when($query !== '', function ($q) use ($query) {
+            $q->where(function ($sub) use ($query) {
+                $sub->where('designation_piece', 'LIKE', "%{$query}%")
+                    ->orWhere('reference', 'LIKE', "%{$query}%");
+            });
+        })
+        ->limit(15)
+        ->get()
+        ->map(fn ($s) => array_merge($s->toArray(), ['source' => 'vehicule']));
+
+    if ($stocks->isNotEmpty()) {
+        return response()->json($stocks->values());
+    }
+
+    // Niveau 2 : rien pour ce véhicule → familles / sous-familles de la base.
+    // Inutile sans texte saisi, ou sans véhicule (le niveau 1 a déjà cherché partout).
+    if ($query === '' || (!$marque && !$modele)) {
+        return response()->json([]);
+    }
+
+    $familles = Stock::query()
+        ->where('designation_piece', 'LIKE', "%{$query}%")
+        ->whereNotNull('famille')
+        ->where('famille', '!=', '')
+        ->select('famille', 'sous_famille', DB::raw('COUNT(*) as nb_pieces'))
+        ->groupBy('famille', 'sous_famille')
+        ->orderByDesc('nb_pieces')
+        ->limit(5)
+        ->get()
+        ->map(fn ($f) => [
+            'id'                => 'fam-' . md5($f->famille . '|' . $f->sous_famille),
+            'designation_piece' => null,
+            'reference'         => null,
+            'famille'           => $f->famille,
+            'sous_famille'      => $f->sous_famille,
+            'nb_pieces'         => $f->nb_pieces,
+            'source'            => 'famille',
+        ]);
+
+    return response()->json($familles->values());
+}
     /**
      * Petite fourniture : montant saisi (obligatoirement appliqué) ou 3 % automatique.
      * Une saisie manuelle verrouille la case : elle ne peut plus être décochée.
