@@ -9,10 +9,10 @@ const props = defineProps({
 });
 
 const search = ref(props.filters.search || '');
-const famille = ref(props.filters.famille || '');
 const showModal = ref(false);
 const currentStock = ref(null);
 
+// Formulaire pour la gestion des attributions et sorties par siège (Seule action autorisée pour le magasinier)
 const form = useForm({
     sieges: [
         { siege: 'Terminus 27', quantite_attribuee: 0, sortie: 0 },
@@ -45,19 +45,33 @@ const submit = () => {
 
 const handleSearch = () => {
     router.get(route('magasinier.pieces.index'), { 
-        search: search.value,
-        famille: famille.value 
+        search: search.value
     }, { preserveState: true, replace: true });
+};
+
+// Exporter vers Excel (CSV) pour le magasinier[cite: 2]
+const exporterExcel = () => {
+    window.location.href = route('administration.stocks.export');
 };
 </script>
 
 <template>
     <AuthenticatedLayout>
         <div class="py-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-            <div class="flex justify-between items-center bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <div>
-                    <h1 class="text-2xl font-black text-slate-900">Espace Magasinier - Catalogue & Gestion des Sorties</h1>
-                    <p class="text-sm text-slate-500">Visualisez l'ensemble du stock et gérez les attributions et sorties par siège.</p>
+                    <h1 class="text-2xl font-black text-slate-900">Espace Magasinier - Catalogue & Gestion des Mouvements</h1>
+                    <p class="text-sm text-slate-500">Consultez l'ensemble du catalogue et enregistrez la répartition par siège et les sorties atelier[cite: 2].</p>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <!-- Bouton Assistant de réapprovisionnement -->
+                    <Link :href="route('administration.stocks.reapprovisionnement')" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-amber-500 text-white text-xs font-bold rounded-xl hover:bg-amber-600 transition shadow-sm">
+                        <i class="fa-solid fa-cart-shopping"></i> Réapprovisionnement
+                    </Link>
+                    <!-- Bouton Exporter -->
+                    <button @click="exporterExcel" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition shadow-sm">
+                        <i class="fa-solid fa-file-excel"></i> Exporter l'inventaire
+                    </button>
                 </div>
             </div>
 
@@ -67,7 +81,7 @@ const handleSearch = () => {
                     type="text" 
                     v-model="search" 
                     @keyup.enter="handleSearch" 
-                    placeholder="Rechercher par référence, désignation, marque, modèle..." 
+                    placeholder="Rechercher par référence, désignation, famille, marque, modèle..." 
                     class="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs p-2.5" 
                 />
                 <button @click="handleSearch" class="w-full sm:w-auto px-6 py-2.5 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 transition">
@@ -81,17 +95,18 @@ const handleSearch = () => {
                     <table class="w-full text-left border-collapse">
                         <thead>
                             <tr class="bg-slate-50 border-b text-[11px] font-bold text-slate-400 uppercase">
-                                <th class="p-3">Date d'entrée</th>
+                                <th class="p-3">Date</th>
                                 <th class="p-3">Référence</th>
                                 <th class="p-3">Désignation</th>
                                 <th class="p-3">Famille / Sous-famille</th>
                                 <th class="p-3">Marque / Modèle</th>
+                                <th class="p-3 text-right">Prix Kagnan HT</th>
                                 <th class="p-3">Qté Initiale</th>
                                 <th class="p-3">Détail Sièges (Attrib. / Sortie)</th>
                                 <th class="p-3 text-right">Prix d'achat</th>
                                 <th class="p-3 text-right">Marge</th>
                                 <th class="p-3 text-right">Total Sorties</th>
-                                <th class="p-3 text-right">Stock Global Restant</th>
+                                <th class="p-3 text-right">Stock Restant</th>
                                 <th class="p-3 text-right">Actions</th>
                             </tr>
                         </thead>
@@ -114,6 +129,7 @@ const handleSearch = () => {
                                     <div class="font-semibold text-slate-800">{{ item.marque || '-' }}</div>
                                     <div class="text-[10px] text-slate-500">{{ item.modele || '-' }}</div>
                                 </td>
+                                <td class="p-3 text-right font-bold text-slate-900">{{ item.prix_kagnan_ht ? item.prix_kagnan_ht + ' FCFA' : '-' }}</td>
                                 <td class="p-3 font-medium">{{ item.quantite ?? 0 }}</td>
                                 <td class="p-3 text-[11px]">
                                     <div v-for="s in (item.sieges || [])" :key="s.id" class="mb-0.5">
@@ -138,7 +154,7 @@ const handleSearch = () => {
                                 </td>
                             </tr>
                             <tr v-if="stocks.data.length === 0">
-                                <td colspan="12" class="p-8 text-center text-slate-400">Aucune pièce trouvée dans le stock.</td>
+                                <td colspan="13" class="p-8 text-center text-slate-400">Aucune pièce trouvée dans le stock.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -163,7 +179,7 @@ const handleSearch = () => {
                 </div>
             </div>
 
-            <!-- Modal de gestion par siège -->
+            <!-- Modal de gestion par siège (Magasinier : attributions et sorties uniquement) -->
             <div v-if="showModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
                 <div class="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
                     <h3 class="text-base font-black text-slate-900">Répartition par Siège & Enregistrement des Sorties</h3>

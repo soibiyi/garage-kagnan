@@ -142,7 +142,7 @@ const submitImport = () => {
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <div>
                     <h1 class="text-2xl font-black text-slate-900">Gestion Globale des Pièces & Stocks (Admin)</h1>
-                    <p class="text-sm text-slate-500">Catalogue, prix, attributions par siège, import/export et alertes de stock.</p>
+                    <p class="text-sm text-slate-500">Catalogue, prix Kagnan HT, attributions par siège, import/export et alertes de stock.</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2 sm:gap-3">
                     <Link :href="route('dashboard')" class="px-3.5 py-2.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-200 transition">
@@ -177,6 +177,7 @@ const submitImport = () => {
                                 <th class="p-3">Désignation</th>
                                 <th class="p-3">Famille / Sous-famille</th>
                                 <th class="p-3">Marque / Modèle</th>
+                                <th class="p-3 text-right">Prix Kagnan HT</th>
                                 <th class="p-3">Qté Initiale</th>
                                 <th class="p-3">Détail Sièges (Attrib. / Sortie)</th>
                                 <th class="p-3 text-right">Prix d'achat</th>
@@ -204,6 +205,7 @@ const submitImport = () => {
                                     <div class="font-semibold text-slate-800">{{ item.marque || '-' }}</div>
                                     <div class="text-[10px] text-slate-500">{{ item.modele || '-' }}</div>
                                 </td>
+                                <td class="p-3 text-right font-bold text-slate-900">{{ item.prix_kagnan_ht ? item.prix_kagnan_ht + ' FCFA' : '-' }}</td>
                                 <td class="p-3 font-medium">{{ item.quantite ?? 0 }}</td>
                                 <td class="p-3 text-[11px]">
                                     <div v-for="s in (item.sieges || [])" :key="s.id" class="mb-0.5">
@@ -227,7 +229,7 @@ const submitImport = () => {
                                 </td>
                             </tr>
                             <tr v-if="stocks.data.length === 0">
-                                <td colspan="12" class="p-8 text-center text-slate-400">Aucune pièce trouvée.</td>
+                                <td colspan="13" class="p-8 text-center text-slate-400">Aucune pièce trouvée.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -295,6 +297,10 @@ const submitImport = () => {
                                 <label class="block text-xs font-semibold mb-1">Modèle</label>
                                 <input type="text" v-model="form.modele" class="w-full bg-slate-50 border rounded-lg text-xs p-2" />
                             </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold mb-1">Prix Kagnan HT</label>
+                            <input type="text" v-model="form.prix_kagnan_ht" class="w-full bg-slate-50 border rounded-lg text-xs p-2 font-semibold text-slate-900" placeholder="Ex: 15000" />
                         </div>
                         <div>
                             <label class="block text-xs font-semibold mb-1">Quantité Initiale (Lot reçu)</label>
@@ -368,7 +374,7 @@ const submitImport = () => {
                         <div class="p-3 bg-blue-50/50 border border-blue-100 rounded-xl text-[11px] text-blue-800 space-y-1">
                             <p class="font-bold"><i class="fa-solid fa-circle-info mr-1"></i> Structure attendue :</p>
                             <p class="text-slate-600">
-                                <strong>Marque</strong>, <strong>Modèle</strong>, <strong>Désignation Pièce</strong>, <strong>Référence</strong>, <strong>Quantité</strong>, <strong>Prix d'achat</strong>, <strong>Marge Vente</strong>, <strong>Famille</strong>, <strong>Sous-famille</strong>.
+                                <strong>Marque</strong>, <strong>Modèle</strong>, <strong>Désignation Pièce</strong>, <strong>Référence</strong>, <strong>Prix Kagnan HT</strong>, <strong>Quantité</strong>, <strong>Prix d'achat</strong>, <strong>Marge Vente</strong>, <strong>Famille</strong>, <strong>Sous-famille</strong>.
                             </p>
                         </div>
 
