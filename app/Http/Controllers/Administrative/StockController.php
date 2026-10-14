@@ -43,6 +43,8 @@ class StockController extends Controller
             $query->where(function($q) use ($search) {
                 $q->where('designation_piece', 'like', "%{$search}%")
                   ->orWhere('reference', 'like', "%{$search}%")
+                  ->orWhere('famille', 'like', "%{$search}%")
+                  ->orWhere('marque', 'like', "%{$search}%")
                   ->orWhere('vehicule_correspondant', 'like', "%{$search}%");
             });
         }
@@ -64,6 +66,8 @@ class StockController extends Controller
             $query->where(function($q) use ($search) {
                 $q->where('designation_piece', 'like', "%{$search}%")
                   ->orWhere('reference', 'like', "%{$search}%")
+                  ->orWhere('famille', 'like', "%{$search}%")
+                  ->orWhere('marque', 'like', "%{$search}%")
                   ->orWhere('vehicule_correspondant', 'like', "%{$search}%");
             });
         }
@@ -85,7 +89,6 @@ class StockController extends Controller
             'sieges.*.sortie' => 'required|integer|min:0',
         ]);
 
-        // Vérification 1 : La somme des attributions ne dépasse pas le stock initial global
         $totalAttribue = collect($validated['sieges'])->sum('quantite_attribuee');
         if ($totalAttribue > ($stock->quantite ?? 0)) {
             return redirect()->back()->withErrors([
@@ -93,7 +96,6 @@ class StockController extends Controller
             ]);
         }
 
-        // Vérification 2 : Les sorties ne dépassent pas les quantités attribuées par siège
         foreach ($validated['sieges'] as $ligne) {
             if ($ligne['sortie'] > $ligne['quantite_attribuee']) {
                 return redirect()->back()->withErrors([
@@ -239,7 +241,7 @@ class StockController extends Controller
 
     public function export(): StreamedResponse
     {
-        $fileName = 'catalogue-stocks-' . date('Y-m-d') . '.csv';
+        $fileName = 'catalogue-stocks-complet-' . date('Y-m-d') . '.csv';
 
         $headers = [
             "Content-type"        => "text/csv; charset=UTF-8",
@@ -254,27 +256,181 @@ class StockController extends Controller
             fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
 
             fputcsv($handle, [
-                'Marque', 'Modèle', 'Désignation Pièce', 'Référence',
-                'Prix Kagnan HT', 'Famille', 'Sous-famille',
+                'Date Entree',
+                'Reference',
+                'Designation Piece',
+                'Famille',
+                'Sous Famille',
+                'Marque',
+                'Modele',
+                'Prix Kagnan HT',
+                'Quantite Initiale',
+                'Prix Achat',
+                'Marge Vente',
+                'Terminus 27 (Attribuee)',
+                'Terminus 27 (Sortie)',
+                'Zone Industrielle (Attribuee)',
+                'Zone Industrielle (Sortie)',
+                'Yamoussoukro (Attribuee)',
+                'Yamoussoukro (Sortie)',
             ], ';');
 
-            Stock::select('marque', 'modele', 'designation_piece', 'reference', 'prix_kagnan_ht', 'famille', 'sous_famille')
+            Stock::with('sieges')
                 ->orderBy('id')
                 ->chunk(200, function ($stocks) use ($handle) {
                     foreach ($stocks as $stock) {
+                        $t27 = $stock->sieges->where('siege', 'Terminus 27')->first();
+                        $zi  = $stock->sieges->where('siege', 'Zone Industrielle')->first();
+                        $yam = $stock->sieges->where('siege', 'Yamoussoukro')->first();
+
                         fputcsv($handle, [
-                            $stock->marque,
-                            $stock->modele,
-                            $stock->designation_piece,
-                            $stock->reference,
-                            $stock->prix_kagnan_ht,
-                            $stock->famille,
-                            $stock->sous_famille,
+                            $stock->date_entree ?? '',
+                            $stock->reference ?? '',
+                            $stock->designation_piece ?? '',
+                            $stock->famille ?? '',
+                            $stock->sous_famille ?? '',
+                            $stock->marque ?? '',
+                            $stock->modele ?? '',
+                            $stock->prix_kagnan_ht ?? '',
+                            $stock->quantite ?? 0,
+                            $stock->prix_achat ?? '',
+                            $stock->marge_vente ?? '',
+                            $t27 ? $t27->quantite_attribuee : 0,
+                            $t27 ? $t27->sortie : 0,
+                            $zi ? $zi->quantite_attribuee : 0,
+                            $zi ? $zi->sortie : 0,
+                            $yam ? $yam->quantite_attribuee : 0,
+                            $yam ? $yam->sortie : 0,
                         ], ';');
                     }
                 });
 
             fclose($handle);
         }, 200, $headers);
+    }
+
+    public function import(Request $request)
+    {
+        $request->validate([
+            'fichier' => 'required|file|mimes:csv,txt|max:10240',
+        ]);
+
+        $path = $request->file('fichier')->getRealPath();
+        
+        if (($handle = fopen($path, 'r')) !== FALSE) {
+            $bom = fread($handle, 3);
+            if ($bom !== "\xEF\xBB\xBF") {
+                rewind($handle);
+            }
+
+            $firstLine = fgets($handle);
+            $delimiter = (substr_count($firstLine, ';') > substr_count($firstLine, ',')) ? ';' : ',';
+            rewind($handle);
+            if ($bom === "\xEF\xBB\xBF") {
+                fread($handle, 3);
+            }
+
+            fgetcsv($handle, 0, $delimiter);
+
+            DB::beginTransaction();
+            try {
+                while (($data = fgetcsv($handle, 0, $delimiter)) !== FALSE) {
+                    if (empty($data[2])) continue;
+
+                    $reference = trim($data[1] ?? '');
+
+                    $stock = Stock::updateOrCreate(
+                        ['reference' => $reference ?: Str::random(10)],
+                        [
+                            'date_entree'       => !empty($data[0]) ? date('Y-m-d', strtotime($data[0])) : null,
+                            'designation_piece' => trim($data[2] ?? ''),
+                            'famille'           => trim($data[3] ?? ''),
+                            'sous_famille'      => trim($data[4] ?? ''),
+                            'marque'            => trim($data[5] ?? ''),
+                            'modele'            => trim($data[6] ?? ''),
+                            'prix_kagnan_ht'    => trim($data[7] ?? ''),
+                            'quantite'          => (int)($data[8] ?? 0),
+                            'prix_achat'        => is_numeric($data[9] ?? null) ? $data[9] : null,
+                            'marge_vente'       => is_numeric($data[10] ?? null) ? $data[10] : null,
+                        ]
+                    );
+
+                    $sieges = [
+                        'Terminus 27'       => ['attrib' => (int)($data[11] ?? 0), 'sortie' => (int)($data[12] ?? 0)],
+                        'Zone Industrielle' => ['attrib' => (int)($data[13] ?? 0), 'sortie' => (int)($data[14] ?? 0)],
+                        'Yamoussoukro'      => ['attrib' => (int)($data[15] ?? 0), 'sortie' => (int)($data[16] ?? 0)],
+                    ];
+
+                    foreach ($sieges as $nomSiege => $qte) {
+                        $stock->sieges()->updateOrCreate(
+                            ['siege' => $nomSiege],
+                            [
+                                'quantite_attribuee' => $qte['attrib'],
+                                'sortie'             => $qte['sortie'],
+                            ]
+                        );
+                    }
+                }
+
+                DB::commit();
+                fclose($handle);
+
+                return redirect()->back()->with('success', 'Catalogue et stocks importés avec succès depuis le fichier CSV !');
+            } catch (\Exception $e) {
+                DB::rollBack();
+                fclose($handle);
+                return redirect()->back()->withErrors(['fichier' => 'Erreur lors de l’importation du fichier CSV : ' . $e->getMessage()]);
+            }
+        }
+
+        return redirect()->back()->withErrors(['fichier' => 'Impossible d’ouvrir le fichier CSV.']);
+    }
+
+
+
+    /**
+     * Vue de l'assistant de réapprovisionnement
+     */
+    public function reapprovisionnement(Request $request)
+    {
+        // Récupère les pièces dont le stock restant global est <= 5
+        $stocks = Stock::with('sieges')
+            ->get()
+            ->filter(function ($stock) {
+                $totalSorties = $stock->sieges->sum('sortie');
+                $stockRestant = $stock->quantite - $totalSorties;
+                return $stockRestant <= 5;
+            })
+            ->values();
+
+        return Inertia::render('Administration/Stocks/Reapprovisionnement', [
+            'stocks' => $stocks
+        ]);
+    }
+
+    /**
+     * Génération du bon de commande au format HTML / Impression / PDF
+     */
+    public function genererBonCommande(Request $request)
+    {
+        $validated = $request->validate([
+            'fournisseur_nom' => 'required|string|max:150',
+            'fournisseur_contact' => 'nullable|string|max:100',
+            'articles' => 'required|array|min:1',
+            'articles.*.designation' => 'required|string',
+            'articles.*.reference' => 'nullable|string',
+            'articles.*.quantite_a_commander' => 'required|integer|min:1',
+            'articles.*.prix_estime' => 'nullable|numeric',
+        ]);
+
+        return Inertia::render('Administration/Stocks/BonCommandePdf', [
+            'commande' => [
+                'numero' => 'BC-' . date('Ymd-His'),
+                'date' => date('d/m/Y'),
+                'fournisseur_nom' => $validated['fournisseur_nom'],
+                'fournisseur_contact' => $validated['fournisseur_contact'] ?? '',
+                'articles' => $validated['articles'],
+            ]
+        ]);
     }
 }

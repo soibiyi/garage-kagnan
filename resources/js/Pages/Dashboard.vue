@@ -7,23 +7,60 @@ const props = defineProps({
     interventionsAtelier: Object, // résultat paginé Laravel : { data, from, to, total, current_page, last_page, prev_page_url, next_page_url }
     filters: { type: Object, default: () => ({}) },
     statuts: { type: Array, default: () => [] },
+    // { normal: { tous: 12, reception: 3, ... }, direct: { tous: 5, ... } }
+    compteurs: { type: Object, default: () => ({}) },
 });
 
 const page = usePage();
 const user = computed(() => page.props.auth.user);
 
 /* ------------------------------------------------------------------ */
-/* Recherche + filtre de statut du tableau « Dossiers en cours »       */
+/* Libellés + styles des statuts (le texte porte toujours l'information, la couleur la renforce) */
+/* ------------------------------------------------------------------ */
+const statutLabels = {
+    reception: 'Sur le parc',
+    atelier: 'En atelier',
+    en_cours: 'En réparation',
+    attente_accord: 'Attente accord devis',
+    accepte: 'Devis accepté',
+};
+const statutStyles = {
+    reception: 'k-badge--steel',
+    atelier: 'k-badge--ink',
+    en_cours: 'k-badge--signal',
+    attente_accord: 'k-badge--amber',
+    accepte: 'k-badge--ok',
+};
+const getStatutLabel = (st) => statutLabels[st] || (st || '').replace(/_/g, ' ');
+const getStatutStyle = (st) => statutStyles[st] || 'k-badge--steel';
+
+/* ------------------------------------------------------------------ */
+/* Onglets (type de devis) + sous-onglets (statut) + recherche         */
 /* ------------------------------------------------------------------ */
 const search = ref(props.filters.search || '');
 const statut = ref(props.filters.statut || '');
+const type = ref(props.filters.type === 'direct' ? 'direct' : 'normal');
 const chargementListe = ref(false);
 const filtresActifs = computed(() => Boolean(search.value || statut.value));
+
+const onglets = [
+    { value: 'normal', label: 'Devis normaux', icone: 'fa-folder-open' },
+    { value: 'direct', label: 'Devis direct', icone: 'fa-file-invoice-dollar' },
+];
+
+const compteurType = (t) => props.compteurs?.[t]?.tous ?? 0;
+const compteurStatut = (st) => props.compteurs?.[type.value]?.[st || 'tous'] ?? 0;
+
+const sousOnglets = computed(() => [
+    { value: '', label: 'Tous' },
+    ...props.statuts.map((st) => ({ value: st, label: getStatutLabel(st) })),
+]);
 
 const applyFilters = () => {
     router.get(
         route('dashboard'),
         {
+            type: type.value === 'direct' ? 'direct' : undefined,
             search: search.value.trim() || undefined,
             statut: statut.value || undefined,
         },
@@ -37,13 +74,21 @@ const applyFilters = () => {
     );
 };
 
+const choisirType = (t) => {
+    if (type.value === t) return;
+    type.value = t; // le statut choisi est conservé en changeant d'onglet
+};
+const choisirStatut = (st) => {
+    statut.value = st;
+};
+
 // Délai pour ne pas interroger le serveur à chaque lettre tapée
 let searchTimer = null;
 watch(search, () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(applyFilters, 300);
 });
-watch(statut, () => {
+watch([statut, type], () => {
     clearTimeout(searchTimer);
     applyFilters();
 });
@@ -53,21 +98,9 @@ const reinitialiserFiltres = () => {
     statut.value = '';
 };
 
-/* Libellés + styles des statuts (le texte porte toujours l'information, la couleur la renforce) */
-const statutLabels = {
-    reception: 'Sur le parc',
-    atelier: 'En atelier',
-    en_cours: 'En réparation',
-    attente_accord: 'Attente accord devis',
-};
-const statutStyles = {
-    reception: 'k-badge--steel',
-    atelier: 'k-badge--ink',
-    en_cours: 'k-badge--signal',
-    attente_accord: 'k-badge--amber',
-};
-const getStatutLabel = (st) => statutLabels[st] || (st || '').replace(/_/g, ' ');
-const getStatutStyle = (st) => statutStyles[st] || 'k-badge--steel';
+/* Actions : mêmes routes pour les deux types ; adapte ici si le devis direct a ses propres routes */
+const routeConsulter = (item) => route('parc.show', item.id);
+const routeSupprimer = (item) => route('parc.destroy', item.id);
 
 /* ------------------------------------------------------------------ */
 /* Rôle                                                                */
@@ -190,7 +223,7 @@ const confirmerSuppression = () => {
 
     suppressionEnCours.value = true;
     erreurSuppression.value = '';
-    router.delete(route('parc.destroy', dossierASupprimer.value.id), {
+    router.delete(routeSupprimer(dossierASupprimer.value), {
         preserveScroll: true,
         onSuccess: () => {
             dossierASupprimer.value = null;
@@ -343,34 +376,61 @@ const logout = () => {
                         <span>Dossiers en cours / Atelier</span>
                     </h4>
 
-                    <!-- Recherche + filtre par statut -->
-                    <div class="mt-5 flex flex-col gap-3 md:flex-row">
-                        <div class="relative w-full">
-                            <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-[var(--k-steel)]">
-                                <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-                            </span>
-                            <input
-                                v-model="search"
-                                type="text"
-                                autocomplete="off"
-                                aria-label="Rechercher un dossier"
-                                placeholder="N° OT, client, immatriculation, marque, modèle…"
-                                class="k-field w-full pl-11 pr-11"
-                            />
-                            <button
-                                v-if="search"
-                                type="button"
-                                @click="search = ''"
-                                aria-label="Effacer la recherche"
-                                class="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-[var(--k-muted)] transition hover:text-[var(--k-signal)]"
-                            >
-                                <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-                            </button>
-                        </div>
-                        <select v-model="statut" aria-label="Filtrer par statut" class="k-field w-full md:w-64">
-                            <option value="">Tous les statuts</option>
-                            <option v-for="st in statuts" :key="st" :value="st">{{ getStatutLabel(st) }}</option>
-                        </select>
+                    <!-- Onglets principaux : type de devis -->
+                    <div class="k-tabs mt-5" role="tablist" aria-label="Type de devis">
+                        <button
+                            v-for="o in onglets"
+                            :key="o.value"
+                            type="button"
+                            role="tab"
+                            :aria-selected="type === o.value"
+                            :class="['k-tab', type === o.value && 'k-tab--active']"
+                            @click="choisirType(o.value)"
+                        >
+                            <i :class="['fa-solid', o.icone, 'text-sm']" aria-hidden="true"></i>
+                            <span>{{ o.label }}</span>
+                            <span class="k-count">{{ compteurType(o.value) }}</span>
+                        </button>
+                    </div>
+
+                    <!-- Recherche -->
+                    <div class="relative mt-5 w-full">
+                        <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-[var(--k-steel)]">
+                            <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+                        </span>
+                        <input
+                            v-model="search"
+                            type="text"
+                            autocomplete="off"
+                            aria-label="Rechercher un dossier"
+                            placeholder="N° OT, client, immatriculation, marque, modèle…"
+                            class="k-field w-full pl-11 pr-11"
+                        />
+                        <button
+                            v-if="search"
+                            type="button"
+                            @click="search = ''"
+                            aria-label="Effacer la recherche"
+                            class="absolute inset-y-0 right-0 flex w-11 items-center justify-center text-[var(--k-muted)] transition hover:text-[var(--k-signal)]"
+                        >
+                            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                        </button>
+                    </div>
+
+                    <!-- Sous-onglets : statuts -->
+                    <div class="k-subtabs mt-4" role="tablist" aria-label="Filtrer par statut">
+                        <button
+                            v-for="s in sousOnglets"
+                            :key="s.value || 'tous'"
+                            type="button"
+                            role="tab"
+                            :aria-selected="statut === s.value"
+                            :class="['k-subtab', statut === s.value && 'k-subtab--active']"
+                            @click="choisirStatut(s.value)"
+                        >
+                            <span>{{ s.label }}</span>
+                            <span class="k-count k-count--sm">{{ compteurStatut(s.value) }}</span>
+                        </button>
                     </div>
 
                     <div class="relative mt-5">
@@ -402,7 +462,7 @@ const logout = () => {
                                     </p>
 
                                     <div class="mt-4 flex gap-2 border-t border-[var(--k-line)] pt-3">
-                                        <Link :href="route('parc.show', item.id)" class="k-btn k-btn--dark flex-1 justify-center">
+                                        <Link :href="routeConsulter(item)" class="k-btn k-btn--dark flex-1 justify-center">
                                             <span>Consulter</span>
                                             <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
                                         </Link>
@@ -448,7 +508,7 @@ const logout = () => {
                                             </td>
                                             <td class="whitespace-nowrap px-5 py-4">
                                                 <div class="flex items-center justify-end gap-1">
-                                                    <Link :href="route('parc.show', item.id)" class="k-btn k-btn--text">
+                                                    <Link :href="routeConsulter(item)" class="k-btn k-btn--text">
                                                         <span>Consulter</span>
                                                         <i class="fa-solid fa-arrow-right text-[10px]" aria-hidden="true"></i>
                                                     </Link>
@@ -469,16 +529,16 @@ const logout = () => {
                                 <i :class="['fa-solid', filtresActifs ? 'fa-magnifying-glass' : 'fa-folder-open', 'text-lg']" aria-hidden="true"></i>
                             </span>
                             <p class="mt-4 text-sm font-bold text-[var(--k-ink)]">
-                                {{ filtresActifs ? 'Aucun dossier ne correspond à votre recherche.' : 'Aucun dossier pour le moment.' }}
+                                {{ filtresActifs ? 'Aucun dossier ne correspond à votre recherche.' : (type === 'direct' ? 'Aucun devis direct pour le moment.' : 'Aucun dossier pour le moment.') }}
                             </p>
                             <p class="mt-1 text-xs text-[var(--k-muted)]">
-                                {{ filtresActifs ? 'Vérifiez l\'orthographe ou essayez un autre statut.' : 'Les véhicules enregistrés à la réception apparaîtront ici.' }}
+                                {{ filtresActifs ? 'Vérifiez l\'orthographe ou essayez un autre statut.' : (type === 'direct' ? 'Les devis directs créés au comptoir apparaîtront ici.' : 'Les véhicules enregistrés à la réception apparaîtront ici.') }}
                             </p>
                             <button v-if="filtresActifs" type="button" @click="reinitialiserFiltres" class="k-btn k-btn--dark mt-5">
                                 <i class="fa-solid fa-rotate-left text-xs" aria-hidden="true"></i>
                                 <span>Effacer les filtres</span>
                             </button>
-                            <Link v-else :href="route('reception.create')" class="k-btn k-btn--dark mt-5">
+                            <Link v-else-if="type === 'normal'" :href="route('reception.create')" class="k-btn k-btn--dark mt-5">
                                 <i class="fa-solid fa-circle-plus text-xs" aria-hidden="true"></i>
                                 <span>Nouvelle réception</span>
                             </Link>
@@ -784,6 +844,7 @@ const logout = () => {
 .k-badge--ink { background: rgba(11, 15, 25, 0.08); color: var(--k-ink); }
 .k-badge--signal { background: rgba(225, 29, 72, 0.1); color: #be123c; }
 .k-badge--amber { background: rgba(180, 83, 9, 0.1); color: var(--k-amber); }
+.k-badge--ok { background: rgba(21, 128, 61, 0.1); color: #15803d; }
 
 /* Plaque d'immatriculation */
 .k-plate {
@@ -797,6 +858,96 @@ const logout = () => {
     border: 1.5px solid var(--k-ink);
     border-radius: 6px;
 }
+
+/* ---------- Onglets (type de devis) ---------- */
+.k-tabs {
+    display: flex;
+    gap: 0.25rem;
+    border-bottom: 1px solid var(--k-line);
+}
+.k-tab {
+    position: relative;
+    display: inline-flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    gap: 0.55rem;
+    min-height: 3rem;
+    padding: 0 1rem;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--k-muted);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    transition: color 0.2s ease, background-color 0.2s ease;
+}
+@media (min-width: 640px) {
+    .k-tab { flex: none; padding: 0 1.5rem; }
+}
+.k-tab::after {
+    content: '';
+    position: absolute;
+    inset: auto 0 -1px 0;
+    height: 2px;
+    background: var(--k-signal);
+    transform: scaleX(0);
+    transition: transform 0.3s var(--k-ease);
+}
+.k-tab:hover { color: var(--k-ink); background: var(--k-paper); }
+.k-tab--active { color: var(--k-ink); }
+.k-tab--active::after { transform: scaleX(1); }
+.k-tab:focus-visible { outline: 2px solid var(--k-signal); outline-offset: -2px; }
+
+/* ---------- Sous-onglets (statuts) ---------- */
+.k-subtabs {
+    display: flex;
+    gap: 0.5rem;
+    padding-bottom: 0.25rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+}
+.k-subtabs::-webkit-scrollbar { display: none; }
+.k-subtab {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 2.5rem;
+    padding: 0 0.9rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #374151;
+    background: #fff;
+    border: 1px solid var(--k-line);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: transform 0.15s ease, background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+}
+.k-subtab:hover { border-color: var(--k-signal); color: var(--k-signal); }
+.k-subtab:active { transform: scale(0.97); }
+.k-subtab:focus-visible { outline: 2px solid var(--k-signal); outline-offset: 2px; }
+.k-subtab--active { background: var(--k-signal); border-color: var(--k-signal); color: #fff; }
+.k-subtab--active:hover { color: #fff; }
+
+/* ---------- Compteurs ---------- */
+.k-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.5rem;
+    height: 1.4rem;
+    padding: 0 0.45rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: var(--k-ink);
+    background: rgba(138, 141, 143, 0.16);
+    border-radius: 999px;
+    font-variant-numeric: tabular-nums;
+}
+.k-tab--active .k-count { background: rgba(225, 29, 72, 0.1); color: #be123c; }
+.k-count--sm { min-width: 1.3rem; height: 1.2rem; font-size: 0.68rem; }
+.k-subtab--active .k-count { background: rgba(255, 255, 255, 0.25); color: #fff; }
 
 /* ---------- Liste des dossiers ---------- */
 .k-ticket {
@@ -864,6 +1015,7 @@ const logout = () => {
 /* ---------- Accessibilité : mouvement réduit ---------- */
 @media (prefers-reduced-motion: reduce) {
     .k-action, .k-action::before, .k-action__arrow, .k-btn, .k-list,
+    .k-tab, .k-tab::after, .k-subtab,
     .sheet-enter-active, .sheet-leave-active,
     .sheet-enter-active .k-sheet, .sheet-leave-active .k-sheet { transition: none; }
     .k-action:hover { transform: none; }

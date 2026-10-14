@@ -10,298 +10,214 @@ const props = defineProps({
 
 const search = ref(props.filters.search || '');
 const showModal = ref(false);
-const showImportModal = ref(false);
-const isEditing = ref(false);
-const currentStockId = ref(null);
+const currentStock = ref(null);
 
-// Formulaire pour Créer / Modifier une pièce
+// Formulaire pour la gestion des attributions et sorties par siège (Seule action autorisée pour le magasinier)
 const form = useForm({
-    marque: '',
-    modele: '',
-    designation_piece: '',
-    reference: '',
-    prix_kagnan_ht: '',
-    famille: '',
-    sous_famille: ''
+    sieges: [
+        { siege: 'Terminus 27', quantite_attribuee: 0, sortie: 0 },
+        { siege: 'Zone Industrielle', quantite_attribuee: 0, sortie: 0 },
+        { siege: 'Yamoussoukro', quantite_attribuee: 0, sortie: 0 },
+    ]
 });
 
-// Formulaire pour Importer un fichier CSV
-const importForm = useForm({
-    fichier: null,
-});
+const openEditModal = (item) => {
+    currentStock.value = item;
+    
+    const siegesList = ['Terminus 27', 'Zone Industrielle', 'Yamoussoukro'];
+    form.sieges = siegesList.map(nomSiege => {
+        const existant = item.sieges?.find(s => s.siege === nomSiege);
+        return {
+            siege: nomSiege,
+            quantite_attribuee: existant ? existant.quantite_attribuee : 0,
+            sortie: existant ? existant.sortie : 0,
+        };
+    });
 
-const openCreateModal = () => {
-    isEditing.value = false;
-    form.reset();
-    form.clearErrors();
-    showModal.value = true;
-};
-
-const openEditModal = (stock) => {
-    isEditing.value = true;
-    currentStockId.value = stock.id;
-    form.marque = stock.marque || '';
-    form.modele = stock.modele || '';
-    form.designation_piece = stock.designation_piece || '';
-    form.reference = stock.reference || '';
-    form.prix_kagnan_ht = stock.prix_kagnan_ht || '';
-    form.famille = stock.famille || '';
-    form.sous_famille = stock.sous_famille || '';
-    form.clearErrors();
     showModal.value = true;
 };
 
 const submit = () => {
-    if (isEditing.value) {
-        form.put(route('administration.stocks.update', currentStockId.value), {
-            preserveScroll: true,
-            onSuccess: () => { showModal.value = false; }
-        });
-    } else {
-        form.post(route('administration.stocks.store'), {
-            preserveScroll: true,
-            onSuccess: () => { showModal.value = false; form.reset(); }
-        });
-    }
-};
-
-const deleteStock = (id) => {
-    if (confirm('Voulez-vous vraiment supprimer cette pièce du stock ?')) {
-        router.delete(route('administration.stocks.destroy', id), {
-            preserveScroll: true
-        });
-    }
+    form.put(route('magasinier.pieces.update', currentStock.value.id), {
+        onSuccess: () => { showModal.value = false; }
+    });
 };
 
 const handleSearch = () => {
-    router.get(route('administration.stocks.index'), { search: search.value }, { preserveState: true, replace: true });
+    router.get(route('magasinier.pieces.index'), { 
+        search: search.value
+    }, { preserveState: true, replace: true });
 };
 
-/* ------------------------------------------------------------------ */
-/* Export & Import (CSV compatible Excel)                             */
-/* ------------------------------------------------------------------ */
-
-// Redirige vers la route Laravel de téléchargement du fichier
+// Exporter vers Excel (CSV) pour le magasinier[cite: 2]
 const exporterExcel = () => {
     window.location.href = route('administration.stocks.export');
-};
-
-const openImportModal = () => {
-    importForm.reset();
-    importForm.clearErrors();
-    showImportModal.value = true;
-};
-
-const handleFileChange = (e) => {
-    importForm.fichier = e.target.files[0];
-};
-
-const submitImport = () => {
-    if (!importForm.fichier) return;
-
-    importForm.post(route('administration.stocks.import'), {
-        preserveScroll: true,
-        onSuccess: () => {
-            showImportModal.value = false;
-            importForm.reset();
-        }
-    });
 };
 </script>
 
 <template>
     <AuthenticatedLayout>
         <div class="py-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-            <!-- Header avec actions (Retour, Exporter, Importer, Ajouter) -->
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <div>
-                    <h1 class="text-2xl font-black text-slate-900">Gestion des Stocks</h1>
-                    <p class="text-sm text-slate-500">Catalogue des pièces détachées et inventaire (25 éléments par page).</p>
+                    <h1 class="text-2xl font-black text-slate-900">Espace Magasinier - Catalogue & Gestion des Mouvements</h1>
+                    <p class="text-sm text-slate-500">Consultez l'ensemble du catalogue et enregistrez la répartition par siège et les sorties atelier[cite: 2].</p>
                 </div>
-                <div class="flex flex-wrap items-center gap-2 sm:gap-3">
-                    <Link :href="route('dashboard')" class="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-200 transition shadow-sm">
-                        <i class="fa-solid fa-arrow-left"></i> <span class="hidden md:inline">Dashboard</span>
+                <div class="flex flex-wrap items-center gap-2">
+                    <!-- Bouton Assistant de réapprovisionnement -->
+                    <Link :href="route('administration.stocks.reapprovisionnement')" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-amber-500 text-white text-xs font-bold rounded-xl hover:bg-amber-600 transition shadow-sm">
+                        <i class="fa-solid fa-cart-shopping"></i> Réapprovisionnement
                     </Link>
-
                     <!-- Bouton Exporter -->
-                    <button @click="exporterExcel" class="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition shadow-sm" title="Télécharger la liste (CSV, ouvrable dans Excel)">
-                        <i class="fa-solid fa-file-excel text-sm"></i> Exporter
-                    </button>
-
-                    <!-- Bouton Importer -->
-                    <button @click="openImportModal" class="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition shadow-sm" title="Mettre à jour la base de données par fichier CSV">
-                        <i class="fa-solid fa-file-import text-sm"></i> Importer
-                    </button>
-
-                    <!-- Bouton Ajouter une pièce -->
-                    <button @click="openCreateModal" class="inline-flex items-center justify-center gap-2 px-3.5 py-2.5 bg-[#E11D48] text-white text-xs font-bold rounded-xl hover:bg-rose-700 transition shadow-sm">
-                        <i class="fa-solid fa-plus"></i> Ajouter une pièce
+                    <button @click="exporterExcel" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition shadow-sm">
+                        <i class="fa-solid fa-file-excel"></i> Exporter l'inventaire
                     </button>
                 </div>
             </div>
 
-            <!-- Recherche élargie (Désignation, Référence, Marque, Modèle) -->
-            <div class="flex items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                <div class="relative flex-1">
-                    <i class="fa-solid fa-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                    <input type="text" v-model="search" @keyup.enter="handleSearch" placeholder="Rechercher par marque, modèle, référence ou désignation..." class="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:border-[#E11D48]" />
-                </div>
-                <button @click="handleSearch" class="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 transition">Filtrer</button>
+            <!-- Barre de recherche -->
+            <div class="flex flex-col sm:flex-row items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                <input 
+                    type="text" 
+                    v-model="search" 
+                    @keyup.enter="handleSearch" 
+                    placeholder="Rechercher par référence, désignation, famille, marque, modèle..." 
+                    class="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs p-2.5" 
+                />
+                <button @click="handleSearch" class="w-full sm:w-auto px-6 py-2.5 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 transition">
+                    Filtrer
+                </button>
             </div>
 
-            <!-- Tableau -->
+            <!-- Tableau complet du stock -->
             <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div class="overflow-x-auto">
                     <table class="w-full text-left border-collapse">
                         <thead>
-                            <tr class="bg-slate-50 border-b border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                                <th class="p-4">Marque</th>
-                                <th class="p-4">Modèle</th>
-                                <th class="p-4">Désignation</th>
-                                <th class="p-4">Famille</th>
-                                <th class="p-4">Référence</th>
-                                <th class="p-4 text-right">Prix Kagnan HT</th>
-                                <th class="p-4 text-right">Actions</th>
+                            <tr class="bg-slate-50 border-b text-[11px] font-bold text-slate-400 uppercase">
+                                <th class="p-3">Date</th>
+                                <th class="p-3">Référence</th>
+                                <th class="p-3">Désignation</th>
+                                <th class="p-3">Famille / Sous-famille</th>
+                                <th class="p-3">Marque / Modèle</th>
+                                <th class="p-3 text-right">Prix Kagnan HT</th>
+                                <th class="p-3">Qté Initiale</th>
+                                <th class="p-3">Détail Sièges (Attrib. / Sortie)</th>
+                                <th class="p-3 text-right">Prix d'achat</th>
+                                <th class="p-3 text-right">Marge</th>
+                                <th class="p-3 text-right">Total Sorties</th>
+                                <th class="p-3 text-right">Stock Restant</th>
+                                <th class="p-3 text-right">Actions</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-slate-100 text-xs text-slate-700">
-                            <tr v-for="item in stocks.data" :key="item.id" class="hover:bg-slate-50/50 transition">
-                                <td class="p-4 font-semibold text-slate-900">{{ item.marque || '-' }}</td>
-                                <td class="p-4 text-slate-600">{{ item.modele || '-' }}</td>
-                                <td class="p-4 font-bold text-slate-900">{{ item.designation_piece }}</td>
-                                <td class="p-4 text-slate-600">{{ item.famille || '-' }}<span v-if="item.sous_famille" class="block text-[11px] text-slate-400">{{ item.sous_famille }}</span></td>
-                                <td class="p-4 font-mono text-slate-600">{{ item.reference || '-' }}</td>
-                                <td class="p-4 text-right font-semibold">{{ item.prix_kagnan_ht ? item.prix_kagnan_ht + ' FCFA' : '-' }}</td>
-                                <td class="p-4 text-right space-x-2">
-                                    <button @click="openEditModal(item)" class="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition" title="Modifier">
-                                        <i class="fa-solid fa-pen text-xs"></i>
-                                    </button>
-                                    <button @click="deleteStock(item.id)" class="p-2 bg-rose-50 hover:bg-rose-100 text-[#E11D48] rounded-lg transition" title="Supprimer">
-                                        <i class="fa-solid fa-trash text-xs"></i>
+                        <tbody class="divide-y text-xs text-slate-700">
+                            <tr v-for="item in stocks.data" :key="item.id" class="hover:bg-slate-50">
+                                <td class="p-3 text-slate-500">{{ item.date_entree || '-' }}</td>
+                                <td class="p-3 font-mono font-semibold">{{ item.reference || '-' }}</td>
+                                <td class="p-3 font-bold text-slate-900">
+                                    {{ item.designation_piece }}
+                                    <!-- Alerte stock bas si <= 5 -->
+                                    <div v-if="(item.quantite - (item.sieges?.reduce((acc, s) => acc + s.sortie, 0) ?? 0)) <= 5" class="mt-1 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                        <i class="fa-solid fa-triangle-exclamation mr-1"></i> Stock bas (&le; 5)
+                                    </div>
+                                </td>
+                                <td class="p-3">
+                                    <div class="font-semibold text-slate-800">{{ item.famille || '-' }}</div>
+                                    <div class="text-[10px] text-slate-400">{{ item.sous_famille || '' }}</div>
+                                </td>
+                                <td class="p-3">
+                                    <div class="font-semibold text-slate-800">{{ item.marque || '-' }}</div>
+                                    <div class="text-[10px] text-slate-500">{{ item.modele || '-' }}</div>
+                                </td>
+                                <td class="p-3 text-right font-bold text-slate-900">{{ item.prix_kagnan_ht ? item.prix_kagnan_ht + ' FCFA' : '-' }}</td>
+                                <td class="p-3 font-medium">{{ item.quantite ?? 0 }}</td>
+                                <td class="p-3 text-[11px]">
+                                    <div v-for="s in (item.sieges || [])" :key="s.id" class="mb-0.5">
+                                        <span class="font-semibold text-slate-900">{{ s.siege }}:</span> 
+                                        <span class="text-blue-600 font-semibold">{{ s.quantite_attribuee }}</span> / 
+                                        <span class="text-rose-600 font-semibold">{{ s.sortie }}</span>
+                                    </div>
+                                    <span v-if="!item.sieges || item.sieges.length === 0" class="text-slate-400 italic">Aucune attribution</span>
+                                </td>
+                                <td class="p-3 text-right font-semibold">{{ item.prix_achat ? item.prix_achat + ' FCFA' : '-' }}</td>
+                                <td class="p-3 text-right font-semibold text-blue-600">{{ item.marge_vente ? item.marge_vente + ' FCFA' : '-' }}</td>
+                                <td class="p-3 text-right text-rose-600 font-semibold">
+                                    {{ item.sieges?.reduce((acc, s) => acc + s.sortie, 0) ?? 0 }}
+                                </td>
+                                <td class="p-3 text-right font-black" :class="(item.quantite - (item.sieges?.reduce((acc, s) => acc + s.sortie, 0) ?? 0)) <= 5 ? 'text-amber-600' : 'text-slate-900'">
+                                    {{ item.quantite - (item.sieges?.reduce((acc, s) => acc + s.sortie, 0) ?? 0) }}
+                                </td>
+                                <td class="p-3 text-right">
+                                    <button @click="openEditModal(item)" class="px-3 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-[#C8102E] transition">
+                                        Gérer Sièges & Sorties
                                     </button>
                                 </td>
                             </tr>
                             <tr v-if="stocks.data.length === 0">
-                                <td colspan="7" class="p-8 text-center text-slate-400 font-medium">Aucune pièce trouvée dans le stock.</td>
+                                <td colspan="13" class="p-8 text-center text-slate-400">Aucune pièce trouvée dans le stock.</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
 
-                <!-- Pagination -->
-                <div class="p-4 border-t border-slate-100 flex items-center justify-between">
-                    <p class="text-xs text-slate-500">Affichage de {{ stocks.from || 0 }} à {{ stocks.to || 0 }} sur {{ stocks.total }} éléments</p>
-                    <div class="flex gap-1">
-                        <template v-for="(link, index) in stocks.links" :key="index">
-                            <component :is="link.url ? Link : 'span'" :href="link.url" v-html="link.label" class="px-3 py-1.5 text-xs rounded-lg border" :class="link.active ? 'bg-[#E11D48] text-white border-[#E11D48]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'" />
-                        </template>
-                    </div>
+                <!-- Pagination en bas du tableau -->
+                <div v-if="stocks.links && stocks.links.length > 3" class="p-4 bg-slate-50 border-t flex justify-center items-center gap-1">
+                    <template v-for="(link, index) in stocks.links" :key="index">
+                        <Link 
+                            v-if="link.url"
+                            :href="link.url"
+                            v-html="link.label"
+                            class="px-3 py-1.5 text-xs font-bold rounded-lg border transition"
+                            :class="link.active ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 hover:bg-slate-100 border-slate-200'"
+                        />
+                        <span 
+                            v-else 
+                            v-html="link.label" 
+                            class="px-3 py-1.5 text-xs font-medium text-slate-400 border border-transparent"
+                        />
+                    </template>
                 </div>
             </div>
 
-            <!-- Modal Ajout/Modification -->
+            <!-- Modal de gestion par siège (Magasinier : attributions et sorties uniquement) -->
             <div v-if="showModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                <div class="bg-white rounded-2xl max-w-lg w-full p-6 space-y-6 shadow-2xl">
-                    <div class="flex items-center justify-between border-b border-slate-100 pb-4">
-                        <h3 class="text-base font-black text-slate-900">{{ isEditing ? 'Modifier la pièce' : 'Ajouter une nouvelle pièce' }}</h3>
-                        <button @click="showModal = false" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-lg"></i></button>
-                    </div>
+                <div class="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+                    <h3 class="text-base font-black text-slate-900">Répartition par Siège & Enregistrement des Sorties</h3>
+                    <p class="text-xs text-slate-500 font-medium">
+                        {{ currentStock?.designation_piece }} (Réf: {{ currentStock?.reference || 'N/A' }}) — 
+                        <span class="font-bold text-slate-800">Quantité Initiale Lot : {{ currentStock?.quantite ?? 0 }}</span>
+                    </p>
 
+                    <div v-if="form.errors.sieges" class="p-3 bg-rose-50 border border-rose-200 text-rose-600 rounded-lg text-xs font-semibold">
+                        {{ form.errors.sieges }}
+                    </div>
+                    
                     <form @submit.prevent="submit" class="space-y-4">
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Marque</label>
-                                <input type="text" v-model="form.marque" class="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs p-2.5 focus:border-[#E11D48]" placeholder="Ex: Toyota" />
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Modèle</label>
-                                <input type="text" v-model="form.modele" class="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs p-2.5 focus:border-[#E11D48]" placeholder="Ex: Corolla" />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-600 mb-1">Désignation de la pièce *</label>
-                            <input type="text" v-model="form.designation_piece" class="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs p-2.5 focus:border-[#E11D48]" placeholder="Ex: Plaquettes de frein avant" required />
-                        </div>
-
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Référence</label>
-                                <input type="text" v-model="form.reference" class="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs p-2.5 focus:border-[#E11D48]" placeholder="Ex: REF-12345" />
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Prix Kagnan HT</label>
-                                <input type="text" v-model="form.prix_kagnan_ht" class="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs p-2.5 focus:border-[#E11D48]" placeholder="Ex: 15000" />
+                        <div class="space-y-3 divide-y">
+                            <div v-for="ligne in form.sieges" :key="ligne.siege" class="pt-3 first:pt-0">
+                                <h4 class="text-xs font-bold text-slate-900 mb-2">{{ ligne.siege }}</h4>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-[11px] font-semibold text-slate-600 mb-1">Quantité Attribuée</label>
+                                        <input type="number" v-model.number="ligne.quantite_attribuee" class="w-full bg-slate-50 border rounded-lg text-xs p-2 font-bold text-blue-600" min="0" />
+                                    </div>
+                                    <div>
+                                        <label class="block text-[11px] font-semibold text-slate-600 mb-1">Quantité Sortie (Atelier)</label>
+                                        <input type="number" v-model.number="ligne.sortie" class="w-full bg-slate-50 border rounded-lg text-xs p-2 font-bold text-rose-600" min="0" />
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="grid grid-cols-2 gap-4">
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Famille</label>
-                                <input type="text" v-model="form.famille" class="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs p-2.5 focus:border-[#E11D48]" placeholder="Ex: Freinage" />
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Sous-famille</label>
-                                <input type="text" v-model="form.sous_famille" class="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs p-2.5 focus:border-[#E11D48]" placeholder="Ex: Plaquettes" />
-                            </div>
-                        </div>
-
-                        <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                            <button type="button" @click="showModal = false" class="px-4 py-2 bg-slate-100 text-slate-600 text-xs font-bold rounded-xl hover:bg-slate-200 transition">Annuler</button>
-                            <button type="submit" :disabled="form.processing" class="px-5 py-2 bg-[#E11D48] text-white text-xs font-bold rounded-xl hover:bg-rose-700 transition shadow-sm">
-                                {{ isEditing ? 'Mettre à jour' : 'Enregistrer' }}
+                        <div class="flex justify-end gap-2 pt-4 border-t">
+                            <button type="button" @click="showModal = false" class="px-4 py-2 bg-slate-100 text-xs font-bold rounded-xl">Annuler</button>
+                            <button type="submit" :disabled="form.processing" class="px-4 py-2 bg-[#C8102E] text-white text-xs font-bold rounded-xl hover:bg-rose-700 transition">
+                                {{ form.processing ? 'Enregistrement...' : 'Valider les modifications' }}
                             </button>
                         </div>
                     </form>
                 </div>
             </div>
-
-            <!-- Modal d'Importation CSV -->
-            <div v-if="showImportModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                <div class="bg-white rounded-2xl max-w-md w-full p-6 space-y-6 shadow-2xl">
-                    <div class="flex items-center justify-between border-b border-slate-100 pb-4">
-                        <h3 class="text-base font-black text-slate-900">Importer un fichier CSV</h3>
-                        <button @click="showImportModal = false" class="text-slate-400 hover:text-slate-600">
-                            <i class="fa-solid fa-xmark text-lg"></i>
-                        </button>
-                    </div>
-
-                    <form @submit.prevent="submitImport" class="space-y-4">
-                        <div>
-                            <label class="block text-xs font-semibold text-slate-600 mb-2">Sélectionner un fichier CSV (.csv)</label>
-                            <input
-                                type="file"
-                                @change="handleFileChange"
-                                accept=".csv,text/csv"
-                                required
-                                class="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs p-2 focus:border-blue-600 text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                            />
-                            <p v-if="importForm.errors.fichier" class="text-xs text-rose-600 mt-1.5 font-medium">
-                                {{ importForm.errors.fichier }}
-                            </p>
-                        </div>
-
-                        <div class="p-3 bg-blue-50/50 border border-blue-100 rounded-xl text-[11px] text-blue-800 space-y-1">
-                            <p class="font-bold"><i class="fa-solid fa-circle-info mr-1"></i> Structure attendue du fichier :</p>
-                            <p class="text-slate-600">
-                                En-têtes en 1ère ligne : <strong>Marque</strong>, <strong>Modèle</strong>, <strong>Désignation Pièce</strong> (obligatoire),
-                                <strong>Référence</strong>, <strong>Prix Kagnan HT</strong>, <strong>Famille</strong>, <strong>Sous-famille</strong>.
-                            </p>
-                            <p class="text-slate-500">
-                                Une ligne ayant la même référence qu'une pièce existante la met à jour. Dans Excel : « Enregistrer sous » → « CSV (séparateur : point-virgule) ».
-                            </p>
-                        </div>
-
-                        <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
-                            <button type="button" @click="showImportModal = false" class="px-4 py-2 bg-slate-100 text-slate-600 text-xs font-bold rounded-xl hover:bg-slate-200 transition">Annuler</button>
-                            <button type="submit" :disabled="importForm.processing || !importForm.fichier" class="px-5 py-2 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition shadow-sm disabled:opacity-50">
-                                <i class="fa-solid fa-upload mr-1.5"></i> Importer
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-
         </div>
     </AuthenticatedLayout>
 </template>

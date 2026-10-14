@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Reception\ReceptionController; 
 use Illuminate\Foundation\Application;
@@ -8,12 +9,10 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use App\Http\Controllers\Reception\VehiculeParcController;
 use App\Http\Controllers\Administrative\DossierController;
-use App\Models\Intervention; 
 use App\Http\Controllers\Mecanicien\MecanicienController;
 use App\Http\Controllers\Administrative\StockController;
 use App\Http\Controllers\ChargeClientController; 
 use App\Http\Controllers\Administrative\FactureController;
-use Illuminate\Http\Request;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -24,54 +23,10 @@ Route::get('/', function () {
     ]);
 });
 
-Route::get('/dashboard', function (Request $request) {
-    if (auth()->user()->role === 'admin') {
-        return redirect()->route('admin.users.index');
-    }
-    if (auth()->user()->role === 'magasinier') {
-        return redirect()->route('magasinier.pieces.index');
-    }
-
-    $search = trim((string) $request->query('search', ''));
-    $statut = $request->query('statut', '');
-
-    $interventionsAtelier = Intervention::duSiege()
-        ->with(['vehicule.client', 'receptionniste', 'mecanicien'])
-        ->when($statut !== '', fn ($q) => $q->where('statut', $statut))
-        ->when($search !== '', function ($q) use ($search) {
-            $like = '%' . $search . '%';
-            $q->where(function ($q) use ($like) {
-                $q->where('numero_ot', 'like', $like)
-                  ->orWhereHas('vehicule', function ($v) use ($like) {
-                      $v->where('immatriculation', 'like', $like)
-                        ->orWhere('marque', 'like', $like)
-                        ->orWhere('modele', 'like', $like)
-                        ->orWhereHas('client', fn ($c) => $c
-                            ->where('nom', 'like', $like)
-                            ->orWhere('prenom', 'like', $like));
-                  });
-            });
-        })
-        ->latest('date_reception')
-        ->paginate(10)
-        ->withQueryString();
-
-    $users = \App\Models\User::all();
-
-    $stats = [
-        'chiffre_affaires' => '0 FCFA',
-        'nombre_voitures' => \App\Models\Vehicule::whereHas('interventions', fn ($q) => $q->duSiege())->count(),
-        'nombre_clients' => \App\Models\Client::whereHas('vehicules.interventions', fn ($q) => $q->duSiege())->count(),
-    ];
-
-    return Inertia::render('Dashboard', [
-        'interventionsAtelier' => $interventionsAtelier,
-        'filters' => ['search' => $search, 'statut' => $statut],
-        'statuts' => Intervention::duSiege()->distinct()->orderBy('statut')->pluck('statut'),
-        'users' => $users,
-        'stats' => $stats,
-    ]);
-})->middleware(['auth', 'verified'])->name('dashboard');
+// Tableau de bord : toute la logique (filtres, onglets, compteurs, redirections de rôle) est dans le contrôleur
+Route::get('/dashboard', [DashboardController::class, 'index'])
+    ->middleware(['auth', 'verified'])
+    ->name('dashboard');
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -156,6 +111,10 @@ Route::middleware(['auth'])->prefix('administration')->name('administration.')->
     Route::delete('/stocks/{stock}', [StockController::class, 'destroy'])->name('stocks.destroy');
     Route::get('/stocks/export', [StockController::class, 'export'])->name('stocks.export');
     Route::post('/stocks/import', [StockController::class, 'import'])->name('stocks.import');
+    
+    // Routes d'assistant de réapprovisionnement et bon de commande (Nommées correctement sous administration.*)
+    Route::get('/reapprovisionnement', [StockController::class, 'reapprovisionnement'])->name('stocks.reapprovisionnement');
+    Route::post('/bon-de-commande', [StockController::class, 'genererBonCommande'])->name('stocks.bon-commande');
 
     Route::get('/chiffre-affaires', [UserController::class, 'chiffreAffaires'])->name('chiffre-affaires');
 
