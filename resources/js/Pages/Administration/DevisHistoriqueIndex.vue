@@ -755,3 +755,4 @@ const groupesModal = computed(() => {
         transition: none;
     }
 }
+</style>
