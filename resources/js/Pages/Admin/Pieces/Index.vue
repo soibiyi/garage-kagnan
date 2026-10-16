@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useForm, router, Link } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 
@@ -8,11 +8,17 @@ const props = defineProps({
     filters: Object
 });
 
+const SIEGES = ['Terminus 27', 'Zone Industrielle', 'Yamoussoukro'];
+const SEUIL_STOCK_BAS = 5;
+
 const search = ref(props.filters.search || '');
 const showModal = ref(false);
 const showImportModal = ref(false);
 const isEditing = ref(false);
 const currentStockId = ref(null);
+const step = ref(1); // 1 = infos pièce, 2 = distribution aux sièges
+
+const siegesVides = () => SIEGES.map(siege => ({ siege, quantite_attribuee: 0, sortie: 0 }));
 
 // Formulaire complet pour l'Admin (Pièce + Sièges + Prix)
 const form = useForm({
@@ -27,11 +33,7 @@ const form = useForm({
     prix_achat: '',
     marge_vente: '',
     prix_kagnan_ht: '',
-    sieges: [
-        { siege: 'Terminus 27', quantite_attribuee: 0, sortie: 0 },
-        { siege: 'Zone Industrielle', quantite_attribuee: 0, sortie: 0 },
-        { siege: 'Yamoussoukro', quantite_attribuee: 0, sortie: 0 },
-    ]
+    sieges: siegesVides(),
 });
 
 // Formulaire pour l'import CSV
@@ -39,15 +41,53 @@ const importForm = useForm({
     fichier: null,
 });
 
+// ---------- Helpers affichage tableau ----------
+const totalSorties = (item) => (item.sieges ?? []).reduce((a, s) => a + Number(s.sortie || 0), 0);
+const totalAttribue = (item) => (item.sieges ?? []).reduce((a, s) => a + Number(s.quantite_attribuee || 0), 0);
+const stockRestant = (item) => Number(item.quantite || 0) - totalSorties(item);
+const nonAttribue = (item) => Number(item.quantite || 0) - totalAttribue(item);
+const restantSiege = (s) => Number(s.quantite_attribuee || 0) - Number(s.sortie || 0);
+
+// ---------- Helpers formulaire (distribution) ----------
+const totalAttribueForm = computed(() =>
+    form.sieges.reduce((a, s) => a + Number(s.quantite_attribuee || 0), 0)
+);
+const resteAAttribuer = computed(() => Number(form.quantite || 0) - totalAttribueForm.value);
+const distributionValide = computed(() =>
+    resteAAttribuer.value >= 0 &&
+    form.sieges.every(s => Number(s.sortie || 0) <= Number(s.quantite_attribuee || 0))
+);
+
+const repartirEquitablement = () => {
+    const total = Number(form.quantite || 0);
+    const n = form.sieges.length;
+    const base = Math.floor(total / n);
+    let reste = total - base * n;
+    form.sieges.forEach((s) => {
+        s.quantite_attribuee = base + (reste > 0 ? 1 : 0);
+        if (reste > 0) reste--;
+    });
+};
+
+const goToStep2 = () => {
+    if (!form.designation_piece) {
+        step.value = 1;
+        form.setError('designation_piece', 'La désignation est obligatoire');
+        return;
+    }
+    form.clearErrors();
+    step.value = 2;
+};
+
+const onSubmit = () => (step.value === 1 ? goToStep2() : submit());
+
+// ---------- Modals ----------
 const openCreateModal = () => {
     isEditing.value = false;
     form.reset();
     form.clearErrors();
-    form.sieges = [
-        { siege: 'Terminus 27', quantite_attribuee: 0, sortie: 0 },
-        { siege: 'Zone Industrielle', quantite_attribuee: 0, sortie: 0 },
-        { siege: 'Yamoussoukro', quantite_attribuee: 0, sortie: 0 },
-    ];
+    form.sieges = siegesVides();
+    step.value = 1;
     showModal.value = true;
 };
 
@@ -68,8 +108,7 @@ const openEditModal = (item) => {
     form.prix_kagnan_ht = item.prix_kagnan_ht || '';
 
     // Charger les attributions par siège existantes
-    const siegesList = ['Terminus 27', 'Zone Industrielle', 'Yamoussoukro'];
-    form.sieges = siegesList.map(nomSiege => {
+    form.sieges = SIEGES.map(nomSiege => {
         const existant = item.sieges?.find(s => s.siege === nomSiege);
         return {
             siege: nomSiege,
@@ -78,10 +117,13 @@ const openEditModal = (item) => {
         };
     });
 
+    step.value = 1;
     showModal.value = true;
 };
 
 const submit = () => {
+    if (!distributionValide.value) return;
+
     if (isEditing.value) {
         form.put(route('administration.stocks.update', currentStockId.value), {
             preserveScroll: true,
@@ -90,7 +132,11 @@ const submit = () => {
     } else {
         form.post(route('administration.stocks.store'), {
             preserveScroll: true,
-            onSuccess: () => { showModal.value = false; form.reset(); }
+            onSuccess: () => {
+                showModal.value = false;
+                form.reset();
+                form.sieges = siegesVides();
+            }
         });
     }
 };
@@ -138,24 +184,27 @@ const submitImport = () => {
 <template>
     <AuthenticatedLayout>
         <div class="py-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-            <!-- Header avec actions unifiées -->
+            <!-- Header avec actions unifiées et parfaitement alignées -->
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <div>
                     <h1 class="text-2xl font-black text-slate-900">Gestion Globale des Pièces & Stocks (Admin)</h1>
                     <p class="text-sm text-slate-500">Catalogue, prix Kagnan HT, attributions par siège, import/export et alertes de stock.</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2 sm:gap-3">
-                    <Link :href="route('dashboard')" class="px-3.5 py-2.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-200 transition">
+                    <Link :href="route('dashboard')" class="inline-flex items-center justify-center px-3.5 py-2.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-200 transition shadow-sm">
                         Dashboard
                     </Link>
-                    <button @click="exporterExcel" class="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition shadow-sm">
+                    <Link :href="route('administration.stocks.historique')" class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-violet-600 text-white text-xs font-bold rounded-xl hover:bg-violet-700 transition shadow-sm">
+                        <i class="fa-solid fa-clock-rotate-left"></i> Historique
+                    </Link>
+                    <button @click="exporterExcel" class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 transition shadow-sm">
                         <i class="fa-solid fa-file-excel"></i> Exporter
                     </button>
-                    <button @click="openImportModal" class="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition shadow-sm">
+                    <button @click="openImportModal" class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition shadow-sm">
                         <i class="fa-solid fa-file-import"></i> Importer
                     </button>
-                    <button @click="openCreateModal" class="inline-flex items-center gap-1.5 px-3.5 py-2.5 bg-[#E11D48] text-white text-xs font-bold rounded-xl hover:bg-rose-700 transition shadow-sm">
-                        <i class="fa-solid fa-plus"></i> Ajouter une pièce
+                    <button @click="openCreateModal" class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-[#E11D48] text-white text-xs font-bold rounded-xl hover:bg-rose-700 transition shadow-sm">
+                        <i class="fa-solid fa-plus"></i> Ajouter
                     </button>
                 </div>
             </div>
@@ -179,7 +228,7 @@ const submitImport = () => {
                                 <th class="p-3">Marque / Modèle</th>
                                 <th class="p-3 text-right">Prix Kagnan HT</th>
                                 <th class="p-3">Qté Initiale</th>
-                                <th class="p-3">Détail Sièges (Attrib. / Sortie)</th>
+                                <th class="p-3">Sièges (Attrib. / Sortie → Restant)</th>
                                 <th class="p-3 text-right">Prix d'achat</th>
                                 <th class="p-3 text-right">Marge</th>
                                 <th class="p-3 text-right">Total Sorties</th>
@@ -193,8 +242,8 @@ const submitImport = () => {
                                 <td class="p-3 font-mono font-semibold">{{ item.reference || '-' }}</td>
                                 <td class="p-3 font-bold text-slate-900">
                                     {{ item.designation_piece }}
-                                    <div v-if="(item.quantite - (item.sieges?.reduce((acc, s) => acc + s.sortie, 0) ?? 0)) <= 5" class="mt-1 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                                        <i class="fa-solid fa-triangle-exclamation mr-1"></i> Stock bas (&le; 5)
+                                    <div v-if="stockRestant(item) <= SEUIL_STOCK_BAS" class="mt-1 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                        <i class="fa-solid fa-triangle-exclamation mr-1"></i> Stock bas (&le; {{ SEUIL_STOCK_BAS }})
                                     </div>
                                 </td>
                                 <td class="p-3">
@@ -207,21 +256,34 @@ const submitImport = () => {
                                 </td>
                                 <td class="p-3 text-right font-bold text-slate-900">{{ item.prix_kagnan_ht ? item.prix_kagnan_ht + ' FCFA' : '-' }}</td>
                                 <td class="p-3 font-medium">{{ item.quantite ?? 0 }}</td>
-                                <td class="p-3 text-[11px]">
-                                    <div v-for="s in (item.sieges || [])" :key="s.id" class="mb-0.5">
-                                        <span class="font-semibold text-slate-900">{{ s.siege }}:</span> 
-                                        <span class="text-blue-600 font-semibold">{{ s.quantite_attribuee }}</span> / 
-                                        <span class="text-rose-600 font-semibold">{{ s.sortie }}</span>
+
+                                <td class="p-3 text-[11px] min-w-[230px]">
+                                    <div v-for="s in (item.sieges || [])" :key="s.id"
+                                         class="mb-1 flex items-center justify-between gap-3 bg-slate-50 rounded-lg px-2 py-1">
+                                        <span class="font-semibold text-slate-900">{{ s.siege }}</span>
+                                        <span class="flex items-center gap-1.5">
+                                            <span class="text-blue-600 font-semibold" title="Attribué">{{ s.quantite_attribuee }}</span>
+                                            <span class="text-slate-300">/</span>
+                                            <span class="text-rose-600 font-semibold" title="Sorties">{{ s.sortie }}</span>
+                                            <span class="text-slate-300">&rarr;</span>
+                                            <span class="px-1.5 py-0.5 rounded font-black"
+                                                  :class="restantSiege(s) <= SEUIL_STOCK_BAS ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'"
+                                                  title="Restant">{{ restantSiege(s) }}</span>
+                                        </span>
+                                    </div>
+                                    <div v-if="nonAttribue(item) > 0" class="text-[10px] font-bold text-violet-600 mt-1">
+                                        <i class="fa-solid fa-box-open mr-1"></i>{{ nonAttribue(item) }} non attribué(s)
                                     </div>
                                     <span v-if="!item.sieges || item.sieges.length === 0" class="text-slate-400 italic">-</span>
                                 </td>
+
                                 <td class="p-3 text-right font-semibold">{{ item.prix_achat ? item.prix_achat + ' FCFA' : '-' }}</td>
                                 <td class="p-3 text-right font-semibold text-blue-600">{{ item.marge_vente ? item.marge_vente + ' FCFA' : '-' }}</td>
                                 <td class="p-3 text-right text-rose-600 font-semibold">
-                                    {{ item.sieges?.reduce((acc, s) => acc + s.sortie, 0) ?? 0 }}
+                                    {{ totalSorties(item) }}
                                 </td>
-                                <td class="p-3 text-right font-black" :class="(item.quantite - (item.sieges?.reduce((acc, s) => acc + s.sortie, 0) ?? 0)) <= 5 ? 'text-amber-600' : 'text-slate-900'">
-                                    {{ item.quantite - (item.sieges?.reduce((acc, s) => acc + s.sortie, 0) ?? 0) }}
+                                <td class="p-3 text-right font-black" :class="stockRestant(item) <= SEUIL_STOCK_BAS ? 'text-amber-600' : 'text-slate-900'">
+                                    {{ stockRestant(item) }}
                                 </td>
                                 <td class="p-3 text-right space-x-1">
                                     <button @click="openEditModal(item)" class="p-1.5 bg-slate-100 rounded-lg hover:bg-slate-200" title="Modifier"><i class="fa-solid fa-pen"></i></button>
@@ -238,23 +300,23 @@ const submitImport = () => {
                 <!-- Pagination -->
                 <div v-if="stocks.links && stocks.links.length > 3" class="p-4 bg-slate-50 border-t flex justify-center items-center gap-1">
                     <template v-for="(link, index) in stocks.links" :key="index">
-                        <Link 
+                        <Link
                             v-if="link.url"
                             :href="link.url"
                             v-html="link.label"
                             class="px-3 py-1.5 text-xs font-bold rounded-lg border transition"
                             :class="link.active ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 hover:bg-slate-100 border-slate-200'"
                         />
-                        <span 
-                            v-else 
-                            v-html="link.label" 
+                        <span
+                            v-else
+                            v-html="link.label"
                             class="px-3 py-1.5 text-xs font-medium text-slate-400 border border-transparent"
                         />
                     </template>
                 </div>
             </div>
 
-            <!-- Modal d'Ajout / Modification Complet -->
+            <!-- Modal d'Ajout / Modification en 2 étapes -->
             <div v-if="showModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
                 <div class="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
                     <h3 class="text-base font-black text-slate-900">{{ isEditing ? 'Modifier la pièce' : 'Ajouter une pièce' }}</h3>
@@ -263,55 +325,109 @@ const submitImport = () => {
                         {{ form.errors.sieges }}
                     </div>
 
-                    <form @submit.prevent="submit" class="space-y-3">
-                        <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <label class="block text-xs font-semibold mb-1">Date d'entrée</label>
-                                <input type="date" v-model="form.date_entree" class="w-full bg-slate-50 border rounded-lg text-xs p-2" />
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold mb-1">Référence</label>
-                                <input type="text" v-model="form.reference" class="w-full bg-slate-50 border rounded-lg text-xs p-2" />
-                            </div>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold mb-1">Désignation *</label>
-                            <input type="text" v-model="form.designation_piece" class="w-full bg-slate-50 border rounded-lg text-xs p-2" required />
-                        </div>
-                        <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <label class="block text-xs font-semibold mb-1">Famille</label>
-                                <input type="text" v-model="form.famille" class="w-full bg-slate-50 border rounded-lg text-xs p-2" />
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold mb-1">Sous-famille</label>
-                                <input type="text" v-model="form.sous_famille" class="w-full bg-slate-50 border rounded-lg text-xs p-2" />
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <label class="block text-xs font-semibold mb-1">Marque</label>
-                                <input type="text" v-model="form.marque" class="w-full bg-slate-50 border rounded-lg text-xs p-2" />
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold mb-1">Modèle</label>
-                                <input type="text" v-model="form.modele" class="w-full bg-slate-50 border rounded-lg text-xs p-2" />
-                            </div>
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold mb-1">Prix Kagnan HT</label>
-                            <input type="text" v-model="form.prix_kagnan_ht" class="w-full bg-slate-50 border rounded-lg text-xs p-2 font-semibold text-slate-900" placeholder="Ex: 15000" />
-                        </div>
-                        <div>
-                            <label class="block text-xs font-semibold mb-1">Quantité Initiale (Lot reçu)</label>
-                            <input type="number" v-model.number="form.quantite" class="w-full bg-slate-50 border rounded-lg text-xs p-2 font-bold text-slate-900" min="0" />
+                    <form @submit.prevent="onSubmit" class="space-y-3">
+
+                        <!-- Indicateur d'étapes -->
+                        <div class="flex items-center gap-2 text-[11px] font-bold">
+                            <button type="button" @click="step = 1"
+                                    class="flex-1 py-2 rounded-lg border transition"
+                                    :class="step === 1 ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200'">
+                                1. Pièce
+                            </button>
+                            <button type="button" @click="goToStep2"
+                                    class="flex-1 py-2 rounded-lg border transition"
+                                    :class="step === 2 ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200'">
+                                2. Distribution aux sièges
+                            </button>
                         </div>
 
-                        <!-- Répartition par siège -->
-                        <div class="border-t pt-3 space-y-3">
-                            <label class="block text-xs font-bold text-slate-900">Répartition par Siège (Attribution & Sorties)</label>
+                        <!-- ÉTAPE 1 : infos pièce -->
+                        <template v-if="step === 1">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-xs font-semibold mb-1">Date d'entrée</label>
+                                    <input type="date" v-model="form.date_entree" class="w-full bg-slate-50 border rounded-lg text-xs p-2" />
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold mb-1">Référence</label>
+                                    <input type="text" v-model="form.reference" class="w-full bg-slate-50 border rounded-lg text-xs p-2" />
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold mb-1">Désignation *</label>
+                                <input type="text" v-model="form.designation_piece" class="w-full bg-slate-50 border rounded-lg text-xs p-2" required />
+                                <p v-if="form.errors.designation_piece" class="text-xs text-rose-600 mt-1">{{ form.errors.designation_piece }}</p>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-xs font-semibold mb-1">Famille</label>
+                                    <input type="text" v-model="form.famille" class="w-full bg-slate-50 border rounded-lg text-xs p-2" />
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold mb-1">Sous-famille</label>
+                                    <input type="text" v-model="form.sous_famille" class="w-full bg-slate-50 border rounded-lg text-xs p-2" />
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-xs font-semibold mb-1">Marque</label>
+                                    <input type="text" v-model="form.marque" class="w-full bg-slate-50 border rounded-lg text-xs p-2" />
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold mb-1">Modèle</label>
+                                    <input type="text" v-model="form.modele" class="w-full bg-slate-50 border rounded-lg text-xs p-2" />
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-3">
+                                <div>
+                                    <label class="block text-xs font-semibold mb-1">Prix Kagnan HT</label>
+                                    <input type="text" v-model="form.prix_kagnan_ht" class="w-full bg-slate-50 border rounded-lg text-xs p-2 font-semibold text-slate-900" placeholder="Ex: 15000" />
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold mb-1">Prix d'achat</label>
+                                    <input type="number" v-model="form.prix_achat" class="w-full bg-slate-50 border rounded-lg text-xs p-2" step="0.01" min="0" />
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold mb-1">Marge vente</label>
+                                    <input type="number" v-model="form.marge_vente" class="w-full bg-slate-50 border rounded-lg text-xs p-2" step="0.01" min="0" />
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold mb-1">Quantité Initiale (Lot reçu)</label>
+                                <input type="number" v-model.number="form.quantite" class="w-full bg-slate-50 border rounded-lg text-xs p-2 font-bold text-slate-900" min="0" />
+                            </div>
+                        </template>
+
+                        <!-- ÉTAPE 2 : distribution aux sièges -->
+                        <template v-else>
+                            <div class="p-3 rounded-xl border flex items-center justify-between"
+                                 :class="resteAAttribuer < 0 ? 'bg-rose-50 border-rose-200' : resteAAttribuer === 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-violet-50 border-violet-200'">
+                                <div>
+                                    <p class="text-[11px] font-bold text-slate-700">{{ form.designation_piece }}</p>
+                                    <p class="text-[11px] text-slate-500">
+                                        Lot reçu : <strong>{{ form.quantite || 0 }}</strong> &middot;
+                                        Attribué : <strong>{{ totalAttribueForm }}</strong>
+                                    </p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-[10px] uppercase font-bold text-slate-400">Reste à attribuer</p>
+                                    <p class="text-lg font-black" :class="resteAAttribuer < 0 ? 'text-rose-600' : 'text-slate-900'">{{ resteAAttribuer }}</p>
+                                </div>
+                            </div>
+
+                            <button type="button" @click="repartirEquitablement"
+                                    class="w-full py-2 text-xs font-bold bg-slate-100 rounded-lg hover:bg-slate-200 transition">
+                                <i class="fa-solid fa-scale-balanced mr-1"></i> Répartir équitablement
+                            </button>
+
                             <div v-for="ligne in form.sieges" :key="ligne.siege" class="bg-slate-50 p-3 rounded-xl border space-y-2">
-                                <span class="text-xs font-extrabold text-slate-800">{{ ligne.siege }}</span>
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-extrabold text-slate-800">{{ ligne.siege }}</span>
+                                    <span class="text-[11px] font-bold px-2 py-0.5 rounded"
+                                          :class="restantSiege(ligne) <= SEUIL_STOCK_BAS ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'">
+                                        Restant : {{ restantSiege(ligne) }}
+                                    </span>
+                                </div>
                                 <div class="grid grid-cols-2 gap-2">
                                     <div>
                                         <label class="block text-[10px] font-semibold text-slate-500">Qté attribuée</label>
@@ -319,28 +435,32 @@ const submitImport = () => {
                                     </div>
                                     <div>
                                         <label class="block text-[10px] font-semibold text-slate-500">Sorties</label>
-                                        <input type="number" v-model.number="ligne.sortie" class="w-full bg-white border rounded-lg text-xs p-1.5 font-bold text-rose-600" min="0" />
+                                        <input type="number" v-model.number="ligne.sortie" class="w-full bg-white border rounded-lg text-xs p-1.5 font-bold text-rose-600" min="0" :max="ligne.quantite_attribuee" />
                                     </div>
                                 </div>
+                                <p v-if="Number(ligne.sortie) > Number(ligne.quantite_attribuee)" class="text-[10px] text-rose-600 font-semibold">
+                                    Les sorties dépassent la quantité attribuée.
+                                </p>
                             </div>
-                        </div>
 
-                        <div class="grid grid-cols-2 gap-3 pt-2">
-                            <div>
-                                <label class="block text-xs font-semibold mb-1">Prix d'achat</label>
-                                <input type="number" v-model="form.prix_achat" class="w-full bg-slate-50 border rounded-lg text-xs p-2" step="0.01" min="0" />
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold mb-1">Marge vente</label>
-                                <input type="number" v-model="form.marge_vente" class="w-full bg-slate-50 border rounded-lg text-xs p-2" step="0.01" min="0" />
-                            </div>
-                        </div>
+                            <p v-if="resteAAttribuer < 0" class="text-xs text-rose-600 font-semibold">
+                                Tu as attribué {{ Math.abs(resteAAttribuer) }} pièce(s) de plus que le lot reçu.
+                            </p>
+                        </template>
 
-                        <div class="flex justify-end gap-2 pt-3 border-t">
+                        <!-- Boutons -->
+                        <div class="flex justify-between gap-2 pt-3 border-t">
                             <button type="button" @click="showModal = false" class="px-4 py-2 bg-slate-100 text-xs font-bold rounded-xl">Annuler</button>
-                            <button type="submit" :disabled="form.processing" class="px-4 py-2 bg-[#E11D48] text-white text-xs font-bold rounded-xl hover:bg-rose-700 transition">
-                                {{ form.processing ? 'Enregistrement...' : 'Enregistrer' }}
-                            </button>
+                            <div class="flex gap-2">
+                                <button v-if="step === 2" type="button" @click="step = 1" class="px-4 py-2 bg-slate-100 text-xs font-bold rounded-xl">Retour</button>
+                                <button v-if="step === 1" type="submit" class="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-800 transition">
+                                    Suivant : distribuer <i class="fa-solid fa-arrow-right ml-1"></i>
+                                </button>
+                                <button v-else type="submit" :disabled="form.processing || !distributionValide"
+                                        class="px-4 py-2 bg-[#E11D48] text-white text-xs font-bold rounded-xl hover:bg-rose-700 transition disabled:opacity-50">
+                                    {{ form.processing ? 'Enregistrement...' : 'Enregistrer' }}
+                                </button>
+                            </div>
                         </div>
                     </form>
                 </div>

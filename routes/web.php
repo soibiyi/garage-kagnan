@@ -47,12 +47,16 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/vehicules/status', [UserController::class, 'vehiculesStatus'])->name('vehicules.status');
     Route::get('/chiffre-affaires', [UserController::class, 'chiffreAffaires'])->name('chiffre-affaires');
     Route::get('/pieces', [StockController::class, 'adminIndex'])->name('pieces.index');
+    // Historique des mouvements pour l'Admin depuis son espace
+    Route::get('/stocks/historique', [StockController::class, 'historiqueMouvements'])->name('stocks.historique');
 });
 
 // Routes dédiées au Magasinier
 Route::middleware(['auth', 'verified'])->prefix('magasinier')->name('magasinier.')->group(function () {
     Route::get('/pieces', [StockController::class, 'magasinierIndex'])->name('pieces.index');
     Route::put('/pieces/{stock}', [StockController::class, 'magasinierUpdate'])->name('pieces.update');
+    // Historique des mouvements pour le Magasinier
+    Route::get('/stocks/historique', [StockController::class, 'historiqueMouvements'])->name('stocks.historique');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -111,6 +115,7 @@ Route::middleware(['auth'])->prefix('administration')->name('administration.')->
     Route::delete('/stocks/{stock}', [StockController::class, 'destroy'])->name('stocks.destroy');
     Route::get('/stocks/export', [StockController::class, 'export'])->name('stocks.export');
     Route::post('/stocks/import', [StockController::class, 'import'])->name('stocks.import');
+    Route::get('/stocks/historique', [StockController::class, 'historiqueMouvements'])->name('stocks.historique');
     
     // Routes d'assistant de réapprovisionnement et bon de commande (Nommées correctement sous administration.*)
     Route::get('/reapprovisionnement', [StockController::class, 'reapprovisionnement'])->name('stocks.reapprovisionnement');

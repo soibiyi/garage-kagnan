@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useForm, router, Link } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 
@@ -8,24 +8,56 @@ const props = defineProps({
     filters: Object
 });
 
+const SIEGES = ['Terminus 27', 'Zone Industrielle', 'Yamoussoukro'];
+const SEUIL_STOCK_BAS = 5;
+
 const search = ref(props.filters.search || '');
 const showModal = ref(false);
 const currentStock = ref(null);
 
-// Formulaire pour la gestion des attributions et sorties par siège (Seule action autorisée pour le magasinier)
+// Formulaire pour la gestion des attributions et sorties par siège
+// (seule action autorisée pour le magasinier : aucune création, modification de pièce ni suppression)
 const form = useForm({
-    sieges: [
-        { siege: 'Terminus 27', quantite_attribuee: 0, sortie: 0 },
-        { siege: 'Zone Industrielle', quantite_attribuee: 0, sortie: 0 },
-        { siege: 'Yamoussoukro', quantite_attribuee: 0, sortie: 0 },
-    ]
+    sieges: SIEGES.map(siege => ({ siege, quantite_attribuee: 0, sortie: 0 })),
 });
 
+// ---------- Helpers affichage tableau ----------
+const totalSorties = (item) => (item.sieges ?? []).reduce((a, s) => a + Number(s.sortie || 0), 0);
+const totalAttribue = (item) => (item.sieges ?? []).reduce((a, s) => a + Number(s.quantite_attribuee || 0), 0);
+const stockRestant = (item) => Number(item.quantite || 0) - totalSorties(item);
+const nonAttribue = (item) => Number(item.quantite || 0) - totalAttribue(item);
+const restantSiege = (s) => Number(s.quantite_attribuee || 0) - Number(s.sortie || 0);
+
+// ---------- Helpers formulaire (distribution) ----------
+const quantiteLot = computed(() => Number(currentStock.value?.quantite || 0));
+const totalAttribueForm = computed(() =>
+    form.sieges.reduce((a, s) => a + Number(s.quantite_attribuee || 0), 0)
+);
+const resteAAttribuer = computed(() => quantiteLot.value - totalAttribueForm.value);
+const distributionValide = computed(() =>
+    resteAAttribuer.value >= 0 &&
+    form.sieges.every(s => Number(s.sortie || 0) <= Number(s.quantite_attribuee || 0))
+);
+
+const repartirEquitablement = () => {
+    const total = quantiteLot.value;
+    const n = form.sieges.length;
+    const base = Math.floor(total / n);
+    let reste = total - base * n;
+    form.sieges.forEach((s) => {
+        s.quantite_attribuee = base + (reste > 0 ? 1 : 0);
+        if (reste > 0) reste--;
+        // On ne laisse pas les sorties dépasser la nouvelle attribution
+        if (Number(s.sortie || 0) > s.quantite_attribuee) s.sortie = s.quantite_attribuee;
+    });
+};
+
+// ---------- Modal ----------
 const openEditModal = (item) => {
     currentStock.value = item;
-    
-    const siegesList = ['Terminus 27', 'Zone Industrielle', 'Yamoussoukro'];
-    form.sieges = siegesList.map(nomSiege => {
+    form.clearErrors();
+
+    form.sieges = SIEGES.map(nomSiege => {
         const existant = item.sieges?.find(s => s.siege === nomSiege);
         return {
             siege: nomSiege,
@@ -38,18 +70,21 @@ const openEditModal = (item) => {
 };
 
 const submit = () => {
+    if (!distributionValide.value) return;
+
     form.put(route('magasinier.pieces.update', currentStock.value.id), {
+        preserveScroll: true,
         onSuccess: () => { showModal.value = false; }
     });
 };
 
 const handleSearch = () => {
-    router.get(route('magasinier.pieces.index'), { 
+    router.get(route('magasinier.pieces.index'), {
         search: search.value
     }, { preserveState: true, replace: true });
 };
 
-// Exporter vers Excel (CSV) pour le magasinier[cite: 2]
+// Exporter vers Excel (CSV) pour le magasinier
 const exporterExcel = () => {
     window.location.href = route('administration.stocks.export');
 };
@@ -61,7 +96,7 @@ const exporterExcel = () => {
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <div>
                     <h1 class="text-2xl font-black text-slate-900">Espace Magasinier - Catalogue & Gestion des Mouvements</h1>
-                    <p class="text-sm text-slate-500">Consultez l'ensemble du catalogue et enregistrez la répartition par siège et les sorties atelier[cite: 2].</p>
+                    <p class="text-sm text-slate-500">Consultez l'ensemble du catalogue, le stock restant par siège, et enregistrez la répartition par siège et les sorties atelier.</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                     <!-- Bouton Assistant de réapprovisionnement -->
@@ -77,12 +112,12 @@ const exporterExcel = () => {
 
             <!-- Barre de recherche -->
             <div class="flex flex-col sm:flex-row items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                <input 
-                    type="text" 
-                    v-model="search" 
-                    @keyup.enter="handleSearch" 
-                    placeholder="Rechercher par référence, désignation, famille, marque, modèle..." 
-                    class="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs p-2.5" 
+                <input
+                    type="text"
+                    v-model="search"
+                    @keyup.enter="handleSearch"
+                    placeholder="Rechercher par référence, désignation, famille, marque, modèle..."
+                    class="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs p-2.5"
                 />
                 <button @click="handleSearch" class="w-full sm:w-auto px-6 py-2.5 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 transition">
                     Filtrer
@@ -102,7 +137,7 @@ const exporterExcel = () => {
                                 <th class="p-3">Marque / Modèle</th>
                                 <th class="p-3 text-right">Prix Kagnan HT</th>
                                 <th class="p-3">Qté Initiale</th>
-                                <th class="p-3">Détail Sièges (Attrib. / Sortie)</th>
+                                <th class="p-3">Sièges (Attrib. / Sortie → Restant)</th>
                                 <th class="p-3 text-right">Prix d'achat</th>
                                 <th class="p-3 text-right">Marge</th>
                                 <th class="p-3 text-right">Total Sorties</th>
@@ -116,9 +151,9 @@ const exporterExcel = () => {
                                 <td class="p-3 font-mono font-semibold">{{ item.reference || '-' }}</td>
                                 <td class="p-3 font-bold text-slate-900">
                                     {{ item.designation_piece }}
-                                    <!-- Alerte stock bas si <= 5 -->
-                                    <div v-if="(item.quantite - (item.sieges?.reduce((acc, s) => acc + s.sortie, 0) ?? 0)) <= 5" class="mt-1 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                                        <i class="fa-solid fa-triangle-exclamation mr-1"></i> Stock bas (&le; 5)
+                                    <!-- Alerte stock bas -->
+                                    <div v-if="stockRestant(item) <= SEUIL_STOCK_BAS" class="mt-1 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                        <i class="fa-solid fa-triangle-exclamation mr-1"></i> Stock bas (&le; {{ SEUIL_STOCK_BAS }})
                                     </div>
                                 </td>
                                 <td class="p-3">
@@ -131,21 +166,35 @@ const exporterExcel = () => {
                                 </td>
                                 <td class="p-3 text-right font-bold text-slate-900">{{ item.prix_kagnan_ht ? item.prix_kagnan_ht + ' FCFA' : '-' }}</td>
                                 <td class="p-3 font-medium">{{ item.quantite ?? 0 }}</td>
-                                <td class="p-3 text-[11px]">
-                                    <div v-for="s in (item.sieges || [])" :key="s.id" class="mb-0.5">
-                                        <span class="font-semibold text-slate-900">{{ s.siege }}:</span> 
-                                        <span class="text-blue-600 font-semibold">{{ s.quantite_attribuee }}</span> / 
-                                        <span class="text-rose-600 font-semibold">{{ s.sortie }}</span>
+
+                                <!-- Détail par siège avec stock restant -->
+                                <td class="p-3 text-[11px] min-w-[230px]">
+                                    <div v-for="s in (item.sieges || [])" :key="s.id"
+                                         class="mb-1 flex items-center justify-between gap-3 bg-slate-50 rounded-lg px-2 py-1">
+                                        <span class="font-semibold text-slate-900">{{ s.siege }}</span>
+                                        <span class="flex items-center gap-1.5">
+                                            <span class="text-blue-600 font-semibold" title="Attribué">{{ s.quantite_attribuee }}</span>
+                                            <span class="text-slate-300">/</span>
+                                            <span class="text-rose-600 font-semibold" title="Sorties">{{ s.sortie }}</span>
+                                            <span class="text-slate-300">&rarr;</span>
+                                            <span class="px-1.5 py-0.5 rounded font-black"
+                                                  :class="restantSiege(s) <= SEUIL_STOCK_BAS ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'"
+                                                  title="Restant">{{ restantSiege(s) }}</span>
+                                        </span>
+                                    </div>
+                                    <div v-if="nonAttribue(item) > 0" class="text-[10px] font-bold text-violet-600 mt-1">
+                                        <i class="fa-solid fa-box-open mr-1"></i>{{ nonAttribue(item) }} non attribué(s)
                                     </div>
                                     <span v-if="!item.sieges || item.sieges.length === 0" class="text-slate-400 italic">Aucune attribution</span>
                                 </td>
+
                                 <td class="p-3 text-right font-semibold">{{ item.prix_achat ? item.prix_achat + ' FCFA' : '-' }}</td>
                                 <td class="p-3 text-right font-semibold text-blue-600">{{ item.marge_vente ? item.marge_vente + ' FCFA' : '-' }}</td>
                                 <td class="p-3 text-right text-rose-600 font-semibold">
-                                    {{ item.sieges?.reduce((acc, s) => acc + s.sortie, 0) ?? 0 }}
+                                    {{ totalSorties(item) }}
                                 </td>
-                                <td class="p-3 text-right font-black" :class="(item.quantite - (item.sieges?.reduce((acc, s) => acc + s.sortie, 0) ?? 0)) <= 5 ? 'text-amber-600' : 'text-slate-900'">
-                                    {{ item.quantite - (item.sieges?.reduce((acc, s) => acc + s.sortie, 0) ?? 0) }}
+                                <td class="p-3 text-right font-black" :class="stockRestant(item) <= SEUIL_STOCK_BAS ? 'text-amber-600' : 'text-slate-900'">
+                                    {{ stockRestant(item) }}
                                 </td>
                                 <td class="p-3 text-right">
                                     <button @click="openEditModal(item)" class="px-3 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-[#C8102E] transition">
@@ -163,16 +212,16 @@ const exporterExcel = () => {
                 <!-- Pagination en bas du tableau -->
                 <div v-if="stocks.links && stocks.links.length > 3" class="p-4 bg-slate-50 border-t flex justify-center items-center gap-1">
                     <template v-for="(link, index) in stocks.links" :key="index">
-                        <Link 
+                        <Link
                             v-if="link.url"
                             :href="link.url"
                             v-html="link.label"
                             class="px-3 py-1.5 text-xs font-bold rounded-lg border transition"
                             :class="link.active ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 hover:bg-slate-100 border-slate-200'"
                         />
-                        <span 
-                            v-else 
-                            v-html="link.label" 
+                        <span
+                            v-else
+                            v-html="link.label"
                             class="px-3 py-1.5 text-xs font-medium text-slate-400 border border-transparent"
                         />
                     </template>
@@ -181,37 +230,66 @@ const exporterExcel = () => {
 
             <!-- Modal de gestion par siège (Magasinier : attributions et sorties uniquement) -->
             <div v-if="showModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                <div class="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+                <div class="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
                     <h3 class="text-base font-black text-slate-900">Répartition par Siège & Enregistrement des Sorties</h3>
                     <p class="text-xs text-slate-500 font-medium">
-                        {{ currentStock?.designation_piece }} (Réf: {{ currentStock?.reference || 'N/A' }}) — 
-                        <span class="font-bold text-slate-800">Quantité Initiale Lot : {{ currentStock?.quantite ?? 0 }}</span>
+                        {{ currentStock?.designation_piece }} (Réf: {{ currentStock?.reference || 'N/A' }})
                     </p>
 
                     <div v-if="form.errors.sieges" class="p-3 bg-rose-50 border border-rose-200 text-rose-600 rounded-lg text-xs font-semibold">
                         {{ form.errors.sieges }}
                     </div>
-                    
-                    <form @submit.prevent="submit" class="space-y-4">
-                        <div class="space-y-3 divide-y">
-                            <div v-for="ligne in form.sieges" :key="ligne.siege" class="pt-3 first:pt-0">
-                                <h4 class="text-xs font-bold text-slate-900 mb-2">{{ ligne.siege }}</h4>
-                                <div class="grid grid-cols-2 gap-3">
-                                    <div>
-                                        <label class="block text-[11px] font-semibold text-slate-600 mb-1">Quantité Attribuée</label>
-                                        <input type="number" v-model.number="ligne.quantite_attribuee" class="w-full bg-slate-50 border rounded-lg text-xs p-2 font-bold text-blue-600" min="0" />
-                                    </div>
-                                    <div>
-                                        <label class="block text-[11px] font-semibold text-slate-600 mb-1">Quantité Sortie (Atelier)</label>
-                                        <input type="number" v-model.number="ligne.sortie" class="w-full bg-slate-50 border rounded-lg text-xs p-2 font-bold text-rose-600" min="0" />
-                                    </div>
-                                </div>
+
+                    <form @submit.prevent="submit" class="space-y-3">
+                        <!-- Récapitulatif du lot -->
+                        <div class="p-3 rounded-xl border flex items-center justify-between"
+                             :class="resteAAttribuer < 0 ? 'bg-rose-50 border-rose-200' : resteAAttribuer === 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-violet-50 border-violet-200'">
+                            <p class="text-[11px] text-slate-600">
+                                Quantité initiale du lot : <strong class="text-slate-900">{{ quantiteLot }}</strong><br />
+                                Déjà attribué : <strong class="text-slate-900">{{ totalAttribueForm }}</strong>
+                            </p>
+                            <div class="text-right">
+                                <p class="text-[10px] uppercase font-bold text-slate-400">Reste à attribuer</p>
+                                <p class="text-lg font-black" :class="resteAAttribuer < 0 ? 'text-rose-600' : 'text-slate-900'">{{ resteAAttribuer }}</p>
                             </div>
                         </div>
 
+                        <button type="button" @click="repartirEquitablement"
+                                class="w-full py-2 text-xs font-bold bg-slate-100 rounded-lg hover:bg-slate-200 transition">
+                            <i class="fa-solid fa-scale-balanced mr-1"></i> Répartir équitablement
+                        </button>
+
+                        <div v-for="ligne in form.sieges" :key="ligne.siege" class="bg-slate-50 p-3 rounded-xl border space-y-2">
+                            <div class="flex items-center justify-between">
+                                <h4 class="text-xs font-extrabold text-slate-900">{{ ligne.siege }}</h4>
+                                <span class="text-[11px] font-bold px-2 py-0.5 rounded"
+                                      :class="restantSiege(ligne) <= SEUIL_STOCK_BAS ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'">
+                                    Restant : {{ restantSiege(ligne) }}
+                                </span>
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-slate-600 mb-1">Quantité Attribuée</label>
+                                    <input type="number" v-model.number="ligne.quantite_attribuee" class="w-full bg-white border rounded-lg text-xs p-2 font-bold text-blue-600" min="0" />
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-semibold text-slate-600 mb-1">Quantité Sortie (Atelier)</label>
+                                    <input type="number" v-model.number="ligne.sortie" class="w-full bg-white border rounded-lg text-xs p-2 font-bold text-rose-600" min="0" :max="ligne.quantite_attribuee" />
+                                </div>
+                            </div>
+                            <p v-if="Number(ligne.sortie) > Number(ligne.quantite_attribuee)" class="text-[10px] text-rose-600 font-semibold">
+                                Les sorties dépassent la quantité attribuée.
+                            </p>
+                        </div>
+
+                        <p v-if="resteAAttribuer < 0" class="text-xs text-rose-600 font-semibold">
+                            Vous avez attribué {{ Math.abs(resteAAttribuer) }} pièce(s) de plus que le lot reçu.
+                        </p>
+
                         <div class="flex justify-end gap-2 pt-4 border-t">
                             <button type="button" @click="showModal = false" class="px-4 py-2 bg-slate-100 text-xs font-bold rounded-xl">Annuler</button>
-                            <button type="submit" :disabled="form.processing" class="px-4 py-2 bg-[#C8102E] text-white text-xs font-bold rounded-xl hover:bg-rose-700 transition">
+                            <button type="submit" :disabled="form.processing || !distributionValide"
+                                    class="px-4 py-2 bg-[#C8102E] text-white text-xs font-bold rounded-xl hover:bg-rose-700 transition disabled:opacity-50">
                                 {{ form.processing ? 'Enregistrement...' : 'Valider les modifications' }}
                             </button>
                         </div>
