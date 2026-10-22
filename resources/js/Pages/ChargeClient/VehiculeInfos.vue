@@ -1,7 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import VehiculeEntete from '@/Components/VehiculeEntete.vue';
-import { Head, router } from '@inertiajs/vue3';
+import { Head, router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import {
@@ -20,6 +20,20 @@ import {
 
 const props = defineProps({
     vehicule: Object,
+});
+
+/* ------------------------------------------------------------------ */
+/* Gestion dynamique du retour selon le rôle                          */
+/* ------------------------------------------------------------------ */
+const page = usePage();
+const user = computed(() => page.props.auth?.user);
+
+const hrefRetour = computed(() => {
+    if (user.value?.role === 'admin') {
+        // Redirige vers la liste des véhicules admin pour éviter l'erreur de route non définie
+        return route('admin.users.index'); 
+    }
+    return route('charge_client.vehicules.show', props.vehicule.id);
 });
 
 /* ------------------------------------------------------------------ */
@@ -44,7 +58,6 @@ const marquerCommeLivre = () => {
 /* ------------------------------------------------------------------ */
 /* Fiche de réception affichée                                          */
 /* ------------------------------------------------------------------ */
-// Réceptions du véhicule, la plus récente en premier
 const receptions = computed(() =>
     [...(props.vehicule.interventions || [])].sort((a, b) => {
         const da = new Date(a.date_reception || 0);
@@ -90,7 +103,6 @@ const heureReception = (valeur) => {
 const kilometrage = (valeur) =>
     valeur || valeur === 0 ? `${Number(valeur).toLocaleString('fr-FR')} km` : 'Non renseigné';
 
-// Traduction et style des statuts
 const getStatutBadge = (statut) => {
     const badges = {
         reception: { text: 'Sur le parc (réception)', classe: 'bg-blue-50 text-blue-700 ring-blue-200' },
@@ -103,7 +115,6 @@ const getStatutBadge = (statut) => {
     return badges[statut] || { text: statut || 'En cours', classe: 'bg-gray-100 text-gray-700 ring-gray-200' };
 };
 
-// URL des images stockées dans Laravel
 const imageUrl = (path) => {
     if (!path) return '';
     if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('blob:')) return path;
@@ -134,7 +145,6 @@ const photos = [
     { champ: 'photo_droite', label: 'Droite' },
 ];
 
-// Photos supplémentaires de la fiche affichée (jusqu'à 6, en plus des 4 photos obligatoires)
 const photosSupplementaires = computed(() => {
     const brut = fiche.value?.photos_supplementaires;
     if (!brut) return [];
@@ -155,8 +165,8 @@ const photosSupplementaires = computed(() => {
         <template #header>
             <VehiculeEntete
                 :vehicule="vehicule"
-                :href="route('charge_client.vehicules.show', vehicule.id)"
-                libelle-retour="Retour au véhicule"
+                :href="hrefRetour"
+                libelle-retour="Retour"
                 section="Infos du véhicule"
             />
         </template>
@@ -191,7 +201,6 @@ const photosSupplementaires = computed(() => {
                     </div>
 
                     <div class="flex flex-wrap items-center gap-3 sm:justify-end">
-                        <!-- BOUTON MARQUER COMME LIVRÉ -->
                         <button
                             v-if="fiche.statut !== 'livre'"
                             type="button"
@@ -210,7 +219,6 @@ const photosSupplementaires = computed(() => {
                             Véhicule livré
                         </span>
 
-                        <!-- SÉLECTEUR SI PLUSIEURS RÉCEPTIONS -->
                         <div v-if="receptions.length > 1" class="sm:w-56">
                             <select
                                 id="choix-reception"
@@ -230,7 +238,6 @@ const photosSupplementaires = computed(() => {
                     <!-- COLONNE GAUCHE ET CENTRE : INFOS PRINCIPALES -->
                     <div class="space-y-6 lg:col-span-2">
 
-                        <!-- 1. VÉHICULE CONCERNÉ -->
                         <section class="space-y-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
                             <h3 class="flex items-center gap-2 border-b border-gray-100 pb-3 text-base font-black text-[#0B0F19]">
                                 <FontAwesomeIcon :icon="faCar" class="text-sm text-[#E11D48]" />
@@ -274,7 +281,6 @@ const photosSupplementaires = computed(() => {
                             </dl>
                         </section>
 
-                        <!-- 2. CLIENT / PROPRIÉTAIRE -->
                         <section class="space-y-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
                             <h3 class="flex items-center gap-2 border-b border-gray-100 pb-3 text-base font-black text-[#0B0F19]">
                                 <FontAwesomeIcon :icon="faUser" class="text-sm text-[#E11D48]" />
@@ -312,7 +318,6 @@ const photosSupplementaires = computed(() => {
                         </section>
 
                         <template v-if="fiche">
-                            <!-- 3. CARBURANT ET TRAITEMENT -->
                             <section class="space-y-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
                                 <h3 class="flex items-center gap-2 border-b border-gray-100 pb-3 text-base font-black text-[#0B0F19]">
                                     <FontAwesomeIcon :icon="faGasPump" class="text-sm text-[#E11D48]" />
@@ -344,7 +349,6 @@ const photosSupplementaires = computed(() => {
                                 </dl>
                             </section>
 
-                            <!-- 4. REMARQUES ET OBSERVATIONS -->
                             <section
                                 v-if="fiche.remarques_eventuelles"
                                 class="space-y-3 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm"
@@ -364,7 +368,6 @@ const photosSupplementaires = computed(() => {
                     <div class="space-y-6">
 
                         <template v-if="fiche">
-                            <!-- ÉQUIPEMENTS PRÉSENTS -->
                             <section class="space-y-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
                                 <h3 class="flex items-center gap-2 border-b border-gray-100 pb-3 text-base font-black text-[#0B0F19]">
                                     <FontAwesomeIcon :icon="faScrewdriverWrench" class="text-sm text-[#E11D48]" />
@@ -387,7 +390,6 @@ const photosSupplementaires = computed(() => {
                                     </li>
                                 </ul>
 
-                                <!-- Pare-brise fissuré (alerte spécifique) -->
                                 <div class="flex items-center justify-between border-t border-gray-100 pt-3 text-xs">
                                     <span class="font-semibold text-[#E11D48]">Pare-brise fissuré</span>
                                     <span
@@ -399,7 +401,6 @@ const photosSupplementaires = computed(() => {
                                 </div>
                             </section>
 
-                            <!-- PHOTOS D'ÉTAT INITIAL -->
                             <section class="space-y-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
                                 <h3 class="flex items-center gap-2 border-b border-gray-100 pb-3 text-base font-black text-[#0B0F19]">
                                     <FontAwesomeIcon :icon="faCamera" class="text-sm text-[#E11D48]" />
@@ -431,7 +432,6 @@ const photosSupplementaires = computed(() => {
                                     </div>
                                 </div>
 
-                                <!-- Photos supplémentaires (facultatives) -->
                                 <div v-if="photosSupplementaires.length" class="space-y-2 border-t border-gray-100 pt-3">
                                     <span class="block text-[10px] font-bold uppercase text-gray-600">
                                         Photos supplémentaires ({{ photosSupplementaires.length }})
@@ -457,7 +457,6 @@ const photosSupplementaires = computed(() => {
                             </section>
                         </template>
 
-                        <!-- AUCUNE RÉCEPTION -->
                         <section
                             v-else
                             class="rounded-2xl border border-dashed border-gray-300 bg-[#F8FAFC] px-6 py-12 text-center"

@@ -107,13 +107,13 @@ const openEditModal = (item) => {
     form.marge_vente = item.marge_vente || '';
     form.prix_kagnan_ht = item.prix_kagnan_ht || '';
 
-    // Charger les attributions par siège existantes
+    // Charger les attributions et initialiser les sorties à 0 pour la saisie de nouveaux mouvements incrémentaux
     form.sieges = SIEGES.map(nomSiege => {
         const existant = item.sieges?.find(s => s.siege === nomSiege);
         return {
             siege: nomSiege,
             quantite_attribuee: existant ? existant.quantite_attribuee : 0,
-            sortie: existant ? existant.sortie : 0,
+            sortie: 0, // Remis à 0 pour saisir uniquement la nouvelle quantité additionnelle à sortir
         };
     });
 
@@ -434,13 +434,10 @@ const submitImport = () => {
                                         <input type="number" v-model.number="ligne.quantite_attribuee" class="w-full bg-white border rounded-lg text-xs p-1.5 font-bold text-blue-600" min="0" />
                                     </div>
                                     <div>
-                                        <label class="block text-[10px] font-semibold text-slate-500">Sorties</label>
-                                        <input type="number" v-model.number="ligne.sortie" class="w-full bg-white border rounded-lg text-xs p-1.5 font-bold text-rose-600" min="0" :max="ligne.quantite_attribuee" />
+                                        <label class="block text-[10px] font-semibold text-slate-500">Nouvelles sorties</label>
+                                        <input type="number" v-model.number="ligne.sortie" class="w-full bg-white border rounded-lg text-xs p-1.5 font-bold text-rose-600" min="0" />
                                     </div>
                                 </div>
-                                <p v-if="Number(ligne.sortie) > Number(ligne.quantite_attribuee)" class="text-[10px] text-rose-600 font-semibold">
-                                    Les sorties dépassent la quantité attribuée.
-                                </p>
                             </div>
 
                             <p v-if="resteAAttribuer < 0" class="text-xs text-rose-600 font-semibold">

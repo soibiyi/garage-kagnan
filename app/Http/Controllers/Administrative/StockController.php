@@ -88,9 +88,8 @@ class StockController extends Controller
     {
         $query = MvtStock::with(['stock', 'user']);
 
-        if ($request->filled('type')) {
-            $query->where('type', $request->input('type'));
-        }
+        $type = $request->input('type', 'entree');
+        $query->where('type', $type);
 
         if ($request->filled('siege')) {
             $query->where('siege', $request->input('siege'));
@@ -100,7 +99,10 @@ class StockController extends Controller
 
         return Inertia::render('Administration/Stocks/HistoriqueMouvements', [
             'mouvements' => $mouvements,
-            'filters' => $request->only(['type', 'siege'])
+            'filters' => [
+                'type' => $type,
+                'siege' => $request->input('siege')
+            ]
         ]);
     }
 
@@ -124,30 +126,28 @@ class StockController extends Controller
         DB::transaction(function () use ($validated, $stock, $request) {
             foreach ($validated['sieges'] as $ligne) {
                 $ancienSiege = $stock->sieges()->where('siege', $ligne['siege'])->first();
-                $ancienneSortie = $ancienSiege ? $ancienSiege->sortie : 0;
-                $nouvelleSortie = $ligne['sortie'];
+                $ancienneSortieTotale = $ancienSiege ? $ancienSiege->sortie : 0;
+                
+                $quantiteSortieAjoutee = $ligne['sortie'];
 
-                if ($nouvelleSortie < $ancienneSortie) {
-                    throw new \Exception("Il est interdit de modifier ou réduire une sortie déjà validée pour le siège {$ligne['siege']}.");
-                }
-
-                if ($nouvelleSortie > $ancienneSortie) {
-                    $difference = $nouvelleSortie - $ancienneSortie;
+                if ($quantiteSortieAjoutee > 0) {
                     MvtStock::create([
                         'stock_id' => $stock->id,
                         'user_id' => auth()->id(),
                         'type' => 'sortie',
-                        'quantite' => $difference,
+                        'quantite' => $quantiteSortieAjoutee,
                         'siege' => $ligne['siege'],
                         'motif' => $request->input('motif'),
                     ]);
                 }
 
+                $nouvelleSortieTotale = $ancienneSortieTotale + $quantiteSortieAjoutee;
+
                 $stock->sieges()->updateOrCreate(
                     ['siege' => $ligne['siege']],
                     [
                         'quantite_attribuee' => $ligne['quantite_attribuee'],
-                        'sortie' => $nouvelleSortie,
+                        'sortie' => $nouvelleSortieTotale,
                     ]
                 );
             }
@@ -285,29 +285,27 @@ class StockController extends Controller
             if ($siegesData !== null) {
                 foreach ($siegesData as $ligne) {
                     $ancienSiege = $stock->sieges()->where('siege', $ligne['siege'])->first();
-                    $ancienneSortie = $ancienSiege ? $ancienSiege->sortie : 0;
-                    $nouvelleSortie = $ligne['sortie'] ?? 0;
+                    $ancienneSortieTotale = $ancienSiege ? $ancienSiege->sortie : 0;
+                    $quantiteSortieAjoutee = $ligne['sortie'] ?? 0;
 
-                    if ($nouvelleSortie < $ancienneSortie) {
-                        throw new \Exception("Il est interdit de modifier ou réduire une sortie déjà validée.");
-                    }
-
-                    if ($nouvelleSortie > $ancienneSortie) {
+                    if ($quantiteSortieAjoutee > 0) {
                         MvtStock::create([
                             'stock_id' => $stock->id,
                             'user_id' => auth()->id(),
                             'type' => 'sortie',
-                            'quantite' => $nouvelleSortie - $ancienneSortie,
+                            'quantite' => $quantiteSortieAjoutee,
                             'siege' => $ligne['siege'],
                             'motif' => 'Sortie atelier (Mise à jour)',
                         ]);
                     }
 
+                    $nouvelleSortieTotale = $ancienneSortieTotale + $quantiteSortieAjoutee;
+
                     $stock->sieges()->updateOrCreate(
                         ['siege' => $ligne['siege']],
                         [
                             'quantite_attribuee' => $ligne['quantite_attribuee'] ?? 0,
-                            'sortie' => $nouvelleSortie,
+                            'sortie' => $nouvelleSortieTotale,
                         ]
                     );
                 }
@@ -449,10 +447,6 @@ class StockController extends Controller
         }
     }
 
-    /**
-     * Lit un fichier Excel (.xlsx/.xls) ou CSV et renvoie les lignes de données
-     * (sans la ligne d'en-têtes), sous forme de tableaux indexés par position.
-     */
     private function lireLignesImport($fichier): array
     {
         $extension = strtolower($fichier->getClientOriginalExtension());
@@ -460,13 +454,11 @@ class StockController extends Controller
 
         if (in_array($extension, ['xlsx', 'xls'])) {
             $feuille = \PhpOffice\PhpSpreadsheet\IOFactory::load($path)->getActiveSheet();
-            // valeurs brutes (pas de formatage), tableau indexé 0,1,2...
             $lignes = $feuille->toArray(null, true, false, false);
-            array_shift($lignes); // ligne d'en-têtes
+            array_shift($lignes);
             return $lignes;
         }
 
-        // CSV : comportement d'origine (détection du séparateur ; ou ,)
         $handle = fopen($path, 'r');
         if ($handle === false) {
             throw new \RuntimeException('Impossible d’ouvrir le fichier.');
@@ -478,7 +470,7 @@ class StockController extends Controller
         $delimiter = (substr_count($firstLine, ';') > substr_count($firstLine, ',')) ? ';' : ',';
         rewind($handle);
         if ($bom === "\xEF\xBB\xBF") { fread($handle, 3); }
-        fgetcsv($handle, 0, $delimiter); // en-têtes
+        fgetcsv($handle, 0, $delimiter);
 
         $lignes = [];
         while (($data = fgetcsv($handle, 0, $delimiter)) !== false) {
@@ -493,7 +485,6 @@ class StockController extends Controller
     {
         if ($valeur === null || $valeur === '') return null;
 
-        // Date Excel stockée sous forme de nombre (numéro de série)
         if (is_numeric($valeur) && (float) $valeur > 20000) {
             return \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($valeur)->format('Y-m-d');
         }

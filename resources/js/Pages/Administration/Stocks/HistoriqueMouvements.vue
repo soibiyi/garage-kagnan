@@ -32,7 +32,7 @@ const ongletActif = ref(props.filters.type || 'entree');
 
 const changerOnglet = (type) => {
     ongletActif.value = type;
-    router.get(route('stocks.historique'), {
+    router.get(route('administration.stocks.historique'), {
         type: type,
         siege: props.filters.siege
     }, { preserveState: true, replace: true });

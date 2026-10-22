@@ -62,7 +62,7 @@ const openEditModal = (item) => {
         return {
             siege: nomSiege,
             quantite_attribuee: existant ? existant.quantite_attribuee : 0,
-            sortie: existant ? existant.sortie : 0,
+            sortie: 0, // Remis à 0 pour saisir uniquement la nouvelle sortie du moment
         };
     });
 
