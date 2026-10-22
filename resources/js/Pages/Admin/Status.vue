@@ -15,6 +15,7 @@ import {
     faChevronRight,
     faRotateLeft,
     faPhone,
+    faEye,
 } from '@fortawesome/free-solid-svg-icons';
 
 const props = defineProps({
@@ -43,12 +44,10 @@ const STATUTS = {
 };
 
 /* -------------------------------------------------------------------------- */
-/* Lien vers le détail (à brancher)                                            */
+/* Lien vers le détail (redirige vers vehiculeinfos)                           */
 /* -------------------------------------------------------------------------- */
 
-// Retourne l'URL du détail d'un véhicule/OT, ou null pour désactiver le lien.
-// Exemple : return v.ot ? route('interventions.show', v.ot.id) : null;
-const lienDetail = (v) => null;
+const lienDetail = (v) => route('charge_client.vehicules.infos', v.id);
 
 /* -------------------------------------------------------------------------- */
 /* Recherche et filtre (conservés dans l'URL)                                  */
@@ -73,7 +72,6 @@ watch([search, filterStatut], ([q, statut]) => {
     const url = new URL(window.location.href);
     q.trim() ? url.searchParams.set('q', q.trim()) : url.searchParams.delete('q');
     statut !== 'tous' ? url.searchParams.set('statut', statut) : url.searchParams.delete('statut');
-    // On garde le state d'Inertia pour ne pas casser la navigation
     window.history.replaceState(window.history.state, '', url);
 });
 
@@ -106,7 +104,6 @@ const libelleAnciennete = (jours) => {
 
 const vehiculesEnrichis = computed(() =>
     props.vehicules.map((v) => {
-        // On suppose interventions[0] = la plus récente (tri à faire côté contrôleur)
         const ot = v.interventions?.[0] ?? null;
         const statut = ot && ot.statut in STATUTS ? ot.statut : 'aucun';
         const jours = ot && statut !== 'livre' ? joursDepuis(ot.updated_at ?? ot.created_at) : null;
@@ -156,7 +153,6 @@ const tri = ref({ cle: 'priorite', dir: 'asc' });
 const comparer = (a, b) => String(a ?? '').localeCompare(String(b ?? ''), 'fr', { sensitivity: 'base' });
 
 const comparateurs = {
-    // Actions en attente d'abord, puis les plus anciens
     priorite: (a, b) =>
         ORDRE.indexOf(a.statut) - ORDRE.indexOf(b.statut) || (b.jours ?? 0) - (a.jours ?? 0),
     vehicule: (a, b) => comparer(a.nomVehicule, b.nomVehicule),
@@ -179,7 +175,6 @@ const ariaSort = (cle) =>
 /* -------------------------------------------------------------------------- */
 
 const vehiculesFiltres = computed(() => {
-    // Chaque mot doit se retrouver quelque part : "toyota corolla" fonctionne
     const termes = normaliser(search.value).split(/\s+/).filter(Boolean);
     const sens = tri.value.dir === 'asc' ? 1 : -1;
 
@@ -325,7 +320,7 @@ const pluriel = (n) => (n > 1 ? 's' : '');
                     <li
                         v-for="v in vehiculesFiltres"
                         :key="v.id"
-                        class="bg-white rounded-xl border border-gray-200 p-4"
+                        class="bg-white rounded-xl border border-gray-200 p-4 space-y-3"
                     >
                         <div class="flex items-start justify-between gap-3">
                             <span
@@ -340,14 +335,16 @@ const pluriel = (n) => (n > 1 ? 's' : '');
                             >{{ v.badge.text }}</span>
                         </div>
 
-                        <div class="mt-3 flex items-center gap-2.5 text-gray-900">
-                            <span class="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 shrink-0">
-                                <FontAwesomeIcon :icon="faCar" class="text-sm" />
-                            </span>
-                            <p class="font-bold text-base">{{ v.nomVehicule || 'Véhicule sans nom' }}</p>
+                        <div class="flex items-center justify-between gap-2 text-gray-900">
+                            <div class="flex items-center gap-2.5">
+                                <span class="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-gray-500 shrink-0">
+                                    <FontAwesomeIcon :icon="faCar" class="text-sm" />
+                                </span>
+                                <p class="font-bold text-base">{{ v.nomVehicule || 'Véhicule sans nom' }}</p>
+                            </div>
                         </div>
 
-                        <div class="mt-3 text-sm">
+                        <div class="text-sm">
                             <p v-if="v.client" class="font-semibold text-gray-900">{{ v.nomComplet }}</p>
                             <p v-else class="italic text-gray-400">Aucun propriétaire</p>
                             <p v-if="v.client?.telephone" class="mt-0.5 flex items-center gap-1.5 text-gray-500">
@@ -356,20 +353,19 @@ const pluriel = (n) => (n > 1 ? 's' : '');
                             </p>
                         </div>
 
-                        <div class="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between gap-3 text-sm">
-                            <component
-                                :is="lienDetail(v) ? Link : 'span'"
-                                v-bind="lienDetail(v) ? { href: lienDetail(v) } : {}"
-                                class="font-mono font-bold"
-                                :class="v.numeroOt ? 'text-[#C8102E]' : 'text-gray-400 font-normal'"
-                            >
+                        <div class="pt-3 border-t border-gray-100 flex items-center justify-between gap-3 text-sm">
+                            <span class="font-mono font-bold" :class="v.numeroOt ? 'text-[#C8102E]' : 'text-gray-400 font-normal'">
                                 {{ v.numeroOt || 'Aucun OT' }}
-                                <FontAwesomeIcon v-if="lienDetail(v) && v.numeroOt" :icon="faChevronRight" class="ml-1 text-xs" />
-                            </component>
-                            <span v-if="v.anciennete" class="inline-flex items-center gap-1.5 text-xs text-gray-500">
-                                <FontAwesomeIcon :icon="faClock" />
-                                {{ v.anciennete }}
                             </span>
+                            
+                            <!-- Bouton Consulter pour mobile -->
+                            <Link
+                                :href="lienDetail(v)"
+                                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-900 text-white text-xs font-bold transition hover:bg-gray-800 active:scale-95"
+                            >
+                                <FontAwesomeIcon :icon="faEye" class="text-[10px]" />
+                                <span>Consulter</span>
+                            </Link>
                         </div>
                     </li>
                 </ul>
@@ -405,6 +401,7 @@ const pluriel = (n) => (n > 1 ? 's' : '');
                                             <FontAwesomeIcon v-if="tri.cle === 'priorite'" :icon="tri.dir === 'asc' ? faArrowUp : faArrowDown" class="text-[10px] text-[#C8102E]" />
                                         </button>
                                     </th>
+                                    <th scope="col" class="py-3.5 px-4 text-right">Actions</th>
                                 </tr>
                             </thead>
 
@@ -445,13 +442,7 @@ const pluriel = (n) => (n > 1 ? 's' : '');
 
                                     <!-- Dernier OT -->
                                     <td class="py-4 px-4 font-mono">
-                                        <component
-                                            v-if="v.numeroOt"
-                                            :is="lienDetail(v) ? Link : 'span'"
-                                            v-bind="lienDetail(v) ? { href: lienDetail(v) } : {}"
-                                            class="font-bold text-[#C8102E]"
-                                            :class="lienDetail(v) ? 'hover:underline underline-offset-2' : ''"
-                                        >{{ v.numeroOt }}</component>
+                                        <span v-if="v.numeroOt" class="font-bold text-[#C8102E]">{{ v.numeroOt }}</span>
                                         <span v-else class="text-gray-400">Aucun OT</span>
                                     </td>
 
@@ -465,6 +456,17 @@ const pluriel = (n) => (n > 1 ? 's' : '');
                                             <FontAwesomeIcon :icon="faClock" class="text-[10px]" />
                                             {{ v.anciennete }}
                                         </p>
+                                    </td>
+
+                                    <!-- Actions (Bouton Consulter) -->
+                                    <td class="py-4 px-4 text-right">
+                                        <Link
+                                            :href="lienDetail(v)"
+                                            class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gray-900 text-white text-xs font-bold transition hover:bg-gray-800 active:scale-95 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E]/40"
+                                        >
+                                            <FontAwesomeIcon :icon="faEye" class="text-xs" />
+                                            <span>Consulter</span>
+                                        </Link>
                                     </td>
                                 </tr>
                             </tbody>

@@ -1,6 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
 import SiegeSwitcher from '@/Components/SiegeSwitcher.vue';
 
@@ -150,6 +150,7 @@ const preparerGroupe = (groupe, idx, chargeId) => {
         client: groupe.client || {},
         toutes,
         interactions,
+        consignes: groupe.client?.consignes || [],
         dernier: interactions[0] ? new Date(interactions[0].created_at) : null,
     };
 };
@@ -176,7 +177,6 @@ const chargesVue = computed(() => {
 
             if (!matchCharge && !clients.length) return null;
 
-            // Clients actifs sur la période en premier (récents d'abord), grisés ensuite
             clients.sort(
                 (a, b) =>
                     (b.dernier?.getTime() ?? -1) - (a.dernier?.getTime() ?? -1) ||
@@ -200,7 +200,6 @@ const chargesVue = computed(() => {
 /* ------------------------------------------------------------------ */
 const chargeActifId = ref(props.chargesClients?.[0]?.id ?? null);
 
-// Si l'onglet actif disparaît (recherche, changement de siège), on retombe sur le premier
 const chargeActif = computed(
     () => chargesVue.value.find((c) => c.id === chargeActifId.value) || chargesVue.value[0] || null,
 );
@@ -220,11 +219,12 @@ watch(
 const initiale = (nom) => (nom ? nom.charAt(0).toUpperCase() : 'C');
 
 /* ------------------------------------------------------------------ */
-/* Modal du client                                                     */
+/* Modal du client & Consignes Admin                                   */
 /* ------------------------------------------------------------------ */
 const clientOuvertCle = ref(null);
 const historiqueComplet = ref(false);
 const boutonFermer = ref(null);
+const afficherFormConsigne = ref(false);
 
 const clientModal = computed(
     () => chargeActif.value?.clients.find((g) => g.cle === clientOuvertCle.value) || null,
@@ -235,8 +235,15 @@ const interactionsModal = computed(() => {
     return historiqueComplet.value ? clientModal.value.toutes : clientModal.value.interactions;
 });
 
+// Formulaire pour l'ajout de consigne
+const consigneForm = useForm({
+    client_id: null,
+    consigne: '',
+});
+
 const ouvrirModal = async (cle) => {
     historiqueComplet.value = false;
+    afficherFormConsigne.value = false;
     clientOuvertCle.value = cle;
     await nextTick();
     boutonFermer.value?.focus();
@@ -245,7 +252,22 @@ const ouvrirModal = async (cle) => {
 function fermerModal() {
     clientOuvertCle.value = null;
     historiqueComplet.value = false;
+    afficherFormConsigne.value = false;
+    consigneForm.reset();
 }
+
+const soumettreConsigne = () => {
+    if (!clientModal.value?.client?.id) return;
+    consigneForm.client_id = clientModal.value.client.id;
+    
+    consigneForm.post(route('admin.clients.consignes.store', clientModal.value.client.id), {
+        preserveScroll: true,
+        onSuccess: () => {
+            consigneForm.reset('consigne');
+            afficherFormConsigne.value = false;
+        },
+    });
+};
 
 watch(clientModal, (ouvert) => {
     document.body.style.overflow = ouvert ? 'hidden' : '';
@@ -513,7 +535,7 @@ const aucuneDonnee = computed(() => !(props.chargesClients && props.chargesClien
             </div>
         </div>
 
-        <!-- ============ MODAL : INTERACTIONS DU CLIENT ============ -->
+        <!-- ============ MODAL : INTERACTIONS & CONSIGNES DU CLIENT ============ -->
         <Teleport to="body">
             <Transition name="modal">
                 <div
@@ -551,6 +573,76 @@ const aucuneDonnee = computed(() => !(props.chargesClients && props.chargesClien
                             >
                                 <i class="fa-solid fa-xmark"></i>
                             </button>
+                        </div>
+
+                        <!-- SECTION CONSIGNES ADMIN -->
+                        <div class="border-b border-rose-100 bg-rose-50/60 p-4">
+                            <div class="flex items-center justify-between gap-2">
+                                <div class="flex items-center gap-2 text-xs font-extrabold text-[#E11D48]">
+                                    <i class="fa-solid fa-bullhorn text-sm"></i>
+                                    <span>Consignes de la direction</span>
+                                </div>
+                                <button
+                                    type="button"
+                                    @click="afficherFormConsigne = !afficherFormConsigne"
+                                    class="inline-flex items-center gap-1.5 rounded-lg bg-[#E11D48] px-2.5 py-1 text-[11px] font-bold text-white transition hover:bg-rose-700 active:scale-95"
+                                >
+                                    <i class="fa-solid" :class="afficherFormConsigne ? 'fa-minus' : 'fa-plus'"></i>
+                                    <span>{{ afficherFormConsigne ? 'Masquer' : 'Laisser une consigne' }}</span>
+                                </button>
+                            </div>
+
+                            <!-- Formulaire de saisie d'une consigne -->
+                            <Transition name="fade">
+                                <form v-if="afficherFormConsigne" @submit.prevent="soumettreConsigne" class="mt-3 space-y-2">
+                                    <textarea
+                                        v-model="consigneForm.consigne"
+                                        rows="2"
+                                        placeholder="Saisissez vos instructions/consignes pour le chargé client à propos de ce client..."
+                                        class="w-full rounded-xl border border-rose-200 bg-white p-2.5 text-xs font-medium text-[#0B0F19] placeholder-gray-400 focus:border-[#E11D48] focus:outline-none focus:ring-1 focus:ring-[#E11D48]"
+                                        required
+                                    ></textarea>
+                                    <div class="flex justify-end gap-2">
+                                        <button
+                                            type="button"
+                                            @click="afficherFormConsigne = false"
+                                            class="rounded-lg border border-gray-200 bg-white px-3 py-1 text-xs font-bold text-gray-600 hover:bg-gray-50"
+                                        >
+                                            Annuler
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            :disabled="consigneForm.processing"
+                                            class="rounded-lg bg-[#0B0F19] px-3 py-1 text-xs font-bold text-white hover:bg-slate-800 disabled:opacity-50"
+                                        >
+                                            Enregistrer la consigne
+                                        </button>
+                                    </div>
+                                </form>
+                            </Transition>
+
+                            <!-- Affichage des consignes actuelles -->
+                            <div v-if="clientModal.consignes && clientModal.consignes.length" class="mt-3 space-y-2">
+                                <div
+                                    v-for="item in clientModal.consignes"
+                                    :key="item.id"
+                                    class="rounded-xl border border-rose-200/80 bg-white p-3 text-xs shadow-sm"
+                                >
+                                    <div class="flex items-center justify-between gap-2 border-b border-gray-100 pb-1.5 text-[11px] font-semibold text-gray-500">
+                                        <span class="font-extrabold text-[#0B0F19]">
+                                            <i class="fa-solid fa-user-shield text-[10px] text-[#E11D48] mr-1"></i>
+                                            {{ item.auteur || 'Direction' }}
+                                        </span>
+                                        <span>{{ quand(new Date(item.created_at)) }}</span>
+                                    </div>
+                                    <p class="mt-1.5 whitespace-pre-line leading-relaxed text-gray-800 font-medium">
+                                        {{ item.consigne }}
+                                    </p>
+                                </div>
+                            </div>
+                            <p v-else-if="!afficherFormConsigne" class="mt-2 text-[11px] font-medium italic text-gray-500">
+                                Aucune consigne particulière enregistrée pour ce client.
+                            </p>
                         </div>
 
                         <!-- Bandeau de période -->
@@ -670,12 +762,10 @@ const aucuneDonnee = computed(() => !(props.chargesClients && props.chargesClien
 .modal-leave-active .modal-panel {
     transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-/* Mobile : le panneau monte du bas (bottom sheet) */
 .modal-enter-from .modal-panel,
 .modal-leave-to .modal-panel {
     transform: translateY(2.5rem);
 }
-/* Desktop : léger zoom */
 @media (min-width: 640px) {
     .modal-enter-from .modal-panel,
     .modal-leave-to .modal-panel {

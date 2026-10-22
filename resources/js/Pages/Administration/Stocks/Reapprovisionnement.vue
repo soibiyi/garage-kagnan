@@ -7,6 +7,9 @@ const props = defineProps({
     stocks: Array
 });
 
+// État de la recherche
+const searchQuery = ref('');
+
 // Préparation des articles présélectionnés
 const articlesSelectionnes = ref(
     props.stocks.map(item => {
@@ -17,12 +20,22 @@ const articlesSelectionnes = ref(
             reference: item.reference || '',
             designation: item.designation_piece,
             stock_restant: stockRestant,
-            quantite_a_commander: Math.max(1, 10 - stockRestant), // Suggère de remonter le stock à 10
+            quantite_a_commander: Math.max(1, 10 - stockRestant),
             prix_estime: item.prix_achat || 0,
             selectionne: true
         };
     })
 );
+
+// Articles filtrés par la recherche
+const articlesFiltres = computed(() => {
+    if (!searchQuery.value.trim()) return articlesSelectionnes.value;
+    const query = searchQuery.value.toLowerCase();
+    return articlesSelectionnes.value.filter(item => 
+        item.designation.toLowerCase().includes(query) || 
+        item.reference.toLowerCase().includes(query)
+    );
+});
 
 const form = useForm({
     fournisseur_nom: '',
@@ -33,7 +46,7 @@ const form = useForm({
 const toutCocher = ref(true);
 
 const toggleToutCocher = () => {
-    articlesSelectionnes.value.forEach(a => a.selectionne = toutCocher.value);
+    articlesFiltres.value.forEach(a => a.selectionne = toutCocher.value);
 };
 
 const genererCommande = () => {
@@ -128,16 +141,29 @@ const totalEstime = computed(() => {
                 </div>
 
                 <!-- Colonne Liste des pièces sous le seuil -->
-                <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div class="p-4 bg-slate-50 border-b flex justify-between items-center">
+                <div class="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden flex flex-col">
+                    <!-- Barre de recherche et sélection -->
+                    <div class="p-4 bg-slate-50 border-b flex flex-col sm:flex-row justify-between items-center gap-3">
                         <label class="inline-flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
                             <input type="checkbox" v-model="toutCocher" @change="toggleToutCocher" class="rounded border-slate-300 text-slate-900 focus:ring-slate-900" />
                             Tout sélectionner / Désélectionner
                         </label>
-                        <span class="text-xs text-slate-400 font-medium">{{ articlesSelectionnes.length }} pièces suggérées</span>
+                        
+                        <!-- Barre de recherche -->
+                        <div class="relative w-full sm:w-64">
+                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                                <i class="fa-solid fa-magnifying-glass text-xs"></i>
+                            </span>
+                            <input 
+                                type="text" 
+                                v-model="searchQuery" 
+                                placeholder="Filtrer par réf. ou nom..." 
+                                class="w-full bg-white border border-slate-200 rounded-lg text-xs pl-8 pr-3 py-1.5 font-medium focus:outline-none focus:ring-1 focus:ring-slate-900"
+                            />
+                        </div>
                     </div>
 
-                    <div class="overflow-x-auto">
+                    <div class="overflow-x-auto flex-1">
                         <table class="w-full text-left border-collapse">
                             <thead>
                                 <tr class="bg-slate-50/50 border-b text-[11px] font-bold text-slate-400 uppercase">
@@ -149,7 +175,7 @@ const totalEstime = computed(() => {
                                 </tr>
                             </thead>
                             <tbody class="divide-y text-xs">
-                                <tr v-for="item in articlesSelectionnes" :key="item.id" class="hover:bg-slate-50" :class="!item.selectionne ? 'opacity-40' : ''">
+                                <tr v-for="item in articlesFiltres" :key="item.id" class="hover:bg-slate-50" :class="!item.selectionne ? 'opacity-40' : ''">
                                     <td class="p-3 text-center">
                                         <input type="checkbox" v-model="item.selectionne" class="rounded border-slate-300 text-slate-900 focus:ring-slate-900" />
                                     </td>
@@ -179,10 +205,10 @@ const totalEstime = computed(() => {
                                         /> FCFA
                                     </td>
                                 </tr>
-                                <tr v-if="articlesSelectionnes.length === 0">
+                                <tr v-if="articlesFiltres.length === 0">
                                     <td colspan="5" class="p-8 text-center text-slate-400">
-                                        <i class="fa-solid fa-circle-check text-emerald-500 text-3xl mb-2"></i>
-                                        <div>Toutes les pièces ont un niveau de stock suffisant !</div>
+                                        <i class="fa-solid fa-magnifying-glass text-slate-300 text-3xl mb-2"></i>
+                                        <div>Aucune pièce ne correspond à votre recherche.</div>
                                     </td>
                                 </tr>
                             </tbody>

@@ -18,8 +18,11 @@ const totalHT = computed(() => {
     <div class="min-h-screen bg-slate-100 p-4 sm:p-8 flex flex-col items-center">
         <!-- Barre d'actions (masquée lors de l'impression) -->
         <div class="max-w-3xl w-full flex justify-between items-center mb-6 print:hidden">
-            <button @click="$window.history.back()" class="text-xs font-bold text-slate-600 hover:text-slate-900">
-                &larr; Retour à la préparation
+            <button 
+                @click="window.history.back()" 
+                class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-sm"
+            >
+                <i class="fa-solid fa-arrow-left"></i> Retour
             </button>
             <button @click="imprimer" class="px-6 py-2.5 bg-slate-900 text-white text-xs font-bold rounded-xl hover:bg-slate-800 transition flex items-center gap-2 shadow-lg">
                 <i class="fa-solid fa-print"></i> Imprimer / Enregistrer en PDF

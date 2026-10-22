@@ -44,6 +44,10 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy'); 
     Route::get('/charge-clients/{user}/activites', [UserController::class, 'chargeClientActivities'])->name('charge_clients.activities');
     Route::get('/users/interactions', [UserController::class, 'interactionIndex'])->name('users.interactionindex');
+    
+    // Route pour enregistrer la consigne admin par rapport au rapport d'un client
+    Route::post('/clients/{client}/consignes', [UserController::class, 'storeConsigne'])->name('clients.consignes.store');
+
     Route::get('/vehicules/status', [UserController::class, 'vehiculesStatus'])->name('vehicules.status');
     Route::get('/chiffre-affaires', [UserController::class, 'chiffreAffaires'])->name('chiffre-affaires');
     Route::get('/pieces', [StockController::class, 'adminIndex'])->name('pieces.index');
@@ -117,7 +121,7 @@ Route::middleware(['auth'])->prefix('administration')->name('administration.')->
     Route::post('/stocks/import', [StockController::class, 'import'])->name('stocks.import');
     Route::get('/stocks/historique', [StockController::class, 'historiqueMouvements'])->name('stocks.historique');
     
-    // Routes d'assistant de réapprovisionnement et bon de commande (Nommées correctement sous administration.*)
+    // Routes d'assistant de réapprovisionnement et bon de commande
     Route::get('/reapprovisionnement', [StockController::class, 'reapprovisionnement'])->name('stocks.reapprovisionnement');
     Route::post('/bon-de-commande', [StockController::class, 'genererBonCommande'])->name('stocks.bon-commande');
 

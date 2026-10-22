@@ -160,6 +160,36 @@ const enregistrerInteraction = () => {
         <div class="min-h-screen bg-white py-8 sm:py-12">
             <div class="mx-auto max-w-3xl space-y-8 px-4 sm:px-6 lg:px-8">
 
+                <!-- CONSIGNES DE LA DIRECTION (ADMIN) -->
+                <section
+                    v-if="vehicule.client?.consignes && vehicule.client.consignes.length"
+                    class="rounded-2xl border border-rose-200 bg-rose-50/70 p-5 shadow-sm"
+                    aria-label="Consignes de la direction"
+                >
+                    <div class="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-[#E11D48]">
+                        <i class="fa-solid fa-bullhorn text-sm"></i>
+                        <span>Consignes de la direction / Admin</span>
+                    </div>
+                    <div class="mt-3 space-y-3">
+                        <div
+                            v-for="item in vehicule.client.consignes"
+                            :key="item.id"
+                            class="rounded-xl border border-rose-200 bg-white p-3.5 text-xs shadow-sm"
+                        >
+                            <div class="flex items-center justify-between gap-2 border-b border-gray-100 pb-1.5 text-[11px] font-semibold text-gray-500">
+                                <span class="font-bold text-[#0B0F19]">
+                                    <i class="fa-solid fa-user-shield text-[10px] text-[#E11D48] mr-1"></i>
+                                    {{ item.auteur || 'Direction' }}
+                                </span>
+                                <span>{{ quand(new Date(item.created_at)) }}</span>
+                            </div>
+                            <p class="mt-2 whitespace-pre-line text-xs font-medium leading-relaxed text-gray-800">
+                                {{ item.consigne }}
+                            </p>
+                        </div>
+                    </div>
+                </section>
+
                 <!-- OÙ EN EST-ON ? Un seul bandeau -->
                 <section
                     class="grid grid-cols-1 divide-y divide-gray-200 overflow-hidden rounded-2xl border border-gray-200 bg-[#F8FAFC] sm:grid-cols-2 sm:divide-x sm:divide-y-0"

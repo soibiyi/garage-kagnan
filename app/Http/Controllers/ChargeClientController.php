@@ -51,7 +51,6 @@ class ChargeClientController extends Controller
                 'vehicules' => $this->vehiculesDuSiege(),
                 'vehicules.interventions' => $this->dossiersDuSiege(),
             ])
-            // Uniquement les clients ayant un dossier dans mon siège (l'admin voit tout)
             ->when(!$this->estAdmin(), fn ($q) => $q->whereHas('vehicules.interventions', fn ($i) => $i->duSiege()))
             ->when($search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
@@ -136,8 +135,9 @@ class ChargeClientController extends Controller
     {
         $this->autoriserVehicule($vehicule);
 
+        // Chargement de client.consignes.user pour afficher les consignes admin sur la vue des relances
         $vehicule->load([
-            'client',
+            'client.consignes.user',
             'interactions.user:id,name',
         ]);
 
@@ -163,7 +163,7 @@ class ChargeClientController extends Controller
         ]);
     }
 
-    // 4. Mettre à jour le statut d'une intervention (Bouton Véhicule Livré)
+    // 4. Mettre à jour le statut d'une intervention
     public function updateStatut(Request $request, Intervention $intervention)
     {
         abort_unless($intervention->estVisiblePar(auth()->user()), 404);
@@ -179,7 +179,7 @@ class ChargeClientController extends Controller
         return back()->with('success', 'Statut du véhicule mis à jour avec succès.');
     }
 
-    // 5. Enregistre une interaction (appel, WhatsApp, visite...) au sujet d'un véhicule
+    // 5. Enregistre une interaction au sujet d'un véhicule
     public function storeInteraction(Request $request, Vehicule $vehicule)
     {
         $this->autoriserVehicule($vehicule);

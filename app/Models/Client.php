@@ -17,4 +17,8 @@ class Client extends Model
     {
         return $this->hasMany(Vehicule::class);
     }
+    public function consignes()
+{
+    return $this->hasMany(Consigne::class)->latest();
+}
 }
