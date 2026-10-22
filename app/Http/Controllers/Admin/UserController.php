@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\Vehicule;
 use App\Models\Client;
 use App\Models\InteractionClient;
+use App\Models\Consigne;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -113,7 +114,7 @@ class UserController extends Controller
         ]);
     }
 
-    // Enregistre le nouvel utilisateur (Rôle magasinier ajouté)
+    // Enregistre le nouvel utilisateur
     public function store(Request $request)
     {
         $request->validate([
@@ -144,7 +145,7 @@ class UserController extends Controller
         ]);
     }
 
-    // Met à jour les informations du collaborateur (Rôle magasinier pris en compte)
+    // Met à jour les informations du collaborateur
     public function update(Request $request, User $user)
     {
         $this->verifierAccesCollaborateur($user);
@@ -191,7 +192,8 @@ class UserController extends Controller
     {
         $siege = $this->siegeActif();
 
-        $interactions = InteractionClient::with(['user', 'client', 'vehicule'])
+        // Chargement de client.consignes.user pour récupérer les consignes associées au client
+        $interactions = InteractionClient::with(['user', 'client.consignes.user', 'vehicule'])
             ->whereHas('user', fn ($q) => $q->where('siege', $siege))
             ->latest()
             ->get();
@@ -209,9 +211,11 @@ class UserController extends Controller
                         'nom' => $premierClient->nom_complet ?? $premierClient->nom ?? 'Client non spécifié',
                         'telephone' => $premierClient->telephone ?? null,
                         'email' => $premierClient->email ?? null,
+                        'consignes' => $premierClient->consignes ?? [],
                     ] : [
                         'id' => null,
                         'nom' => 'Client non spécifié',
+                        'consignes' => [],
                     ],
                     'interactions' => $group->values(),
                 ];
@@ -230,6 +234,24 @@ class UserController extends Controller
             'chargesClients' => $chargesClients,
             'siegeFiltre' => $siege,
         ]);
+    }
+
+    /**
+     * Enregistrer une consigne de la direction pour un client
+     */
+    public function storeConsigne(Request $request, Client $client)
+    {
+        $request->validate([
+            'consigne' => 'required|string|max:2000',
+        ]);
+
+        Consigne::create([
+            'client_id' => $client->id,
+            'user_id' => auth()->id(),
+            'consigne' => $request->consigne,
+        ]);
+
+        return back()->with('success', 'Consigne enregistrée avec succès.');
     }
 
     /**
@@ -253,7 +275,7 @@ class UserController extends Controller
     }
 
     /**
-     * Historique du chiffre d'affaires par année (filtré strictement par zone pour l'administratif)
+     * Historique du chiffre d'affaires par année
      */
     public function chiffreAffaires()
     {
