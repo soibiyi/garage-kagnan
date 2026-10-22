@@ -32,6 +32,27 @@ class ReceptionController extends Controller
         return $prefix . str_pad($dernier + 1, 3, '0', STR_PAD_LEFT);
     }
 
+    /** Ne garde que lettres et chiffres, en majuscules : « ab-123 cd » devient « AB123CD ». */
+    private function normaliserIdentifiant(?string $valeur): string
+    {
+        return preg_replace('/[^A-Z0-9]/', '', strtoupper(trim((string) $valeur)));
+    }
+
+    /** Cherche un véhicule par immatriculation ou VIN, en ignorant casse, espaces, tirets, points, slash et underscore. */
+    private function trouverVehicule(string $colonne, string $valeurNormalisee): ?Vehicule
+    {
+        if ($valeurNormalisee === '' || !in_array($colonne, ['immatriculation', 'vin'], true)) {
+            return null;
+        }
+
+        $expression = "UPPER(`{$colonne}`)";
+        foreach ([' ', '-', '.', '/', '_'] as $caractere) {
+            $expression = "REPLACE({$expression}, '{$caractere}', '')";
+        }
+
+        return Vehicule::whereRaw("{$expression} = ?", [$valeurNormalisee])->first();
+    }
+
     /** Messages d'erreur de validation en français. */
     private function messagesValidation(): array
     {
@@ -173,6 +194,39 @@ class ReceptionController extends Controller
         $siege = auth()->user()->siege ?: ($validated['siege'] ?? null);
         if (empty($siege)) {
             throw ValidationException::withMessages(['siege' => 'Veuillez choisir le siège.']);
+        }
+
+        // Véhicule déjà enregistré ? Contrôle fait AVANT toute création (client, véhicule, photos) :
+        // en cas d'erreur, rien n'est enregistré.
+        //  - nouveau client           : tout véhicule déjà connu (immatriculation ou VIN) est refusé ;
+        //  - client existant sélectionné : refusé seulement si le véhicule appartient à un AUTRE client
+        //    (un client peut ramener son propre véhicule pour une nouvelle intervention).
+        // La comparaison ignore la casse, les espaces, tirets et points (AB-123-CD = ab 123 cd = AB123CD).
+        $clientSaisi = $validated['client_id'] ?? null;
+        $immatSaisie = strtoupper(trim($validated['immatriculation']));
+        $vinSaisi = !empty($validated['vin']) ? strtoupper(trim($validated['vin'])) : null;
+
+        $vehiculeParImmat = $this->trouverVehicule('immatriculation', $this->normaliserIdentifiant($immatSaisie));
+        $vehiculeParVin = $this->trouverVehicule('vin', $this->normaliserIdentifiant($vinSaisi));
+
+        $enConflit = fn (?Vehicule $v) => $v && (empty($clientSaisi) || (int) $v->client_id !== (int) $clientSaisi);
+
+        $erreursVehicule = [];
+
+        if ($enConflit($vehiculeParImmat)) {
+            $erreursVehicule['immatriculation'] = empty($clientSaisi)
+                ? "Cette immatriculation ({$immatSaisie}) est déjà enregistrée. Sélectionnez le client existant au lieu de créer un nouveau client."
+                : "Cette immatriculation ({$immatSaisie}) est déjà enregistrée au nom d'un autre client.";
+        }
+
+        if ($enConflit($vehiculeParVin)) {
+            $erreursVehicule['vin'] = empty($clientSaisi)
+                ? "Ce numéro de châssis ({$vinSaisi}) est déjà enregistré. Sélectionnez le client existant au lieu de créer un nouveau client."
+                : "Ce numéro de châssis ({$vinSaisi}) est déjà enregistré au nom d'un autre client.";
+        }
+
+        if (!empty($erreursVehicule)) {
+            throw ValidationException::withMessages($erreursVehicule);
         }
 
         // Gestion client

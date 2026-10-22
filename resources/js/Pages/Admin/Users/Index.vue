@@ -26,6 +26,10 @@ import {
     faEnvelope,
     faLocationDot,
     faCalendarDays,
+    faReceipt,
+    faClipboardCheck,
+    faFileInvoiceDollar,
+    faClockRotateLeft,
 } from '@fortawesome/free-solid-svg-icons';
 
 const props = defineProps({
@@ -61,6 +65,14 @@ const chiffreAffairesAffiche = computed(() => {
     const total = mois?.total ?? 0;
     return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(total);
 });
+
+// ─── Accès rapides : devis (mêmes routes que l'espace administratif) ─
+const accesDevis = [
+    { label: 'Devis en attente de validation', description: 'Saisir les choix du client et enregistrer.', icone: faReceipt, href: route('administration.facturation.index') },
+    { label: 'Devis validés', description: "Dossiers dont l'accord client a été enregistré.", icone: faClipboardCheck, href: route('administration.devis.acceptes') },
+    { label: 'Devis direct', description: 'Création et gestion des devis directs (comptoir).', icone: faFileInvoiceDollar, href: route('administration.devis.directs.index') },
+    { label: 'Historique des devis', description: "Vue d'ensemble de tous les services (acceptés / refusés).", icone: faClockRotateLeft, href: route('administration.devis.historique') },
+];
 
 // ─── Rôles ──────────────────────────────────────────────────────────
 const ROLES_CONFIG = {
@@ -289,6 +301,23 @@ const logout = () => {
           <div class="min-w-0 flex-1">
             <h3 class="text-base font-bold text-[#1A1A1A]">Suivi des Interactions</h3>
             <p class="mt-0.5 text-sm leading-snug text-[#6B6E70]">Consulter les interactions entre les chargés client et les clients.</p>
+          </div>
+          <font-awesome-icon :icon="faArrowRight" class="shrink-0 text-xs text-gray-300 transition duration-300 group-hover:translate-x-1 group-hover:text-[#C8102E]" />
+        </Link>
+
+        <!-- Devis : mêmes pages que l'espace administratif -->
+        <Link
+          v-for="acces in accesDevis"
+          :key="acces.label"
+          :href="acces.href"
+          class="group flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-[#C8102E] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E]/40 sm:p-5"
+        >
+          <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-[#C8102E] transition duration-300 group-hover:bg-[#C8102E] group-hover:text-white">
+            <font-awesome-icon :icon="acces.icone" class="text-lg" />
+          </span>
+          <div class="min-w-0 flex-1">
+            <h3 class="text-base font-bold text-[#1A1A1A]">{{ acces.label }}</h3>
+            <p class="mt-0.5 text-sm leading-snug text-[#6B6E70]">{{ acces.description }}</p>
           </div>
           <font-awesome-icon :icon="faArrowRight" class="shrink-0 text-xs text-gray-300 transition duration-300 group-hover:translate-x-1 group-hover:text-[#C8102E]" />
         </Link>

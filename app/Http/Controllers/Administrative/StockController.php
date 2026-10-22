@@ -371,65 +371,135 @@ class StockController extends Controller
 
     public function import(Request $request)
     {
-        $request->validate(['fichier' => 'required|file|mimes:csv,txt|max:10240']);
-        $path = $request->file('fichier')->getRealPath();
-        
-        if (($handle = fopen($path, 'r')) !== FALSE) {
-            $bom = fread($handle, 3);
-            if ($bom !== "\xEF\xBB\xBF") { rewind($handle); }
-            $firstLine = fgets($handle);
-            $delimiter = (substr_count($firstLine, ';') > substr_count($firstLine, ',')) ? ';' : ',';
-            rewind($handle);
-            if ($bom === "\xEF\xBB\xBF") { fread($handle, 3); }
-            fgetcsv($handle, 0, $delimiter);
+        $request->validate([
+            'fichier' => 'required|file|mimes:xlsx,xls,csv,txt|max:10240',
+        ], [
+            'fichier.mimes' => 'Le fichier doit être au format Excel (.xlsx, .xls) ou CSV.',
+        ]);
 
-            DB::beginTransaction();
-            try {
-                while (($data = fgetcsv($handle, 0, $delimiter)) !== FALSE) {
-                    if (empty($data[2])) continue;
-                    $reference = trim($data[1] ?? '');
-
-                    $stock = Stock::updateOrCreate(
-                        ['reference' => $reference ?: Str::random(10)],
-                        [
-                            'date_entree'       => !empty($data[0]) ? date('Y-m-d', strtotime($data[0])) : null,
-                            'designation_piece' => trim($data[2] ?? ''),
-                            'famille'           => trim($data[3] ?? ''),
-                            'sous_famille'      => trim($data[4] ?? ''),
-                            'marque'            => trim($data[5] ?? ''),
-                            'modele'            => trim($data[6] ?? ''),
-                            'prix_kagnan_ht'    => trim($data[7] ?? ''),
-                            'quantite'          => (int)($data[8] ?? 0),
-                            'prix_achat'        => is_numeric($data[9] ?? null) ? $data[9] : null,
-                            'marge_vente'       => is_numeric($data[10] ?? null) ? $data[10] : null,
-                        ]
-                    );
-
-                    $sieges = [
-                        'Terminus 27'       => ['attrib' => (int)($data[11] ?? 0), 'sortie' => (int)($data[12] ?? 0)],
-                        'Zone Industrielle' => ['attrib' => (int)($data[13] ?? 0), 'sortie' => (int)($data[14] ?? 0)],
-                        'Yamoussoukro'      => ['attrib' => (int)($data[15] ?? 0), 'sortie' => (int)($data[16] ?? 0)],
-                    ];
-
-                    foreach ($sieges as $nomSiege => $qte) {
-                        $stock->sieges()->updateOrCreate(
-                            ['siege' => $nomSiege],
-                            ['quantite_attribuee' => $qte['attrib'], 'sortie' => $qte['sortie']]
-                        );
-                    }
-                }
-
-                DB::commit();
-                fclose($handle);
-                return redirect()->back()->with('success', 'Catalogue et stocks importés avec succès !');
-            } catch (\Exception $e) {
-                DB::rollBack();
-                fclose($handle);
-                return redirect()->back()->withErrors(['fichier' => 'Erreur : ' . $e->getMessage()]);
-            }
+        try {
+            $lignes = $this->lireLignesImport($request->file('fichier'));
+        } catch (\Throwable $e) {
+            return redirect()->back()->withErrors(['fichier' => 'Impossible de lire le fichier : ' . $e->getMessage()]);
         }
 
-        return redirect()->back()->withErrors(['fichier' => 'Impossible d’ouvrir le fichier.']);
+        $crees = 0;
+        $misAJour = 0;
+        $ignores = 0;
+
+        DB::beginTransaction();
+        try {
+            foreach ($lignes as $data) {
+                if (empty($data[2])) { $ignores++; continue; }
+
+                $reference = trim((string) ($data[1] ?? ''));
+
+                $stock = Stock::updateOrCreate(
+                    ['reference' => $reference ?: Str::random(10)],
+                    [
+                        'date_entree'       => $this->normaliserDate($data[0] ?? null),
+                        'designation_piece' => trim((string) $data[2]),
+                        'famille'           => trim((string) ($data[3] ?? '')) ?: null,
+                        'sous_famille'      => trim((string) ($data[4] ?? '')) ?: null,
+                        'marque'            => trim((string) ($data[5] ?? '')) ?: null,
+                        'modele'            => trim((string) ($data[6] ?? '')) ?: null,
+                        'prix_kagnan_ht'    => trim((string) ($data[7] ?? '')) ?: null,
+                        'quantite'          => (int) ($data[8] ?? 0),
+                        'prix_achat'        => is_numeric($data[9] ?? null) ? $data[9] : null,
+                        'marge_vente'       => is_numeric($data[10] ?? null) ? $data[10] : null,
+                    ]
+                );
+
+                if ($stock->wasRecentlyCreated) {
+                    $crees++;
+                    if (($stock->quantite ?? 0) > 0) {
+                        MvtStock::create([
+                            'stock_id' => $stock->id,
+                            'user_id'  => auth()->id(),
+                            'type'     => 'entree',
+                            'quantite' => $stock->quantite,
+                            'motif'    => 'Import de fichier (stock initial)',
+                        ]);
+                    }
+                } else {
+                    $misAJour++;
+                }
+
+                $sieges = [
+                    'Terminus 27'       => ['attrib' => (int) ($data[11] ?? 0), 'sortie' => (int) ($data[12] ?? 0)],
+                    'Zone Industrielle' => ['attrib' => (int) ($data[13] ?? 0), 'sortie' => (int) ($data[14] ?? 0)],
+                    'Yamoussoukro'      => ['attrib' => (int) ($data[15] ?? 0), 'sortie' => (int) ($data[16] ?? 0)],
+                ];
+
+                foreach ($sieges as $nomSiege => $qte) {
+                    $stock->sieges()->updateOrCreate(
+                        ['siege' => $nomSiege],
+                        ['quantite_attribuee' => $qte['attrib'], 'sortie' => $qte['sortie']]
+                    );
+                }
+            }
+
+            DB::commit();
+            return redirect()->back()->with('success',
+                "Import terminé : {$crees} pièce(s) créée(s), {$misAJour} mise(s) à jour, {$ignores} ligne(s) ignorée(s)."
+            );
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return redirect()->back()->withErrors(['fichier' => 'Erreur : ' . $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Lit un fichier Excel (.xlsx/.xls) ou CSV et renvoie les lignes de données
+     * (sans la ligne d'en-têtes), sous forme de tableaux indexés par position.
+     */
+    private function lireLignesImport($fichier): array
+    {
+        $extension = strtolower($fichier->getClientOriginalExtension());
+        $path = $fichier->getRealPath();
+
+        if (in_array($extension, ['xlsx', 'xls'])) {
+            $feuille = \PhpOffice\PhpSpreadsheet\IOFactory::load($path)->getActiveSheet();
+            // valeurs brutes (pas de formatage), tableau indexé 0,1,2...
+            $lignes = $feuille->toArray(null, true, false, false);
+            array_shift($lignes); // ligne d'en-têtes
+            return $lignes;
+        }
+
+        // CSV : comportement d'origine (détection du séparateur ; ou ,)
+        $handle = fopen($path, 'r');
+        if ($handle === false) {
+            throw new \RuntimeException('Impossible d’ouvrir le fichier.');
+        }
+
+        $bom = fread($handle, 3);
+        if ($bom !== "\xEF\xBB\xBF") { rewind($handle); }
+        $firstLine = fgets($handle);
+        $delimiter = (substr_count($firstLine, ';') > substr_count($firstLine, ',')) ? ';' : ',';
+        rewind($handle);
+        if ($bom === "\xEF\xBB\xBF") { fread($handle, 3); }
+        fgetcsv($handle, 0, $delimiter); // en-têtes
+
+        $lignes = [];
+        while (($data = fgetcsv($handle, 0, $delimiter)) !== false) {
+            $lignes[] = $data;
+        }
+        fclose($handle);
+
+        return $lignes;
+    }
+
+    private function normaliserDate($valeur): ?string
+    {
+        if ($valeur === null || $valeur === '') return null;
+
+        // Date Excel stockée sous forme de nombre (numéro de série)
+        if (is_numeric($valeur) && (float) $valeur > 20000) {
+            return \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($valeur)->format('Y-m-d');
+        }
+
+        $timestamp = strtotime((string) $valeur);
+        return $timestamp ? date('Y-m-d', $timestamp) : null;
     }
 
     public function reapprovisionnement(Request $request)

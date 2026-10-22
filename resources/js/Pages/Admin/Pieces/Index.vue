@@ -466,11 +466,11 @@ const submitImport = () => {
                 </div>
             </div>
 
-            <!-- Modal d'Importation CSV -->
+            <!-- Modal d'Importation Excel / CSV -->
             <div v-if="showImportModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
                 <div class="bg-white rounded-2xl max-w-md w-full p-6 space-y-6 shadow-2xl">
                     <div class="flex items-center justify-between border-b border-slate-100 pb-4">
-                        <h3 class="text-base font-black text-slate-900">Importer un fichier CSV</h3>
+                        <h3 class="text-base font-black text-slate-900">Importer un fichier Excel ou CSV</h3>
                         <button @click="showImportModal = false" class="text-slate-400 hover:text-slate-600">
                             <i class="fa-solid fa-xmark text-lg"></i>
                         </button>
@@ -478,11 +478,11 @@ const submitImport = () => {
 
                     <form @submit.prevent="submitImport" class="space-y-4">
                         <div>
-                            <label class="block text-xs font-semibold text-slate-600 mb-2">Sélectionner un fichier CSV (.csv)</label>
+                            <label class="block text-xs font-semibold text-slate-600 mb-2">Sélectionner un fichier Excel (.xlsx, .xls) ou CSV (.csv)</label>
                             <input
                                 type="file"
                                 @change="handleFileChange"
-                                accept=".csv,text/csv"
+                                accept=".xlsx,.xls,.csv,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                                 required
                                 class="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs p-2 focus:border-blue-600 text-slate-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                             />
@@ -492,10 +492,11 @@ const submitImport = () => {
                         </div>
 
                         <div class="p-3 bg-blue-50/50 border border-blue-100 rounded-xl text-[11px] text-blue-800 space-y-1">
-                            <p class="font-bold"><i class="fa-solid fa-circle-info mr-1"></i> Structure attendue :</p>
+                            <p class="font-bold"><i class="fa-solid fa-circle-info mr-1"></i> Structure attendue (1re ligne = en-têtes, colonnes dans cet ordre) :</p>
                             <p class="text-slate-600">
-                                <strong>Marque</strong>, <strong>Modèle</strong>, <strong>Désignation Pièce</strong>, <strong>Référence</strong>, <strong>Prix Kagnan HT</strong>, <strong>Quantité</strong>, <strong>Prix d'achat</strong>, <strong>Marge Vente</strong>, <strong>Famille</strong>, <strong>Sous-famille</strong>.
+                                <strong>Date Entree</strong>, <strong>Reference</strong>, <strong>Designation Piece</strong>, <strong>Famille</strong>, <strong>Sous Famille</strong>, <strong>Marque</strong>, <strong>Modele</strong>, <strong>Prix Kagnan HT</strong>, <strong>Quantite Initiale</strong>, <strong>Prix Achat</strong>, <strong>Marge Vente</strong>, puis les 6 colonnes des sièges (Attribuee / Sortie).
                             </p>
+                            <p class="text-slate-500">Astuce : le fichier produit par le bouton « Exporter » sert de modèle.</p>
                         </div>
 
                         <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
