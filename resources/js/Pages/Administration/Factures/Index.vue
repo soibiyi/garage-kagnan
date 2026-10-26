@@ -367,6 +367,25 @@ const backText = computed(() => {
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right">
                                         <div class="inline-flex items-center justify-end gap-2">
+                                            <!-- Modifiable uniquement tant qu'aucun paiement n'a été enregistré -->
+                                            <Link
+                                                v-if="!dossier.a_paiement"
+                                                :href="route('administration.devis.edit', dossier.id)"
+                                                class="inline-flex items-center justify-center gap-1.5 h-9 px-4 w-40 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-[11px] shrink-0"
+                                                title="Ajouter ou supprimer des lignes, cocher ou décocher les choix du client"
+                                            >
+                                                <i class="fa-solid fa-pen text-[10px]"></i>
+                                                <span>Modifier</span>
+                                            </Link>
+                                            <span
+                                                v-else
+                                                class="inline-flex items-center justify-center gap-1.5 h-9 px-3 w-40 bg-gray-100 text-gray-500 border border-gray-200 font-bold uppercase tracking-wider rounded-lg text-[10px] whitespace-nowrap shrink-0"
+                                                title="Un paiement a déjà été enregistré : ce devis ne peut plus être modifié"
+                                            >
+                                                <i class="fa-solid fa-lock text-[10px]"></i>
+                                                <span>Paiement enregistré</span>
+                                            </span>
+
                                             <Link
                                                 :href="route('administration.factures.show', dossier.id)"
                                                 class="inline-flex items-center justify-center gap-1.5 h-9 px-4 w-44 bg-[#E11D48] hover:bg-rose-700 text-white font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-[11px] shrink-0"

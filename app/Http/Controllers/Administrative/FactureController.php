@@ -99,9 +99,16 @@ class FactureController extends Controller
             ->get()
             ->keyBy('intervention_id');
 
-        $dossiers->each(function ($d) use ($factures) {
-            $paye = (int) round((float) optional($factures->get($d->id))->montant_paye);
+        // Factures ayant déjà au moins un versement : leur devis n'est plus modifiable
+        $facturesAvecPaiement = Paiement::whereIn('facture_id', $factures->pluck('id'))
+            ->pluck('facture_id')
+            ->unique();
+
+        $dossiers->each(function ($d) use ($factures, $facturesAvecPaiement) {
+            $facture = $factures->get($d->id);
+            $paye = (int) round((float) optional($facture)->montant_paye);
             $d->setAttribute('resume_paiement', $this->resume($d, $paye));
+            $d->setAttribute('a_paiement', $facture !== null && $facturesAvecPaiement->contains($facture->id));
         });
 
         return Inertia::render('Administration/Factures/Index', [
