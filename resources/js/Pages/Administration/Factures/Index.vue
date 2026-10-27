@@ -1,115 +1,417 @@
 <script setup>
-import { ref } from 'vue';
-import { router, Link } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import { Head, Link, usePage, router } from '@inertiajs/vue3';
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
 
-// Le contrôleur utilise ->get() : "dossiers" est un simple tableau (pas de .data)
 const props = defineProps({
-    dossiers: { type: Array, default: () => [] },
-    filters: { type: Object, default: () => ({}) },
+    dossiers: {
+        type: Array,
+        default: () => [],
+    },
+    filters: Object,
 });
 
-// URL de base de la page (ex: /admin/factures). Adaptez si vos routes diffèrent.
-const base = window.location.pathname.replace(/\/$/, '');
+const page = usePage();
 
+// ─────────────────────────────────────────────
+// RECHERCHE
+// ─────────────────────────────────────────────
 const search = ref(props.filters?.search || '');
 
-const rechercher = () => {
-    router.get(base, { search: search.value }, { preserveState: true, replace: true });
+watch(search, (value) => {
+    router.get(
+        route('administration.factures.index'),
+        { search: value },
+        { preserveState: true, replace: true }
+    );
+});
+
+// ─────────────────────────────────────────────
+// HELPERS PAIEMENT & TYPE
+// ─────────────────────────────────────────────
+const resteAPayer = (dossier) => Number(dossier.resume_paiement?.reste ?? 0);
+
+const estSolde = (dossier) => Boolean(dossier.resume_paiement?.soldee);
+
+// Vérifie si le dossier est un devis direct
+const estDevisDirect = (dossier) => {
+    return dossier.circuit === 'devis_direct' || dossier.type === 'devis_direct' || dossier.is_direct || !dossier.numero_ot;
 };
 
-const fcfa = (n) => new Intl.NumberFormat('fr-FR').format(Number(n || 0)) + ' FCFA';
+// ─────────────────────────────────────────────
+// FILTRES (Séparation stricte Normaux vs Devis Directs)
+// ─────────────────────────────────────────────
+const ongletInitial = new URLSearchParams((page.url || '').split('?')[1] || '').get('onglet');
+const onglet = ref(
+    ['soldes', 'temp'].includes(ongletInitial) ? ongletInitial : 'non_soldes'
+);
 
-const nomClient = (d) => {
-    const c = d.vehicule?.client;
-    return c ? `${c.nom ?? ''} ${c.prenom ?? ''}`.trim() || 'N/A' : 'N/A';
-};
+// Dossiers normaux non soldés (exclut les devis directs)
+const dossiersNonSoldes = computed(() => (props.dossiers || []).filter((d) => !estDevisDirect(d) && !estSolde(d)));
 
-const statut = (d) => {
-    const r = d.resume_paiement;
-    if (r?.soldee) return { label: 'Soldée', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
-    if ((r?.montant_paye ?? 0) > 0) return { label: 'Partielle', cls: 'bg-amber-50 text-amber-700 border-amber-200' };
-    return { label: 'Impayée', cls: 'bg-rose-50 text-rose-700 border-rose-200' };
-};
+// Dossiers normaux soldés (exclut les devis directs)
+const dossiersSoldes = computed(() => (props.dossiers || []).filter((d) => !estDevisDirect(d) && estSolde(d)));
 
-const supprimer = (d) => {
-    if (confirm('Supprimer ce devis direct ?')) {
-        router.delete(`${base}/${d.id}`, { preserveScroll: true });
+// Uniquement les devis directs (qu'ils soient soldés ou non)
+const dossiersDevisDirects = computed(() => (props.dossiers || []).filter((d) => estDevisDirect(d)));
+
+const dossiersAffiches = computed(() => {
+    if (onglet.value === 'soldes') return dossiersSoldes.value;
+    if (onglet.value === 'temp') return dossiersDevisDirects.value;
+    return dossiersNonSoldes.value;
+});
+
+// ─────────────────────────────────────────────
+// SUPPRESSION (Réservée aux devis directs)
+// ─────────────────────────────────────────────
+const supprimerDossier = (dossier) => {
+    const identifiant = dossier.vehicule?.immatriculation || dossier.numero_ot || `#${dossier.id}`;
+    
+    if (confirm(`Êtes-vous sûr de vouloir supprimer ce devis direct (${identifiant}) ? Cette action est irréversible.`)) {
+        router.delete(route('administration.factures.destroy', dossier.id), {
+            preserveScroll: true,
+            onSuccess: () => {
+                notification.value = `Le devis direct (${identifiant}) a été supprimé avec succès.`;
+                clearTimeout(notifTimer);
+                notifTimer = setTimeout(() => (notification.value = null), 5000);
+            },
+        });
     }
 };
+
+// ─────────────────────────────────────────────
+// ACTUALISATION AUTOMATIQUE
+// ─────────────────────────────────────────────
+const REFRESH_INTERVAL = 4000;
+let refreshTimer = null;
+let rechargementEnCours = false;
+
+const actualiser = () => {
+    if (document.hidden || rechargementEnCours) return;
+
+    rechargementEnCours = true;
+    router.reload({
+        only: ['dossiers'],
+        preserveScroll: true,
+        preserveState: true,
+        onFinish: () => {
+            rechargementEnCours = false;
+        },
+    });
+};
+
+const onVisibilityChange = () => {
+    if (!document.hidden) actualiser();
+};
+
+onMounted(() => {
+    refreshTimer = setInterval(actualiser, REFRESH_INTERVAL);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('focus', actualiser);
+});
+
+onUnmounted(() => {
+    clearInterval(refreshTimer);
+    clearTimeout(notifTimer);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    window.removeEventListener('focus', actualiser);
+});
+
+// ─────────────────────────────────────────────
+// NOTIFICATION
+// ─────────────────────────────────────────────
+const notification = ref(null);
+let notifTimer = null;
+
+watch(
+    () => props.dossiers,
+    (nouveaux, anciens) => {
+        if (!nouveaux || !anciens) return;
+
+        const idsNonSoldesAvant = new Set(
+            anciens.filter((d) => !estDevisDirect(d) && !estSolde(d)).map((d) => d.id)
+        );
+        const nouvellementSoldes = nouveaux.filter(
+            (d) => !estDevisDirect(d) && estSolde(d) && idsNonSoldesAvant.has(d.id)
+        );
+
+        if (nouvellementSoldes.length > 0) {
+            const d = nouvellementSoldes[0];
+            const ot = d.numero_ot || d.vehicule?.immatriculation || '';
+            notification.value =
+                nouvellementSoldes.length === 1
+                    ? `Le dossier ${ot} vient d'être soldé et a été déplacé dans « Soldées ».`
+                    : `${nouvellementSoldes.length} dossiers viennent d'être soldés et ont été déplacés dans « Soldées ».`;
+
+            clearTimeout(notifTimer);
+            notifTimer = setTimeout(() => (notification.value = null), 6000);
+        }
+    }
+);
+
+// ─────────────────────────────────────────────
+// NAVIGATION
+// ─────────────────────────────────────────────
+const isMecanicien = computed(() => {
+    const user = page.props.auth?.user;
+    return user?.role === 'mecanicien' || user?.roles?.some((r) => r.name === 'mecanicien');
+});
+
+const backUrl = computed(() => {
+    if (isMecanicien.value) {
+        return route('mecanicien.index');
+    }
+    return route('dashboard');
+});
+
+const backText = computed(() => {
+    return isMecanicien.value
+        ? '← Retour à mon atelier'
+        : '← Retour au tableau de bord';
+});
 </script>
 
 <template>
+    <Head title="Facturation & Encaissements" />
+
     <AuthenticatedLayout>
-        <div class="p-6 space-y-5">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-                <h1 class="text-xl font-bold text-slate-900">Factures et encaissements</h1>
-                <a :href="`${base}/export`" class="px-4 py-2 rounded-lg bg-slate-900 text-white text-xs font-bold">
-                    Exporter le tableau de créances
-                </a>
-            </div>
+        <template #header>
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                    <h2 class="text-xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
+                        <i class="fa-solid fa-file-invoice-dollar text-[#E11D48]"></i>
+                        <span>Facturation & Encaissements</span>
+                    </h2>
+                    <p class="text-xs text-gray-500 mt-1">
+                        Gestion des factures et encaissements des dossiers d'atelier et devis directs.
+                    </p>
+                </div>
 
-            <div v-if="$page.props.flash?.success" class="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold">
-                {{ $page.props.flash.success }}
-            </div>
-            <div v-if="$page.props.errors?.error" class="p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs font-bold">
-                {{ $page.props.errors.error }}
-            </div>
+                <div class="flex items-center gap-2">
+                    <!-- BOUTON D'EXPORTATION NATIF VERS EXCEL -->
+                    <a
+                        :href="route('administration.factures.export')"
+                        class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition inline-flex items-center gap-2 shadow-xs"
+                    >
+                        <i class="fa-solid fa-file-excel"></i>
+                        <span>Exporter le tableau</span>
+                    </a>
 
-            <form @submit.prevent="rechercher" class="flex gap-2">
-                <input v-model="search" type="text" placeholder="N° OT ou nom du client"
-                    class="w-full max-w-sm rounded-lg border-slate-300 text-sm" />
-                <button type="submit" class="px-4 py-2 rounded-lg bg-slate-100 text-slate-800 text-xs font-bold">Rechercher</button>
-            </form>
+                    <Link
+                        :href="backUrl"
+                        class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition"
+                    >
+                        {{ backText }}
+                    </Link>
+                </div>
+            </div>
+        </template>
 
-            <div class="bg-white rounded-xl border overflow-x-auto">
-                <table class="w-full text-left border-collapse">
-                    <thead>
-                        <tr class="bg-slate-50 border-b text-[11px] font-bold text-slate-500">
-                            <th class="p-3">N° facture</th>
-                            <th class="p-3">N° OT</th>
-                            <th class="p-3">Client</th>
-                            <th class="p-3">Immatriculation</th>
-                            <th class="p-3 text-right">Total TTC</th>
-                            <th class="p-3 text-right">Payé</th>
-                            <th class="p-3 text-right">Reste</th>
-                            <th class="p-3">Statut</th>
-                            <th class="p-3 text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y text-xs text-slate-700">
-                        <tr v-for="d in dossiers" :key="d.id" class="hover:bg-slate-50">
-                            <td class="p-3 font-mono">{{ d.resume_paiement?.numero || '-' }}</td>
-                            <td class="p-3 font-mono">{{ d.numero_ot || '-' }}</td>
-                            <td class="p-3 font-semibold">{{ nomClient(d) }}</td>
-                            <td class="p-3">{{ d.vehicule?.immatriculation || '-' }}</td>
-                            <td class="p-3 text-right font-bold">{{ fcfa(d.resume_paiement?.total_ttc) }}</td>
-                            <td class="p-3 text-right">
-                                {{ fcfa(d.resume_paiement?.montant_paye) }}
-                                <div class="mt-1 h-1.5 w-24 ml-auto rounded bg-slate-100 overflow-hidden">
-                                    <div class="h-full bg-emerald-500" :style="{ width: (d.resume_paiement?.pourcentage || 0) + '%' }"></div>
-                                </div>
-                            </td>
-                            <td class="p-3 text-right font-bold">{{ fcfa(d.resume_paiement?.reste) }}</td>
-                            <td class="p-3">
-                                <span class="px-2 py-0.5 rounded border text-[10px] font-bold" :class="statut(d).cls">
-                                    {{ statut(d).label }}
-                                </span>
-                            </td>
-                            <td class="p-3 text-right whitespace-nowrap">
-                                <Link :href="`${base}/${d.id}`" class="text-blue-600 font-bold mr-3">Ouvrir</Link>
-                                <button v-if="!d.a_paiement && !d.numero_ot" @click="supprimer(d)" class="text-rose-600 font-bold">
-                                    Supprimer
-                                </button>
-                            </td>
-                        </tr>
-                        <tr v-if="dossiers.length === 0">
-                            <td colspan="9" class="p-8 text-center text-slate-400">
-                                Aucun dossier avec un devis accepté.
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+        <div class="py-8 bg-white min-h-screen text-gray-900">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+
+                <!-- NOTIFICATION -->
+                <transition
+                    enter-active-class="transition duration-300"
+                    enter-from-class="opacity-0 -translate-y-2"
+                    leave-active-class="transition duration-200"
+                    leave-to-class="opacity-0"
+                >
+                    <div
+                        v-if="notification"
+                        class="flex items-center justify-between gap-3 px-4 py-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold rounded-xl"
+                    >
+                        <span class="flex items-center gap-2">
+                            <i class="fa-solid fa-circle-check"></i>
+                            {{ notification }}
+                        </span>
+                        <button type="button" @click="notification = null" class="text-emerald-600 hover:text-emerald-800">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                </transition>
+
+                <!-- BARRE DE RECHERCHE + FILTRES -->
+                <div class="flex flex-col md:flex-row justify-between items-stretch md:items-center gap-4">
+                    <div class="relative w-full md:w-80">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-4 text-gray-400">
+                            <i class="fa-solid fa-magnifying-glass text-xs"></i>
+                        </span>
+                        <input
+                            type="text"
+                            v-model="search"
+                            placeholder="Rechercher par nom ou numéro d'OT..."
+                            class="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 focus:outline-none focus:border-[#E11D48] transition shadow-xs"
+                        />
+                    </div>
+
+                    <!-- BOUTONS DE FILTRES -->
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button
+                            type="button"
+                            @click="onglet = 'non_soldes'"
+                            :class="[
+                                'inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold rounded-xl border transition',
+                                onglet === 'non_soldes'
+                                    ? 'bg-[#E11D48] text-white border-[#E11D48] shadow-sm'
+                                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                            ]"
+                        >
+                            <i class="fa-solid fa-hourglass-half text-[11px]"></i>
+                            <span>Non soldées</span>
+                            <span
+                                :class="[
+                                    'px-1.5 py-0.5 rounded-md text-[10px] font-black',
+                                    onglet === 'non_soldes' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'
+                                ]"
+                            >{{ dossiersNonSoldes.length }}</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            @click="onglet = 'soldes'"
+                            :class="[
+                                'inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold rounded-xl border transition',
+                                onglet === 'soldes'
+                                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                            ]"
+                        >
+                            <i class="fa-solid fa-circle-check text-[11px]"></i>
+                            <span>Soldées</span>
+                            <span
+                                :class="[
+                                    'px-1.5 py-0.5 rounded-md text-[10px] font-black',
+                                    onglet === 'soldes' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'
+                                ]"
+                            >{{ dossiersSoldes.length }}</span>
+                        </button>
+
+                        <button
+                            type="button"
+                            @click="onglet = 'temp'"
+                            :class="[
+                                'inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold rounded-xl border transition',
+                                onglet === 'temp'
+                                    ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                            ]"
+                        >
+                            <i class="fa-solid fa-bolt text-[11px]"></i>
+                            <span>Devis Directs</span>
+                            <span
+                                :class="[
+                                    'px-1.5 py-0.5 rounded-md text-[10px] font-black',
+                                    onglet === 'temp' ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'
+                                ]"
+                            >{{ dossiersDevisDirects.length }}</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-white shadow-xl shadow-gray-200/50 rounded-2xl overflow-hidden border border-gray-100 p-6">
+
+                    <div v-if="dossiersAffiches.length === 0" class="text-center py-16">
+                        <div class="w-12 h-12 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-400 mx-auto mb-3">
+                            <i class="fa-solid fa-folder-closed text-xl"></i>
+                        </div>
+                        <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wider">
+                            <template v-if="onglet === 'temp'">Aucun devis direct enregistré</template>
+                            <template v-else-if="onglet === 'soldes'">Aucune facture soldée</template>
+                            <template v-else>Aucun dossier à facturer</template>
+                        </h3>
+                        <p class="text-xs text-gray-500 mt-1">Il n'y a pas de dossier correspondant à votre filtre.</p>
+                    </div>
+
+                    <div v-else class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-gray-200 text-left text-xs align-middle">
+                            <thead class="bg-gray-50/70 text-gray-500 uppercase tracking-wider text-[10px]">
+                                <tr>
+                                    <th class="px-6 py-3 font-semibold">N° Dossier / Véhicule</th>
+                                    <th class="px-6 py-3 font-semibold">Client</th>
+                                    <th class="px-6 py-3 font-semibold">OT</th>
+                                    <th class="px-6 py-3 font-semibold text-right">Reste à payer</th>
+                                    <th class="px-6 py-3 font-semibold text-right">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200/60">
+                                <tr v-for="dossier in dossiersAffiches" :key="dossier.id" class="hover:bg-gray-50/80 transition-colors">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="font-bold text-gray-900 flex items-center gap-2 uppercase">
+                                            <i class="fa-solid fa-car text-gray-400 text-[11px]"></i>
+                                            <span>{{ dossier.vehicule?.marque }} {{ dossier.vehicule?.modele }}</span>
+                                        </div>
+                                        <span class="font-mono text-[11px] text-[#E11D48] mt-0.5 block">
+                                            Immat: {{ dossier.vehicule?.immatriculation }}
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-gray-600 font-medium">
+                                        {{ dossier.vehicule?.client?.nom || '' }} {{ dossier.vehicule?.client?.prenom || dossier.vehicule?.client?.name || 'N/A' }}
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="px-2.5 py-1 inline-flex text-[11px] font-semibold rounded-md bg-blue-50 text-blue-700 border border-blue-200">
+                                            {{ dossier.numero_ot ? `OT: ${dossier.numero_ot}` : (estDevisDirect(dossier) ? 'Devis Direct' : 'Sans OT') }}
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-right">
+                                        <span
+                                            v-if="estSolde(dossier)"
+                                            class="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-black uppercase tracking-wider rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                        >
+                                            <i class="fa-solid fa-circle-check text-[10px]"></i>
+                                            Soldé
+                                        </span>
+                                        <span v-else class="font-bold text-[#E11D48]">
+                                            {{ resteAPayer(dossier).toLocaleString() }} F
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-right">
+                                        <div class="inline-flex items-center justify-end gap-2">
+                                            <!-- Modifiable uniquement tant qu'aucun paiement n'a été enregistré -->
+                                            <Link
+                                                v-if="!dossier.a_paiement"
+                                                :href="route('administration.devis.edit', dossier.id)"
+                                                class="inline-flex items-center justify-center gap-1.5 h-9 px-4 w-40 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-[11px] shrink-0"
+                                                title="Ajouter ou supprimer des lignes, cocher ou décocher les choix du client"
+                                            >
+                                                <i class="fa-solid fa-pen text-[10px]"></i>
+                                                <span>Modifier</span>
+                                            </Link>
+                                            <span
+                                                v-else
+                                                class="inline-flex items-center justify-center gap-1.5 h-9 px-3 w-40 bg-gray-100 text-gray-500 border border-gray-200 font-bold uppercase tracking-wider rounded-lg text-[10px] whitespace-nowrap shrink-0"
+                                                title="Un paiement a déjà été enregistré : ce devis ne peut plus être modifié"
+                                            >
+                                                <i class="fa-solid fa-lock text-[10px]"></i>
+                                                <span>Paiement enregistré</span>
+                                            </span>
+
+                                            <Link
+                                                :href="route('administration.factures.show', dossier.id)"
+                                                class="inline-flex items-center justify-center gap-1.5 h-9 px-4 w-44 bg-[#E11D48] hover:bg-rose-700 text-white font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-[11px] shrink-0"
+                                            >
+                                                <span>{{ estSolde(dossier) ? 'Voir la facture' : 'Facturer / Encaisser' }}</span>
+                                                <i class="fa-solid fa-arrow-right text-[10px]"></i>
+                                            </Link>
+
+                                            <button
+                                                v-if="estDevisDirect(dossier)"
+                                                type="button"
+                                                @click="supprimerDossier(dossier)"
+                                                title="Supprimer ce devis direct"
+                                                class="inline-flex items-center justify-center h-9 w-9 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition border border-red-200 shrink-0"
+                                            >
+                                                <i class="fa-solid fa-trash-can text-xs"></i>
+                                            </button>
+                                            <div v-else class="w-9 h-9 shrink-0"></div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                </div>
             </div>
         </div>
     </AuthenticatedLayout>
