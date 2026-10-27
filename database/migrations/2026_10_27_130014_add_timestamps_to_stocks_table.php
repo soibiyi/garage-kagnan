@@ -6,20 +6,27 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
-   public function up()
-{
-    Schema::table('stocks', function (Blueprint $table) {
-        $table->timestamps(); // Ajoute created_at et updated_at
-    });
-}
+    public function up()
+    {
+        Schema::table('stocks', function (Blueprint $table) {
+            if (!Schema::hasColumn('stocks', 'created_at')) {
+                $table->timestamp('created_at')->nullable();
+            }
+            if (!Schema::hasColumn('stocks', 'updated_at')) {
+                $table->timestamp('updated_at')->nullable();
+            }
+        });
+    }
 
-public function down()
-{
-    Schema::table('stocks', function (Blueprint $table) {
-        $table->dropTimestamps();
-    });
-}
+    public function down()
+    {
+        Schema::table('stocks', function (Blueprint $table) {
+            if (Schema::hasColumn('stocks', 'created_at')) {
+                $table->dropColumn('created_at');
+            }
+            if (Schema::hasColumn('stocks', 'updated_at')) {
+                $table->dropColumn('updated_at');
+            }
+        });
+    }
 };
