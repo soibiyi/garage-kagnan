@@ -5,7 +5,8 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 
 const props = defineProps({
     stocks: Object,
-    filters: Object
+    filters: Object,
+    nombreNouveautes: Number
 });
 
 const SIEGES = ['Terminus 27', 'Zone Industrielle', 'Yamoussoukro'];
@@ -27,6 +28,24 @@ const totalAttribue = (item) => (item.sieges ?? []).reduce((a, s) => a + Number(
 const stockRestant = (item) => Number(item.quantite || 0) - totalSorties(item);
 const nonAttribue = (item) => Number(item.quantite || 0) - totalAttribue(item);
 const restantSiege = (s) => Number(s.quantite_attribuee || 0) - Number(s.sortie || 0);
+
+// Vérifie si la pièce a été ajoutée ou importée récemment (moins de 48h)
+const isRecent = (dateString) => {
+    if (!dateString) return false;
+    const dateCreation = new Date(dateString.replace(' ', 'T'));
+    const maintenant = new Date();
+    const diffHeures = (maintenant - dateCreation) / 36e5;
+    return diffHeures >= 0 && diffHeures <= 48;
+};
+
+// Actions de filtrage pour les nouveautés
+const filtrerNouveautes = () => {
+    router.get(route('magasinier.pieces.index'), { filter: 'nouveautes' }, { preserveState: true });
+};
+
+const reinitialiserFiltre = () => {
+    router.get(route('magasinier.pieces.index'), {}, { preserveState: true });
+};
 
 // ---------- Helpers formulaire (distribution) ----------
 const quantiteLot = computed(() => Number(currentStock.value?.quantite || 0));
@@ -62,7 +81,7 @@ const openEditModal = (item) => {
         return {
             siege: nomSiege,
             quantite_attribuee: existant ? existant.quantite_attribuee : 0,
-            sortie: 0, // Remis à 0 pour saisir uniquement la nouvelle sortie du moment
+            sortie: 0,
         };
     });
 
@@ -80,7 +99,8 @@ const submit = () => {
 
 const handleSearch = () => {
     router.get(route('magasinier.pieces.index'), {
-        search: search.value
+        search: search.value,
+        filter: props.filters.filter
     }, { preserveState: true, replace: true });
 };
 
@@ -111,6 +131,33 @@ const exporterExcel = () => {
                         <i class="fa-solid fa-file-excel"></i> Exporter
                     </button>
                 </div>
+            </div>
+
+            <!-- BANNIÈRE DE NOTIFICATION DES NOUVEAUTÉS -->
+            <div v-if="nombreNouveautes > 0 && filters.filter !== 'nouveautes'" class="p-4 bg-blue-50 border border-blue-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-black text-lg animate-bounce shrink-0">
+                        <i class="fa-solid fa-bell"></i>
+                    </div>
+                    <div>
+                        <h4 class="text-xs font-black text-blue-900">Nouvelles pièces ajoutées par l'administration !</h4>
+                        <p class="text-[11px] text-blue-700">Il y a <strong>{{ nombreNouveautes }}</strong> nouvelle(s) pièce(s) récente(s) en attente de répartition ou de suivi.</p>
+                    </div>
+                </div>
+                <button @click="filtrerNouveautes" class="w-full sm:w-auto px-5 py-2.5 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition shadow-sm shrink-0">
+                    <i class="fa-solid fa-eye mr-1.5"></i> Voir uniquement les nouveautés
+                </button>
+            </div>
+
+            <!-- Indicateur si le filtre nouveautés est actif -->
+            <div v-if="filters.filter === 'nouveautes'" class="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-xs text-amber-900 shadow-sm">
+                <div class="flex items-center gap-2 font-bold">
+                    <i class="fa-solid fa-filter text-amber-600"></i>
+                    <span>Affichage filtré : Consultation exclusive des nouvelles pièces récentes.</span>
+                </div>
+                <button @click="reinitialiserFiltre" class="px-3 py-1.5 bg-white border border-amber-300 font-bold rounded-lg hover:bg-amber-100 transition shadow-sm">
+                    Voir tout le catalogue
+                </button>
             </div>
 
             <!-- Barre de recherche -->
@@ -153,7 +200,13 @@ const exporterExcel = () => {
                                 <td class="p-3 text-slate-500">{{ item.date_entree || '-' }}</td>
                                 <td class="p-3 font-mono font-semibold">{{ item.reference || '-' }}</td>
                                 <td class="p-3 font-bold text-slate-900">
-                                    {{ item.designation_piece }}
+                                    <div class="flex items-center gap-2">
+                                        <span>{{ item.designation_piece }}</span>
+                                        <!-- Badge signalement Nouveau -->
+                                        <span v-if="isRecent(item.created_at)" class="px-2 py-0.5 rounded-full text-[9px] font-black bg-rose-500 text-white animate-pulse shadow-sm">
+                                            NOUVEAU
+                                        </span>
+                                    </div>
                                     <div v-if="stockRestant(item) <= SEUIL_STOCK_BAS" class="mt-1 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
                                         <i class="fa-solid fa-triangle-exclamation mr-1"></i> Stock bas (&le; {{ SEUIL_STOCK_BAS }})
                                     </div>

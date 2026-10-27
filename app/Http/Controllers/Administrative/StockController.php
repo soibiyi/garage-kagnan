@@ -73,11 +73,20 @@ class StockController extends Controller
             });
         }
 
+        // Filtre exclusif si le magasinier clique sur le bouton "Voir uniquement les nouveautés"
+        if ($request->input('filter') === 'nouveautes') {
+            $query->where('created_at', '>=', now()->subHours(48));
+        }
+
         $stocks = $query->with('sieges')->orderBy('designation_piece', 'asc')->paginate(25)->withQueryString();
+
+        // Compte total des pièces créées ces dernières 48h pour alimenter la bannière d'alerte
+        $nombreNouveautes = Stock::where('created_at', '>=', now()->subHours(48))->count();
 
         return Inertia::render('Magasinier/Pieces/Index', [
             'stocks' => $stocks,
-            'filters' => $request->only(['search'])
+            'filters' => $request->only(['search', 'filter']),
+            'nombreNouveautes' => $nombreNouveautes,
         ]);
     }
 
@@ -292,10 +301,10 @@ class StockController extends Controller
                         MvtStock::create([
                             'stock_id' => $stock->id,
                             'user_id' => auth()->id(),
-                            'type' => 'sortie',
+                            'type'     => 'sortie',
                             'quantite' => $quantiteSortieAjoutee,
-                            'siege' => $ligne['siege'],
-                            'motif' => 'Sortie atelier (Mise à jour)',
+                            'siege'    => $ligne['siege'],
+                            'motif'    => 'Sortie atelier (Mise à jour)',
                         ]);
                     }
 
@@ -384,32 +393,65 @@ class StockController extends Controller
         $crees = 0;
         $misAJour = 0;
         $ignores = 0;
+        $rapportErreurs = [];
 
         DB::beginTransaction();
         try {
-            foreach ($lignes as $data) {
-                if (empty($data[2])) { $ignores++; continue; }
+            foreach ($lignes as $index => $data) {
+                $numeroLigne = $index + 2;
+
+                if (empty($data[2])) {
+                    $ignores++;
+                    $rapportErreurs[] = "Ligne {$numeroLigne} : Ignorée (Désignation de pièce manquante).";
+                    continue;
+                }
 
                 $reference = trim((string) ($data[1] ?? ''));
+                $designation = trim((string) $data[2]);
 
-                $stock = Stock::updateOrCreate(
-                    ['reference' => $reference ?: Str::random(10)],
-                    [
-                        'date_entree'       => $this->normaliserDate($data[0] ?? null),
-                        'designation_piece' => trim((string) $data[2]),
-                        'famille'           => trim((string) ($data[3] ?? '')) ?: null,
-                        'sous_famille'      => trim((string) ($data[4] ?? '')) ?: null,
-                        'marque'            => trim((string) ($data[5] ?? '')) ?: null,
-                        'modele'            => trim((string) ($data[6] ?? '')) ?: null,
-                        'prix_kagnan_ht'    => trim((string) ($data[7] ?? '')) ?: null,
-                        'quantite'          => (int) ($data[8] ?? 0),
-                        'prix_achat'        => is_numeric($data[9] ?? null) ? $data[9] : null,
-                        'marge_vente'       => is_numeric($data[10] ?? null) ? $data[10] : null,
-                    ]
-                );
+                $stockQuery = Stock::query();
+                if (!empty($reference)) {
+                    $stockQuery->where('reference', $reference);
+                } else {
+                    $stockQuery->where('designation_piece', $designation)
+                               ->whereNull('reference');
+                }
 
-                if ($stock->wasRecentlyCreated) {
+                $stock = $stockQuery->first();
+
+                $donneesPiece = [
+                    'date_entree'       => $this->normaliserDate($data[0] ?? null),
+                    'reference'         => $reference !== '' ? $reference : null,
+                    'designation_piece' => $designation,
+                    'famille'           => trim((string) ($data[3] ?? '')) ?: null,
+                    'sous_famille'      => trim((string) ($data[4] ?? '')) ?: null,
+                    'marque'            => trim((string) ($data[5] ?? '')) ?: null,
+                    'modele'            => trim((string) ($data[6] ?? '')) ?: null,
+                    'prix_kagnan_ht'    => trim((string) ($data[7] ?? '')) ?: null,
+                    'quantite'          => (int) ($data[8] ?? 0),
+                    'prix_achat'        => is_numeric($data[9] ?? null) ? $data[9] : null,
+                    'marge_vente'       => is_numeric($data[10] ?? null) ? $data[10] : null,
+                ];
+
+                if ($stock) {
+                    $ancienneQuantite = $stock->quantite;
+                    $stock->update($donneesPiece);
+                    $misAJour++;
+
+                    if ($stock->quantite > $ancienneQuantite) {
+                        $difference = $stock->quantite - $ancienneQuantite;
+                        MvtStock::create([
+                            'stock_id' => $stock->id,
+                            'user_id'  => auth()->id(),
+                            'type'     => 'entree',
+                            'quantite' => $difference,
+                            'motif'    => 'Import de fichier (Réapprovisionnement)',
+                        ]);
+                    }
+                } else {
+                    $stock = Stock::create($donneesPiece);
                     $crees++;
+
                     if (($stock->quantite ?? 0) > 0) {
                         MvtStock::create([
                             'stock_id' => $stock->id,
@@ -419,8 +461,6 @@ class StockController extends Controller
                             'motif'    => 'Import de fichier (stock initial)',
                         ]);
                     }
-                } else {
-                    $misAJour++;
                 }
 
                 $sieges = [
@@ -438,9 +478,10 @@ class StockController extends Controller
             }
 
             DB::commit();
-            return redirect()->back()->with('success',
-                "Import terminé : {$crees} pièce(s) créée(s), {$misAJour} mise(s) à jour, {$ignores} ligne(s) ignorée(s)."
-            );
+            return redirect()->back()->with([
+                'success' => "Import terminé : {$crees} pièce(s) créée(s), {$misAJour} mise(s) à jour, {$ignores} ligne(s) ignorée(s).",
+                'rapport' => $rapportErreurs
+            ]);
         } catch (\Throwable $e) {
             DB::rollBack();
             return redirect()->back()->withErrors(['fichier' => 'Erreur : ' . $e->getMessage()]);
@@ -459,6 +500,12 @@ class StockController extends Controller
             return $lignes;
         }
 
+        $contenu = file_get_contents($path);
+        if (!mb_check_encoding($contenu, 'UTF-8')) {
+            $contenu = mb_convert_encoding($contenu, 'UTF-8', 'ISO-8859-1');
+            file_put_contents($path, $contenu);
+        }
+
         $handle = fopen($path, 'r');
         if ($handle === false) {
             throw new \RuntimeException('Impossible d’ouvrir le fichier.');
@@ -474,7 +521,11 @@ class StockController extends Controller
 
         $lignes = [];
         while (($data = fgetcsv($handle, 0, $delimiter)) !== false) {
-            $lignes[] = $data;
+            $dataNettoye = array_map(function($cellule) {
+                return is_string($cellule) ? trim($cellule) : $cellule;
+            }, $data);
+            
+            $lignes[] = $dataNettoye;
         }
         fclose($handle);
 

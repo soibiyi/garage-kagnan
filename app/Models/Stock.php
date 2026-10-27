@@ -13,7 +13,7 @@ class Stock extends Model
 
     protected $guarded = [];
 
-    public $timestamps = false; // Garde ton comportement d'origine si tu n'as que created_at
+    public $timestamps = true; // Garde ton comportement d'origine si tu n'as que created_at
 
     // Relation avec les 3 sièges
     public function sieges()
