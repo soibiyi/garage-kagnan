@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue';
-import { Link, usePage, router } from '@inertiajs/vue3';
+import { Head, Link, usePage, router } from '@inertiajs/vue3'; // 1. Ajoute Head ici
 import FlashToast from '@/Components/FlashToast.vue';
 
 const page = usePage();
@@ -42,7 +42,6 @@ const MENUS = {
 
 const menu = computed(() => MENUS[role.value] ?? []);
 
-// Méthode de déconnexion réinitialisant le sessionStorage
 const logout = () => {
     sessionStorage.removeItem('dashboard_loaded');
     sessionStorage.removeItem('admin_loaded');
@@ -52,6 +51,9 @@ const logout = () => {
 
 <template>
     <div>
+        <!-- 2. Ajoute la balise Head ici pour définir le titre de l'application -->
+        <Head title="Garage Kagnan" />
+
         <div class="min-h-screen bg-gray-100 print:min-h-0 print:bg-white">
             <nav class="border-b border-gray-100 bg-white print:hidden">
                 <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -88,7 +90,7 @@ const logout = () => {
                     </div>
                 </div>
 
-                <!-- MENU PAR RÔLE (défilement horizontal sur mobile) -->
+                <!-- MENU PAR RÔLE -->
                 <div v-if="menu.length" class="border-t border-gray-100">
                     <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                         <div class="flex gap-1 overflow-x-auto whitespace-nowrap">
