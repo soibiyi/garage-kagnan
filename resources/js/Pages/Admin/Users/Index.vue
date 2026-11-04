@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { Link, router } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import SiegeSwitcher from '@/Components/SiegeSwitcher.vue';
 import {
@@ -143,6 +143,7 @@ const logout = () => {
 </script>
 
 <template>
+  <Head title="Gestion des utilisateurs" />
   <!-- ÉCRAN DE CHARGEMENT -->
   <Transition name="kg-fade">
     <div v-if="isLoading" class="fixed inset-0 z-50 flex items-center justify-center bg-white px-6">

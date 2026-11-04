@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue';
-import { router, Link, usePage } from '@inertiajs/vue3';
+import { Head, router, Link, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 
 const props = defineProps({
@@ -57,6 +57,7 @@ const annulerSortie = (mvt) => {
 
 <template>
     <AuthenticatedLayout>
+        <Head title="Historique des mouvements de stock" />
         <div class="py-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
             <div v-if="$page.props.flash?.success" class="bg-emerald-50 text-emerald-700 text-sm font-bold p-3 rounded-xl">
                 {{ $page.props.flash.success }}

@@ -1,5 +1,5 @@
 <script setup>
-import { useForm, Link } from '@inertiajs/vue3';
+import { Head, useForm, Link } from '@inertiajs/vue3';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import { 
     faUserPen, 
@@ -33,6 +33,7 @@ const submit = () => {
 </script>
 
 <template>
+  <Head title="Modifier un utilisateur" />
   <div class="min-h-screen bg-gray-50 py-10 px-4 sm:px-6 lg:px-8">
     <div class="max-w-3xl mx-auto">
       

@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue';
-import { Link, usePage } from '@inertiajs/vue3';
+import { Head, Link, usePage } from '@inertiajs/vue3';
 import SiegeSwitcher from '@/Components/SiegeSwitcher.vue';
 import VueApexCharts from 'vue3-apexcharts';
 
@@ -305,6 +305,7 @@ const exporterPDF = async () => {
 </script>
 
 <template>
+  <Head title="Chiffre d'affaires" />
   <div class="min-h-screen bg-gray-50 py-8 sm:py-10 px-4 sm:px-6 lg:px-8">
     <div class="max-w-7xl mx-auto space-y-8">
 

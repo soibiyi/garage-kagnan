@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue';
-import { useForm, router, Link } from '@inertiajs/vue3';
+import { Head, useForm, router, Link } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 
 const props = defineProps({
@@ -183,6 +183,7 @@ const submitImport = () => {
 
 <template>
     <AuthenticatedLayout>
+        <Head title="Gestion des pièces" />
         <div class="py-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
             <!-- Header avec actions unifiées et parfaitement alignées -->
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">

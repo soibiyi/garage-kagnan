@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue';
-import { useForm, router, Link } from '@inertiajs/vue3';
+import { Head, useForm, router, Link } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 
 const props = defineProps({
@@ -92,6 +92,7 @@ const exporterExcel = () => {
 
 <template>
     <AuthenticatedLayout>
+        <Head title="Gestion des stocks" />
         <div class="py-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <div>
