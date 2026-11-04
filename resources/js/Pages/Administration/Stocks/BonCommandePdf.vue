@@ -1,4 +1,5 @@
 <script setup>
+import { Head } from '@inertiajs/vue3';
 import { computed } from 'vue';
 
 const props = defineProps({
@@ -15,6 +16,7 @@ const totalHT = computed(() => {
 </script>
 
 <template>
+    <Head title="Bon de commande" />
     <div class="min-h-screen bg-slate-100 p-4 sm:p-8 flex flex-col items-center">
         <!-- Barre d'actions (masquée lors de l'impression) -->
         <div class="max-w-3xl w-full flex justify-between items-center mb-6 print:hidden">
