@@ -408,160 +408,224 @@ class StockController extends Controller
     }
 
     public function import(Request $request)
-    {
-        $request->validate([
-            'fichier' => 'required|file|mimes:xlsx,xls,csv,txt|max:10240',
-        ], [
-            'fichier.mimes' => 'Le fichier doit être au format Excel (.xlsx, .xls) ou CSV.',
+{
+    $request->validate([
+        'fichier' => 'required|file|mimes:xlsx,xls,csv,txt|max:10240',
+    ], [
+        'fichier.mimes' => 'Le fichier doit être au format Excel (.xlsx, .xls) ou CSV.',
+    ]);
+
+    try {
+        [$entetes, $lignes] = $this->lireLignesImport($request->file('fichier'));
+    } catch (\Throwable $e) {
+        return redirect()->back()->withErrors(['fichier' => 'Impossible de lire le fichier : ' . $e->getMessage()]);
+    }
+
+    $col = $this->mapperEntetes($entetes);
+
+    if (!isset($col['designation_piece'])) {
+        return redirect()->back()->withErrors([
+            'fichier' => 'Colonne « designation_piece » (ou « Désignation Pièce ») introuvable dans la première ligne du fichier.'
         ]);
+    }
 
-        try {
-            $lignes = $this->lireLignesImport($request->file('fichier'));
-        } catch (\Throwable $e) {
-            return redirect()->back()->withErrors(['fichier' => 'Impossible de lire le fichier : ' . $e->getMessage()]);
-        }
+    $crees = 0;
+    $misAJour = 0;
+    $ignores = 0;
+    $rapportErreurs = [];
 
-        $crees = 0;
-        $misAJour = 0;
-        $ignores = 0;
-        $rapportErreurs = [];
+    $textes  = ['famille', 'sous_famille', 'marque', 'modele', 'generation', 'moteur', 'categorie',
+                'periodicite', 'prix_kagnan_ht', 'note', 'vehicule_correspondant', 'fournisseur'];
+    $nombres = ['prix_achat', 'marge_vente', 'prix_marche_ht', 'ecart_pct', 'prix_ttc_kagnan'];
 
-        DB::beginTransaction();
-        try {
-            foreach ($lignes as $index => $data) {
-                $numeroLigne = $index + 2;
+    $sieges = [
+        'Terminus 27'       => ['terminus_27_attribuee', 'terminus_27_sortie'],
+        'Zone Industrielle' => ['zone_industrielle_attribuee', 'zone_industrielle_sortie'],
+        'Yamoussoukro'      => ['yamoussoukro_attribuee', 'yamoussoukro_sortie'],
+    ];
 
-                if (empty($data[2])) {
-                    $ignores++;
-                    $rapportErreurs[] = "Ligne {$numeroLigne} : Ignorée (Désignation de pièce manquante).";
-                    continue;
+    DB::beginTransaction();
+    try {
+        foreach ($lignes as $index => $data) {
+            $numeroLigne = $index + 2;
+
+            $designation = trim((string) ($data[$col['designation_piece']] ?? ''));
+            if ($designation === '') {
+                $ignores++;
+                $rapportErreurs[] = "Ligne {$numeroLigne} : Ignorée (Désignation de pièce manquante).";
+                continue;
+            }
+
+            $reference = isset($col['reference']) ? trim((string) ($data[$col['reference']] ?? '')) : '';
+
+            $stockQuery = Stock::query();
+            if ($reference !== '') {
+                $stockQuery->where('reference', $reference);
+            } else {
+                $stockQuery->where('designation_piece', $designation)->whereNull('reference');
+            }
+            $stock = $stockQuery->first();
+
+            // On ne construit que les champs dont la colonne existe dans le fichier
+            $donneesPiece = ['designation_piece' => $designation];
+
+            if (isset($col['reference'])) {
+                $donneesPiece['reference'] = $reference !== '' ? $reference : null;
+            }
+            if (isset($col['date_entree'])) {
+                $donneesPiece['date_entree'] = $this->normaliserDate($data[$col['date_entree']] ?? null);
+            }
+            if (isset($col['quantite'])) {
+                $donneesPiece['quantite'] = (int) ($data[$col['quantite']] ?? 0);
+            }
+            foreach ($textes as $c) {
+                if (isset($col[$c])) {
+                    $v = trim((string) ($data[$col[$c]] ?? ''));
+                    $donneesPiece[$c] = $v !== '' ? $v : null;
                 }
-
-                $reference = trim((string) ($data[1] ?? ''));
-                $designation = trim((string) $data[2]);
-
-                $stockQuery = Stock::query();
-                if (!empty($reference)) {
-                    $stockQuery->where('reference', $reference);
-                } else {
-                    $stockQuery->where('designation_piece', $designation)
-                               ->whereNull('reference');
-                }
-
-                $stock = $stockQuery->first();
-
-                $donneesPiece = [
-                    'date_entree'       => $this->normaliserDate($data[0] ?? null),
-                    'reference'         => $reference !== '' ? $reference : null,
-                    'designation_piece' => $designation,
-                    'famille'           => trim((string) ($data[3] ?? '')) ?: null,
-                    'sous_famille'      => trim((string) ($data[4] ?? '')) ?: null,
-                    'marque'            => trim((string) ($data[5] ?? '')) ?: null,
-                    'modele'            => trim((string) ($data[6] ?? '')) ?: null,
-                    'prix_kagnan_ht'    => trim((string) ($data[7] ?? '')) ?: null,
-                    'quantite'          => (int) ($data[8] ?? 0),
-                    'prix_achat'        => is_numeric($data[9] ?? null) ? $data[9] : null,
-                    'marge_vente'       => is_numeric($data[10] ?? null) ? $data[10] : null,
-                ];
-
-                if ($stock) {
-                    $ancienneQuantite = $stock->quantite;
-                    $stock->update($donneesPiece);
-                    $misAJour++;
-
-                    if ($stock->quantite > $ancienneQuantite) {
-                        $difference = $stock->quantite - $ancienneQuantite;
-                        MvtStock::create([
-                            'stock_id' => $stock->id,
-                            'user_id'  => auth()->id(),
-                            'type'     => 'entree',
-                            'quantite' => $difference,
-                            'motif'    => 'Import de fichier (Réapprovisionnement)',
-                        ]);
-                    }
-                } else {
-                    $stock = Stock::create($donneesPiece);
-                    $crees++;
-
-                    if (($stock->quantite ?? 0) > 0) {
-                        MvtStock::create([
-                            'stock_id' => $stock->id,
-                            'user_id'  => auth()->id(),
-                            'type'     => 'entree',
-                            'quantite' => $stock->quantite,
-                            'motif'    => 'Import de fichier (stock initial)',
-                        ]);
-                    }
-                }
-
-                $sieges = [
-                    'Terminus 27'       => ['attrib' => (int) ($data[11] ?? 0), 'sortie' => (int) ($data[12] ?? 0)],
-                    'Zone Industrielle' => ['attrib' => (int) ($data[13] ?? 0), 'sortie' => (int) ($data[14] ?? 0)],
-                    'Yamoussoukro'      => ['attrib' => (int) ($data[15] ?? 0), 'sortie' => (int) ($data[16] ?? 0)],
-                ];
-
-                foreach ($sieges as $nomSiege => $qte) {
-                    $stock->sieges()->updateOrCreate(
-                        ['siege' => $nomSiege],
-                        ['quantite_attribuee' => $qte['attrib'], 'sortie' => $qte['sortie']]
-                    );
+            }
+            foreach ($nombres as $c) {
+                if (isset($col[$c])) {
+                    $v = $data[$col[$c]] ?? null;
+                    $donneesPiece[$c] = is_numeric($v) ? $v : null;
                 }
             }
 
-            DB::commit();
-            return redirect()->back()->with([
-                'success' => "Import terminé : {$crees} pièce(s) créée(s), {$misAJour} mise(s) à jour, {$ignores} ligne(s) ignorée(s).",
-                'rapport' => $rapportErreurs
-            ]);
-        } catch (\Throwable $e) {
-            DB::rollBack();
-            return redirect()->back()->withErrors(['fichier' => 'Erreur : ' . $e->getMessage()]);
+            if ($stock) {
+                $ancienneQuantite = (int) ($stock->quantite ?? 0);
+                $stock->update($donneesPiece);
+                $misAJour++;
+
+                $nouvelle = (int) ($stock->quantite ?? 0);
+                if ($nouvelle > $ancienneQuantite) {
+                    MvtStock::create([
+                        'stock_id' => $stock->id,
+                        'user_id'  => auth()->id(),
+                        'type'     => 'entree',
+                        'quantite' => $nouvelle - $ancienneQuantite,
+                        'motif'    => 'Import de fichier (Réapprovisionnement)',
+                    ]);
+                }
+            } else {
+                $stock = Stock::create($donneesPiece);
+                $crees++;
+
+                if (($stock->quantite ?? 0) > 0) {
+                    MvtStock::create([
+                        'stock_id' => $stock->id,
+                        'user_id'  => auth()->id(),
+                        'type'     => 'entree',
+                        'quantite' => $stock->quantite,
+                        'motif'    => 'Import de fichier (stock initial)',
+                    ]);
+                }
+            }
+
+            // Sièges : uniquement si le fichier contient leurs colonnes
+            foreach ($sieges as $nomSiege => [$cAttrib, $cSortie]) {
+                if (!isset($col[$cAttrib]) && !isset($col[$cSortie])) {
+                    continue;
+                }
+                $existant = $stock->sieges()->where('siege', $nomSiege)->first();
+
+                $stock->sieges()->updateOrCreate(
+                    ['siege' => $nomSiege],
+                    [
+                        'quantite_attribuee' => isset($col[$cAttrib])
+                            ? (int) ($data[$col[$cAttrib]] ?? 0) : ($existant->quantite_attribuee ?? 0),
+                        'sortie' => isset($col[$cSortie])
+                            ? (int) ($data[$col[$cSortie]] ?? 0) : ($existant->sortie ?? 0),
+                    ]
+                );
+            }
+        }
+
+        DB::commit();
+        return redirect()->back()->with([
+            'success' => "Import terminé : {$crees} pièce(s) créée(s), {$misAJour} mise(s) à jour, {$ignores} ligne(s) ignorée(s).",
+            'rapport' => $rapportErreurs
+        ]);
+    } catch (\Throwable $e) {
+        DB::rollBack();
+        return redirect()->back()->withErrors(['fichier' => 'Erreur : ' . $e->getMessage()]);
+    }
+}
+
+/**
+ * Transforme les en-têtes du fichier en clés internes.
+ * "Date Entrée" → date_entree, "Quantite Initiale" → quantite,
+ * "Terminus 27 (Attribuee)" → terminus_27_attribuee...
+ * Retourne [clé => index de colonne].
+ */
+private function mapperEntetes(array $entetes): array
+{
+    $alias = [
+        'quantite_initiale' => 'quantite',
+        'designation'       => 'designation_piece',
+        'ecart_pourcent'    => 'ecart_pct',
+    ];
+
+    $connues = [
+        'date_entree', 'reference', 'designation_piece', 'famille', 'sous_famille', 'marque', 'modele',
+        'generation', 'moteur', 'categorie', 'periodicite', 'prix_kagnan_ht', 'prix_marche_ht', 'ecart_pct',
+        'prix_ttc_kagnan', 'note', 'quantite', 'vehicule_correspondant', 'prix_achat', 'marge_vente', 'fournisseur',
+        'terminus_27_attribuee', 'terminus_27_sortie',
+        'zone_industrielle_attribuee', 'zone_industrielle_sortie',
+        'yamoussoukro_attribuee', 'yamoussoukro_sortie',
+    ];
+
+    $map = [];
+    foreach ($entetes as $i => $nom) {
+        $cle = trim(preg_replace('/[^a-z0-9]+/', '_', strtolower(Str::ascii((string) $nom))), '_');
+        $cle = $alias[$cle] ?? $cle;
+        if (in_array($cle, $connues, true) && !isset($map[$cle])) {
+            $map[$cle] = $i;
         }
     }
+    return $map;
+}
 
-    private function lireLignesImport($fichier): array
-    {
-        $extension = strtolower($fichier->getClientOriginalExtension());
-        $path = $fichier->getRealPath();
+/** Retourne [en-têtes, lignes de données] */
+private function lireLignesImport($fichier): array
+{
+    $extension = strtolower($fichier->getClientOriginalExtension());
+    $path = $fichier->getRealPath();
 
-        if (in_array($extension, ['xlsx', 'xls'])) {
-            $feuille = \PhpOffice\PhpSpreadsheet\IOFactory::load($path)->getActiveSheet();
-            $lignes = $feuille->toArray(null, true, false, false);
-            array_shift($lignes);
-            return $lignes;
-        }
-
-        $contenu = file_get_contents($path);
-        if (!mb_check_encoding($contenu, 'UTF-8')) {
-            $contenu = mb_convert_encoding($contenu, 'UTF-8', 'ISO-8859-1');
-            file_put_contents($path, $contenu);
-        }
-
-        $handle = fopen($path, 'r');
-        if ($handle === false) {
-            throw new \RuntimeException('Impossible d’ouvrir le fichier.');
-        }
-
-        $bom = fread($handle, 3);
-        if ($bom !== "\xEF\xBB\xBF") { rewind($handle); }
-        $firstLine = fgets($handle);
-        $delimiter = (substr_count($firstLine, ';') > substr_count($firstLine, ',')) ? ';' : ',';
-        rewind($handle);
-        if ($bom === "\xEF\xBB\xBF") { fread($handle, 3); }
-        fgetcsv($handle, 0, $delimiter);
-
-        $lignes = [];
-        while (($data = fgetcsv($handle, 0, $delimiter)) !== false) {
-            $dataNettoye = array_map(function($cellule) {
-                return is_string($cellule) ? trim($cellule) : $cellule;
-            }, $data);
-            
-            $lignes[] = $dataNettoye;
-        }
-        fclose($handle);
-
-        return $lignes;
+    if (in_array($extension, ['xlsx', 'xls'])) {
+        $feuille = \PhpOffice\PhpSpreadsheet\IOFactory::load($path)->getActiveSheet();
+        $lignes = $feuille->toArray(null, true, false, false);
+        $entetes = array_shift($lignes) ?? [];
+        return [$entetes, $lignes];
     }
+
+    $contenu = file_get_contents($path);
+    if (!mb_check_encoding($contenu, 'UTF-8')) {
+        $contenu = mb_convert_encoding($contenu, 'UTF-8', 'ISO-8859-1');
+        file_put_contents($path, $contenu);
+    }
+
+    $handle = fopen($path, 'r');
+    if ($handle === false) {
+        throw new \RuntimeException('Impossible d’ouvrir le fichier.');
+    }
+
+    $bom = fread($handle, 3);
+    if ($bom !== "\xEF\xBB\xBF") { rewind($handle); }
+    $firstLine = fgets($handle);
+    $delimiter = (substr_count($firstLine, ';') > substr_count($firstLine, ',')) ? ';' : ',';
+    rewind($handle);
+    if ($bom === "\xEF\xBB\xBF") { fread($handle, 3); }
+
+    $entetes = fgetcsv($handle, 0, $delimiter) ?: [];
+
+    $lignes = [];
+    while (($data = fgetcsv($handle, 0, $delimiter)) !== false) {
+        $lignes[] = array_map(fn($c) => is_string($c) ? trim($c) : $c, $data);
+    }
+    fclose($handle);
+
+    return [$entetes, $lignes];
+}
 
     private function normaliserDate($valeur): ?string
     {
