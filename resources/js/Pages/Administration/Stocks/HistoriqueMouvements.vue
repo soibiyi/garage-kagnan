@@ -28,27 +28,50 @@ const texteRetour = computed(() => {
     return '← Retour à la gestion des stocks';
 });
 
+// Préfixe des routes selon le rôle (magasinier a ses propres routes)
+const prefixeRoute = computed(() =>
+    user.value?.role === 'magasinier' ? 'magasinier' : 'administration'
+);
+
+const peutAnnuler = computed(() => ['admin', 'magasinier'].includes(user.value?.role));
+
 const ongletActif = ref(props.filters.type || 'entree');
 
 const changerOnglet = (type) => {
     ongletActif.value = type;
-    router.get(route('administration.stocks.historique'), {
+    router.get(route(`${prefixeRoute.value}.stocks.historique`), {
         type: type,
         siege: props.filters.siege
     }, { preserveState: true, replace: true });
+};
+
+const annulerSortie = (mvt) => {
+    const message = `Annuler la sortie de ${mvt.quantite} × ${mvt.stock?.designation_piece || 'pièce'} (${mvt.siege || 'siège inconnu'}) ?\n\nLa quantité sera remise en stock et cette ligne disparaîtra de l'historique.`;
+    if (!confirm(message)) return;
+
+    router.delete(route(`${prefixeRoute.value}.stocks.mouvements.annuler`, mvt.id), {
+        preserveScroll: true,
+    });
 };
 </script>
 
 <template>
     <AuthenticatedLayout>
         <div class="py-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+            <div v-if="$page.props.flash?.success" class="bg-emerald-50 text-emerald-700 text-sm font-bold p-3 rounded-xl">
+                {{ $page.props.flash.success }}
+            </div>
+            <div v-if="$page.props.errors?.annulation" class="bg-rose-50 text-rose-700 text-sm font-bold p-3 rounded-xl">
+                {{ $page.props.errors.annulation }}
+            </div>
+
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
                 <div>
                     <Link :href="routeRetour" class="text-xs font-bold text-slate-400 hover:text-slate-700">
                         {{ texteRetour }}
                     </Link>
                     <h1 class="text-2xl font-black text-slate-900 mt-1">Historique des Mouvements de Stock</h1>
-                    <p class="text-sm text-slate-500">Traçabilité complète des entrées et des sorties (immuables) par siège.</p>
+                    <p class="text-sm text-slate-500">Traçabilité des entrées et des sorties par siège. Une sortie saisie par erreur peut être annulée.</p>
                 </div>
 
                 <div class="flex bg-slate-100 p-1 rounded-xl">
@@ -80,6 +103,7 @@ const changerOnglet = (type) => {
                                 <th class="p-3">Siège Concerné</th>
                                 <th class="p-3">Motif / Source</th>
                                 <th class="p-3">Auteur</th>
+                                <th class="p-3 text-center">Action</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y text-xs text-slate-700">
@@ -106,9 +130,18 @@ const changerOnglet = (type) => {
                                 <td class="p-3 text-slate-600">
                                     {{ mvt.user?.name || 'Système / Rétroactif' }}
                                 </td>
+                                <td class="p-3 text-center">
+                                    <button
+                                        v-if="mvt.type === 'sortie' && peutAnnuler"
+                                        @click="annulerSortie(mvt)"
+                                        class="px-3 py-1.5 text-[11px] font-bold rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 transition"
+                                    >
+                                        Annuler
+                                    </button>
+                                </td>
                             </tr>
                             <tr v-if="mouvements.data.length === 0">
-                                <td colspan="6" class="p-8 text-center text-slate-400">Aucun mouvement enregistré pour cet onglet.</td>
+                                <td colspan="7" class="p-8 text-center text-slate-400">Aucun mouvement enregistré pour cet onglet.</td>
                             </tr>
                         </tbody>
                     </table>

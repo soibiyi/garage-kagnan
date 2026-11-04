@@ -53,6 +53,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/pieces', [StockController::class, 'adminIndex'])->name('pieces.index');
     // Historique des mouvements pour l'Admin depuis son espace
     Route::get('/stocks/historique', [StockController::class, 'historiqueMouvements'])->name('stocks.historique');
+    // Annulation d'une sortie (Admin)
+    Route::delete('/stocks/mouvements/{mouvement}', [StockController::class, 'annulerSortie'])->name('stocks.mouvements.annuler');
 });
 
 // Routes dédiées au Magasinier
@@ -61,6 +63,8 @@ Route::middleware(['auth', 'verified'])->prefix('magasinier')->name('magasinier.
     Route::put('/pieces/{stock}', [StockController::class, 'magasinierUpdate'])->name('pieces.update');
     // Historique des mouvements pour le Magasinier
     Route::get('/stocks/historique', [StockController::class, 'historiqueMouvements'])->name('stocks.historique');
+    // Annulation d'une sortie (Magasinier)
+    Route::delete('/stocks/mouvements/{mouvement}', [StockController::class, 'annulerSortie'])->name('stocks.mouvements.annuler');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -120,6 +124,8 @@ Route::middleware(['auth'])->prefix('administration')->name('administration.')->
     Route::get('/stocks/export', [StockController::class, 'export'])->name('stocks.export');
     Route::post('/stocks/import', [StockController::class, 'import'])->name('stocks.import');
     Route::get('/stocks/historique', [StockController::class, 'historiqueMouvements'])->name('stocks.historique');
+    // Annulation d'une sortie (Administration)
+    Route::delete('/stocks/mouvements/{mouvement}', [StockController::class, 'annulerSortie'])->name('stocks.mouvements.annuler');
     
     // Routes d'assistant de réapprovisionnement et bon de commande
     Route::get('/reapprovisionnement', [StockController::class, 'reapprovisionnement'])->name('stocks.reapprovisionnement');

@@ -17,8 +17,10 @@ const showModal = ref(false);
 const currentStock = ref(null);
 
 // Formulaire pour la gestion des attributions, sorties et du motif par siège
+// sortie_deja = sorties déjà enregistrées en base (lecture seule, non envoyée au calcul serveur)
+// sortie      = NOUVELLE sortie saisie maintenant
 const form = useForm({
-    sieges: SIEGES.map(siege => ({ siege, quantite_attribuee: 0, sortie: 0 })),
+    sieges: SIEGES.map(siege => ({ siege, quantite_attribuee: 0, sortie_deja: 0, sortie: 0 })),
     motif: '',
 });
 
@@ -53,9 +55,18 @@ const totalAttribueForm = computed(() =>
     form.sieges.reduce((a, s) => a + Number(s.quantite_attribuee || 0), 0)
 );
 const resteAAttribuer = computed(() => quantiteLot.value - totalAttribueForm.value);
+
+// Reste du siège dans la modale = attribué - déjà sorti - sortie en cours de saisie
+const restantSiegeForm = (l) =>
+    Number(l.quantite_attribuee || 0) - Number(l.sortie_deja || 0) - Number(l.sortie || 0);
+
+// Maximum qu'on peut encore sortir pour ce siège
+const maxSortie = (l) =>
+    Math.max(0, Number(l.quantite_attribuee || 0) - Number(l.sortie_deja || 0));
+
 const distributionValide = computed(() =>
     resteAAttribuer.value >= 0 &&
-    form.sieges.every(s => Number(s.sortie || 0) <= Number(s.quantite_attribuee || 0))
+    form.sieges.every(s => restantSiegeForm(s) >= 0)
 );
 
 const repartirEquitablement = () => {
@@ -66,7 +77,7 @@ const repartirEquitablement = () => {
     form.sieges.forEach((s) => {
         s.quantite_attribuee = base + (reste > 0 ? 1 : 0);
         if (reste > 0) reste--;
-        if (Number(s.sortie || 0) > s.quantite_attribuee) s.sortie = s.quantite_attribuee;
+        if (Number(s.sortie || 0) > maxSortie(s)) s.sortie = maxSortie(s);
     });
 };
 
@@ -81,6 +92,7 @@ const openEditModal = (item) => {
         return {
             siege: nomSiege,
             quantite_attribuee: existant ? existant.quantite_attribuee : 0,
+            sortie_deja: existant ? Number(existant.sortie || 0) : 0,
             sortie: 0,
         };
     });
@@ -315,20 +327,30 @@ const exporterExcel = () => {
                             <div class="flex items-center justify-between">
                                 <h4 class="text-xs font-extrabold text-slate-900">{{ ligne.siege }}</h4>
                                 <span class="text-[11px] font-bold px-2 py-0.5 rounded"
-                                      :class="restantSiege(ligne) <= SEUIL_STOCK_BAS ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'">
-                                    Restant : {{ restantSiege(ligne) }}
+                                      :class="restantSiegeForm(ligne) < 0
+                                          ? 'bg-rose-50 text-rose-700'
+                                          : restantSiegeForm(ligne) <= SEUIL_STOCK_BAS
+                                              ? 'bg-amber-50 text-amber-700'
+                                              : 'bg-emerald-50 text-emerald-700'">
+                                    Restant : {{ restantSiegeForm(ligne) }}
                                 </span>
                             </div>
+                            <p v-if="ligne.sortie_deja > 0" class="text-[10px] font-semibold text-slate-500">
+                                Déjà sorti précédemment : <span class="text-rose-600">{{ ligne.sortie_deja }}</span>
+                            </p>
                             <div class="grid grid-cols-2 gap-3">
                                 <div>
                                     <label class="block text-[11px] font-semibold text-slate-600 mb-1">Quantité Attribuée</label>
-                                    <input type="number" v-model.number="ligne.quantite_attribuee" class="w-full bg-white border rounded-lg text-xs p-2 font-bold text-blue-600" min="0" />
+                                    <input type="number" v-model.number="ligne.quantite_attribuee" class="w-full bg-white border rounded-lg text-xs p-2 font-bold text-blue-600" :min="ligne.sortie_deja" />
                                 </div>
                                 <div>
-                                    <label class="block text-[11px] font-semibold text-slate-600 mb-1">Quantité Sortie (Atelier)</label>
-                                    <input type="number" v-model.number="ligne.sortie" class="w-full bg-white border rounded-lg text-xs p-2 font-bold text-rose-600" min="0" :max="ligne.quantite_attribuee" />
+                                    <label class="block text-[11px] font-semibold text-slate-600 mb-1">Nouvelle sortie (Atelier)</label>
+                                    <input type="number" v-model.number="ligne.sortie" class="w-full bg-white border rounded-lg text-xs p-2 font-bold text-rose-600" min="0" :max="maxSortie(ligne)" />
                                 </div>
                             </div>
+                            <p v-if="restantSiegeForm(ligne) < 0" class="text-[10px] font-bold text-rose-600">
+                                Impossible : l'attribution doit couvrir les sorties déjà faites + la nouvelle sortie.
+                            </p>
                         </div>
 
                         <div>

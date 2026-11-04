@@ -115,6 +115,37 @@ class StockController extends Controller
         ]);
     }
 
+    /**
+     * Annule une sortie : la quantité sortie est remise au siège
+     * et le mouvement est supprimé de l'historique.
+     */
+    public function annulerSortie(MvtStock $mouvement)
+    {
+        if (!in_array(auth()->user()->role, ['admin', 'magasinier'])) {
+            abort(403);
+        }
+
+        if ($mouvement->type !== 'sortie') {
+            return redirect()->back()->withErrors(['annulation' => 'Seules les sorties peuvent être annulées.']);
+        }
+
+        DB::transaction(function () use ($mouvement) {
+            $ligneSiege = $mouvement->stock
+                ? $mouvement->stock->sieges()->where('siege', $mouvement->siege)->lockForUpdate()->first()
+                : null;
+
+            if ($ligneSiege) {
+                $ligneSiege->update([
+                    'sortie' => max(0, $ligneSiege->sortie - $mouvement->quantite),
+                ]);
+            }
+
+            $mouvement->delete();
+        });
+
+        return redirect()->back()->with('success', 'Sortie annulée, la quantité a été restituée.');
+    }
+
     public function magasinierUpdate(Request $request, Stock $stock)
     {
         $validated = $request->validate([
@@ -300,7 +331,7 @@ class StockController extends Controller
                     if ($quantiteSortieAjoutee > 0) {
                         MvtStock::create([
                             'stock_id' => $stock->id,
-                            'user_id' => auth()->id(),
+                            'user_id'  => auth()->id(),
                             'type'     => 'sortie',
                             'quantite' => $quantiteSortieAjoutee,
                             'siege'    => $ligne['siege'],
