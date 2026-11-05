@@ -147,7 +147,7 @@ const messageVide = computed(() => {
     }
     return {
         titre: 'Aucun client pour le moment',
-        texte: 'Les clients apparaîtront ici dès qu\'un véhicule sera reçu au circuit normal.',
+        texte: 'Les clients ayant créé leur compte en ligne apparaissent ici, même sans véhicule. Les autres apparaissent après une intervention au circuit normal.',
     };
 });
 </script>
@@ -281,6 +281,12 @@ const messageVide = computed(() => {
                                     <p class="truncate text-sm font-extrabold text-[#0B0F19]">
                                         {{ row.client.nom }} {{ row.client.prenom }}
                                     </p>
+                                    <span
+                                        v-if="row.client.portal_registered"
+                                        class="mt-1 inline-flex rounded-md bg-[#E11D48]/10 px-2 py-0.5 text-[10px] font-bold text-[#E11D48]"
+                                    >
+                                        Compte créé en ligne
+                                    </span>
                                     <!-- Téléphone (mobile : sous le nom) -->
                                     <p class="mt-0.5 flex items-center gap-1.5 truncate text-xs font-medium text-[#8A8D8F] md:hidden">
                                         <i class="fa-solid fa-phone text-[10px]"></i>
@@ -362,8 +368,8 @@ const messageVide = computed(() => {
                                     v-else
                                     class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 ring-1 ring-inset ring-emerald-200"
                                 >
-                                    <i class="fa-solid fa-circle-check text-[11px]"></i>
-                                    À jour
+                                    <i :class="row.client.portal_registered ? 'fa-solid fa-user-check' : 'fa-solid fa-circle-check'" class="text-[11px]"></i>
+                                    {{ row.client.portal_registered ? 'Nouveau compte' : 'À jour' }}
                                 </span>
                             </div>
                         </Link>

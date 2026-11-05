@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\Client;
+use App\Models\ClientPortalMessage;
+use App\Models\ClientPortalRequest;
 use App\Models\InteractionClient;
 use App\Models\Intervention;
 use App\Models\Vehicule;
@@ -42,6 +44,23 @@ class ChargeClientController extends Controller
         abort_unless($vehicule->interventions()->duSiege()->exists(), 404);
     }
 
+    private function autoriserClientPortail(Client $client): void
+    {
+        abort_unless(in_array(auth()->user()->role, ['admin', 'charge_client'], true), 403);
+
+        if ($this->estAdmin()) {
+            return;
+        }
+
+        $hasDossierAtSiege = $client->vehicules()->whereHas(
+            'interventions',
+            fn ($query) => $query->where('siege', auth()->user()->siege)
+        )->exists();
+        $belongsToSiege = $client->portal_registered && $client->siege === auth()->user()->siege;
+
+        abort_unless($hasDossierAtSiege || $belongsToSiege, 404);
+    }
+
     // 1. Liste de tous les clients avec leurs véhicules
     public function index(Request $request)
     {
@@ -51,7 +70,13 @@ class ChargeClientController extends Controller
                 'vehicules' => $this->vehiculesDuSiege(),
                 'vehicules.interventions' => $this->dossiersDuSiege(),
             ])
-            ->when(!$this->estAdmin(), fn ($q) => $q->whereHas('vehicules.interventions', fn ($i) => $i->duSiege()))
+            ->when(!$this->estAdmin(), fn ($q) => $q->where(function ($clients) {
+                $clients->whereHas('vehicules.interventions', fn ($i) => $i->duSiege())
+                    ->orWhere(function ($registered) {
+                        $registered->where('portal_registered', true)
+                            ->where('siege', auth()->user()->siege);
+                    });
+            }))
             ->when($search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('nom', 'like', "%{$search}%")
@@ -65,7 +90,7 @@ class ChargeClientController extends Controller
             ->get();
 
         $clientsFiltres = $clients->filter(function ($client) {
-            return $client->vehicules->contains(function ($vehicule) {
+            return $client->portal_registered || $client->vehicules->contains(function ($vehicule) {
                 return $vehicule->interventions->contains(function ($intervention) {
                     return strtolower($intervention->circuit) === 'normal';
                 });
@@ -86,13 +111,133 @@ class ChargeClientController extends Controller
             'vehicules.interventions' => $this->dossiersDuSiege(),
             'vehicules.interventions.devis.lignes',
             'vehicules.interventions.facture.paiements',
+            'portalRequests' => fn ($query) => $query->when(
+                !$this->estAdmin(),
+                fn ($requests) => $requests
+                    ->whereNotNull('siege')
+                    ->where('siege', auth()->user()->siege)
+            )->with('traitePar:id,name'),
+            'portalRequests.vehicule',
         ]);
 
-        abort_if(!$this->estAdmin() && $client->vehicules->isEmpty(), 404);
+        $this->autoriserClientPortail($client);
 
         return Inertia::render('ChargeClient/ClientShow', [
-            'client' => $client
+            'client' => $client,
+            'portalAccess' => [
+                'identifier' => $client->portal_identifier,
+                'temporaryPassword' => $client->temporaryPortalPassword(),
+                'passwordChangeRequired' => $client->portal_password_change_required,
+            ],
         ]);
+    }
+
+    public function acceptPortalAppointment(Client $client, ClientPortalRequest $portalRequest)
+    {
+        $this->autoriserClientPortail($client);
+        abort_unless(
+            $portalRequest->client_id === $client->id
+                && $portalRequest->type === 'rendez_vous',
+            404
+        );
+
+        abort_unless(
+            $this->estAdmin() || $portalRequest->siege === auth()->user()->siege,
+            404
+        );
+
+        $updated = ClientPortalRequest::query()
+            ->whereKey($portalRequest->id)
+            ->where('statut', 'en_attente')
+            ->update([
+                'statut' => 'accepte',
+                'traite_par' => auth()->id(),
+                'traite_le' => now(),
+                'updated_at' => now(),
+            ]);
+
+        abort_unless($updated, 409, 'Cette demande a déjà été traitée.');
+
+        return back()->with('success', 'Le rendez-vous a été accepté et le client en sera informé.');
+    }
+
+    public function portalMessages(Request $request, Client $client)
+    {
+        $this->autoriserClientPortail($client);
+
+        $validated = $request->validate([
+            'after_id' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        $query = ClientPortalMessage::query()
+            ->where('client_id', $client->id)
+            ->with('user:id,name');
+        if (array_key_exists('after_id', $validated)) {
+            $query->where('id', '>', $validated['after_id']);
+        }
+        $messages = $query->orderByDesc('id')->limit(100)->get()->reverse()->values();
+
+        ClientPortalMessage::query()
+            ->whereIn('id', $messages->where('sender_type', 'client')->pluck('id'))
+            ->whereNull('read_at')
+            ->update(['read_at' => now()]);
+
+        return response()->json([
+            'messages' => $messages->map(fn (ClientPortalMessage $message) => [
+                'id' => $message->id,
+                'sender_type' => $message->sender_type,
+                'sender_name' => $message->sender_type === 'client'
+                    ? trim($client->prenom.' '.$client->nom)
+                    : ($message->user?->name ?? 'Garage Kagnan'),
+                'message' => $message->message,
+                'created_at' => $message->created_at,
+            ]),
+        ]);
+    }
+
+    public function sendPortalMessage(Request $request, Client $client)
+    {
+        $this->autoriserClientPortail($client);
+
+        $validated = $request->validate([
+            'message' => ['required', 'string', 'max:2000'],
+        ]);
+
+        $message = ClientPortalMessage::create([
+            'client_id' => $client->id,
+            'user_id' => auth()->id(),
+            'sender_type' => 'staff',
+            'message' => trim($validated['message']),
+        ]);
+
+        return response()->json([
+            'message' => [
+                'id' => $message->id,
+                'sender_type' => $message->sender_type,
+                'sender_name' => auth()->user()->name,
+                'message' => $message->message,
+                'created_at' => $message->created_at,
+            ],
+        ], 201);
+    }
+
+    public function resetPortalPassword(Client $client)
+    {
+        abort_unless(in_array(auth()->user()->role, ['admin', 'charge_client'], true), 403);
+
+        if (!$this->estAdmin()) {
+            $hasDossierAtSiege = $client->vehicules()->whereHas(
+                'interventions',
+                fn ($query) => $query->where('siege', auth()->user()->siege)
+            )->exists();
+            $belongsToSiege = $client->portal_registered && $client->siege === auth()->user()->siege;
+
+            abort_unless($hasDossierAtSiege || $belongsToSiege, 404);
+        }
+
+        $client->replaceTemporaryPortalPassword();
+
+        return back()->with('success', 'Un nouveau mot de passe provisoire a été généré.');
     }
 
     // 3. Fiche d'un véhicule (accueil : 3 cartes + échéances)

@@ -13,6 +13,7 @@ use App\Http\Controllers\Mecanicien\MecanicienController;
 use App\Http\Controllers\Administrative\StockController;
 use App\Http\Controllers\ChargeClientController; 
 use App\Http\Controllers\Administrative\FactureController;
+use App\Http\Controllers\EspaceClientController;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -22,6 +23,20 @@ Route::get('/', function () {
         'phpVersion' => PHP_VERSION,
     ]);
 });
+
+Route::get('/espace-client', [EspaceClientController::class, 'index'])->name('espace-client.index');
+Route::get('/espace-client/tableau-de-bord', [EspaceClientController::class, 'dashboard'])->name('espace-client.dashboard');
+Route::post('/espace-client/inscription', [EspaceClientController::class, 'register'])->middleware('throttle:3,1')->name('espace-client.register');
+Route::post('/espace-client/connexion', [EspaceClientController::class, 'login'])->middleware('throttle:5,1')->name('espace-client.login');
+Route::post('/espace-client/deconnexion', [EspaceClientController::class, 'logout'])->name('espace-client.logout');
+Route::get('/espace-client/api/me', [EspaceClientController::class, 'me'])->name('espace-client.me');
+Route::get('/espace-client/api/messages', [EspaceClientController::class, 'portalMessages'])->name('espace-client.messages.index');
+Route::post('/espace-client/api/messages', [EspaceClientController::class, 'sendPortalMessage'])->middleware('throttle:30,1')->name('espace-client.messages.store');
+Route::patch('/espace-client/api/mot-de-passe', [EspaceClientController::class, 'changePassword'])->name('espace-client.password');
+Route::patch('/espace-client/api/profil', [EspaceClientController::class, 'updateProfile'])->name('espace-client.profile');
+Route::post('/espace-client/api/vehicules', [EspaceClientController::class, 'addVehicle'])->name('espace-client.vehicles.store');
+Route::patch('/espace-client/api/devis/{devis}/choix', [EspaceClientController::class, 'updateQuoteSelection'])->name('espace-client.quotes.selection');
+Route::post('/espace-client/api/demandes', [EspaceClientController::class, 'storePortalRequest'])->middleware('throttle:10,1')->name('espace-client.requests.store');
 
 // Tableau de bord : toute la logique (filtres, onglets, compteurs, redirections de rôle) est dans le contrôleur
 Route::get('/dashboard', [DashboardController::class, 'index'])
@@ -84,6 +99,10 @@ Route::middleware(['auth'])->prefix('parc')->name('parc.')->group(function () {
 Route::middleware(['auth', 'verified'])->prefix('suivi-client')->name('charge_client.')->group(function () {
     Route::get('/clients', [ChargeClientController::class, 'index'])->name('clients.index');
     Route::get('/clients/{client}', [ChargeClientController::class, 'showClient'])->name('clients.show');
+    Route::post('/clients/{client}/portail/mot-de-passe-provisoire', [ChargeClientController::class, 'resetPortalPassword'])->name('clients.portal-password.reset');
+    Route::post('/clients/{client}/portail/demandes/{portalRequest}/accepter', [ChargeClientController::class, 'acceptPortalAppointment'])->name('clients.portal-requests.accept');
+    Route::get('/clients/{client}/portail/messages', [ChargeClientController::class, 'portalMessages'])->name('clients.portal-messages.index');
+    Route::post('/clients/{client}/portail/messages', [ChargeClientController::class, 'sendPortalMessage'])->middleware('throttle:30,1')->name('clients.portal-messages.store');
     Route::get('/vehicules/{vehicule}', [ChargeClientController::class, 'showVehicule'])->name('vehicules.show');
     Route::get('/vehicules/{vehicule}/infos', [ChargeClientController::class, 'infosVehicule'])->name('vehicules.infos');
     Route::get('/vehicules/{vehicule}/relances', [ChargeClientController::class, 'relancesVehicule'])->name('vehicules.relances');

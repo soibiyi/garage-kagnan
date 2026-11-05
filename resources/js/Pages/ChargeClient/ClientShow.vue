@@ -1,10 +1,32 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link } from '@inertiajs/vue3';
+import { Head, Link, router } from '@inertiajs/vue3';
+import { ref } from 'vue';
+import Conversation from '@/Pages/EspaceClient/sections/Conversation.vue';
 
-defineProps({
+const props = defineProps({
     client: Object,
+    portalAccess: Object,
 });
+const showTemporaryPassword = ref(false);
+const acceptingRequestId = ref(null);
+
+const regenerateTemporaryPassword = () => {
+    if (!window.confirm('Générer un nouveau mot de passe provisoire ? L’ancien mot de passe sera invalidé.')) return;
+    router.post(route('charge_client.clients.portal-password.reset', props.client.id));
+};
+
+const acceptAppointment = (requestId) => {
+    if (acceptingRequestId.value) return;
+    acceptingRequestId.value = requestId;
+    router.post(route('charge_client.clients.portal-requests.accept', {
+        client: props.client.id,
+        portalRequest: requestId,
+    }), {}, {
+        preserveScroll: true,
+        onFinish: () => { acceptingRequestId.value = null; },
+    });
+};
 
 // Fonction pour vérifier l'expiration et la règle des 10 jours
 const checkExpirationDetail = (dateStr) => {
@@ -46,7 +68,97 @@ const checkExpirationDetail = (dateStr) => {
 
         <div class="py-12 bg-white min-h-screen">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-                
+                <section class="rounded-3xl border border-gray-200 bg-[#F8FAFC] p-6">
+                    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                            <h3 class="text-lg font-black text-[#0B0F19]">Accès à l’espace client</h3>
+                            <p v-if="portalAccess.passwordChangeRequired" class="mt-1 text-sm text-[#8A8D8F]">
+                                Communiquez ces identifiants au client. Il devra changer son mot de passe provisoire à sa première connexion.
+                            </p>
+                            <p v-else class="mt-1 text-sm text-[#8A8D8F]">
+                                Le client a défini son mot de passe. Vous pouvez générer un mot de passe provisoire s’il a besoin de réinitialiser son accès.
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            @click="regenerateTemporaryPassword"
+                            class="inline-flex min-h-10 items-center justify-center rounded-xl bg-[#E11D48] px-4 text-xs font-bold text-white transition hover:bg-[#BE123C]"
+                        >
+                            Générer un nouveau mot de passe
+                        </button>
+                    </div>
+                    <div class="mt-5 grid gap-4 sm:grid-cols-2">
+                        <div>
+                            <p class="text-xs font-bold uppercase tracking-wide text-[#8A8D8F]">Identifiant</p>
+                            <p class="mt-1 select-all font-mono text-sm font-bold text-[#0B0F19]">{{ portalAccess.identifier }}</p>
+                        </div>
+                        <div>
+                            <p class="text-xs font-bold uppercase tracking-wide text-[#8A8D8F]">Mot de passe provisoire</p>
+                            <div v-if="portalAccess.temporaryPassword" class="mt-1 flex items-center gap-3">
+                                <p class="select-all font-mono text-sm font-bold text-[#0B0F19]">
+                                    {{ showTemporaryPassword ? portalAccess.temporaryPassword : '••••••••••••••••' }}
+                                </p>
+                                <button
+                                    type="button"
+                                    @click="showTemporaryPassword = !showTemporaryPassword"
+                                    class="text-xs font-bold text-[#E11D48] hover:underline"
+                                >
+                                    {{ showTemporaryPassword ? 'Masquer' : 'Afficher' }}
+                                </button>
+                            </div>
+                            <p v-else class="mt-1 text-sm font-semibold text-emerald-700">
+                                Aucun mot de passe provisoire en attente.
+                            </p>
+                        </div>
+                    </div>
+                </section>
+
+                <section v-if="client.portal_requests?.length" class="rounded-3xl border border-gray-200 bg-white p-6">
+                    <h3 class="text-lg font-black text-[#0B0F19]">Demandes de l’espace client</h3>
+                    <article v-for="demande in client.portal_requests" :key="demande.id" class="mt-4 rounded-xl border border-gray-200 bg-[#F8FAFC] p-4">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <strong class="text-sm text-[#0B0F19]">
+                                {{ {
+                                    message: 'Message',
+                                    rendez_vous: 'Rendez-vous',
+                                    depannage: 'Dépannage',
+                                    convoyage: 'Convoyage'
+                                }[demande.type] || demande.type }}
+                            </strong>
+                            <span :class="[
+                                'rounded-full px-3 py-1 text-xs font-bold',
+                                demande.statut === 'accepte'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : demande.statut === 'refuse'
+                                        ? 'bg-rose-100 text-rose-800'
+                                        : 'bg-amber-100 text-amber-800'
+                            ]">
+                                {{ demande.statut.replaceAll('_', ' ') }}
+                            </span>
+                        </div>
+                        <p v-if="demande.vehicule" class="mt-2 text-xs text-gray-600">
+                            {{ demande.vehicule.marque }} {{ demande.vehicule.modele }} — {{ demande.vehicule.immatriculation }}
+                        </p>
+                        <p v-for="(valeur, cle) in demande.details" :key="cle" class="mt-1 text-sm text-gray-700">
+                            <strong>{{ cle.replaceAll('_', ' ') }} :</strong> {{ valeur }}
+                        </p>
+                        <p class="mt-2 text-xs text-gray-500">{{ new Date(demande.created_at).toLocaleString('fr-FR') }}</p>
+                        <button
+                            v-if="demande.type === 'rendez_vous' && demande.statut === 'en_attente'"
+                            type="button"
+                            :disabled="acceptingRequestId !== null"
+                            class="mt-3 inline-flex min-h-9 items-center rounded-lg bg-[#E11D48] px-3 text-xs font-bold text-white transition hover:bg-[#BE123C] disabled:cursor-wait disabled:opacity-60"
+                            @click="acceptAppointment(demande.id)"
+                        >
+                            {{ acceptingRequestId === demande.id ? 'Acceptation…' : 'Accepter ce rendez-vous' }}
+                        </button>
+                    </article>
+                </section>
+
+                <section v-if="client.portal_registered" class="rounded-3xl border border-gray-200 bg-white p-6">
+                    <Conversation audience="staff" :client-id="Number(client.id)" />
+                </section>
+
                 <h3 class="text-lg font-black text-[#0B0F19] flex items-center gap-2.5">
                     <i class="fa-solid fa-car text-[#E11D48]"></i>
                     <span>Véhicules du client</span>

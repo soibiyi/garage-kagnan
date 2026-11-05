@@ -11,9 +11,6 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // Appel de votre seeder admin
-        $this->call([
-            AdminUserSeeder::class,
-        ]);
+        // Les comptes employés doivent être créés explicitement, jamais pendant une migration.
     }
 }

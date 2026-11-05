@@ -34,7 +34,7 @@ function place(ll, force) {
   } else {
     B.value = pt
     if (mB) map.removeLayer(mB)
-    mB = L.circleMarker(pt, { radius: 9, color: '#f2780c', fillOpacity: 1 }).addTo(map)
+    mB = L.circleMarker(pt, { radius: 9, color: '#e11d48', fillOpacity: 1 }).addTo(map)
     labelB.value = `Arrivée : ${pt.lat.toFixed(4)}, ${pt.lng.toFixed(4)}`
   }
   route()
@@ -47,12 +47,12 @@ async function route() {
   try {
     const r = await fetch(`https://router.project-osrm.org/route/v1/driving/${a.lng},${a.lat};${b.lng},${b.lat}?overview=full&geometries=geojson`).then(r => r.json())
     dist.value = r.routes[0].distance / 1000
-    line = L.geoJSON(r.routes[0].geometry, { style: { color: '#0b1b33', weight: 5 } }).addTo(map)
+    line = L.geoJSON(r.routes[0].geometry, { style: { color: '#0b0f19', weight: 5 } }).addTo(map)
   } catch {
     const R = 6371, dLat = (b.lat - a.lat) * Math.PI / 180, dLng = (b.lng - a.lng) * Math.PI / 180
     const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2
     dist.value = R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h)) * 1.3
-    line = L.polyline([a, b], { color: '#0b1b33', weight: 4, dashArray: '8' }).addTo(map)
+    line = L.polyline([a, b], { color: '#0b0f19', weight: 4, dashArray: '8' }).addTo(map)
   }
   map.fitBounds(line.getBounds(), { padding: [40, 40] })
 }
@@ -77,10 +77,10 @@ function commander() {
 onMounted(() => {
   map = L.map(mapEl.value).setView(GARAGE, 13)
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map)
-  L.circleMarker(GARAGE, { radius: 8, color: '#0b1b33', fillOpacity: 1 }).addTo(map).bindPopup('Garage Kagnan')
+  L.circleMarker(GARAGE, { radius: 8, color: '#0b0f19', fillOpacity: 1 }).addTo(map).bindPopup('Garage Kagnan')
   map.on('click', e => place(e.latlng))
   B.value = { lat: GARAGE[0], lng: GARAGE[1] }
-  mB = L.circleMarker(B.value, { radius: 9, color: '#f2780c', fillOpacity: 1 }).addTo(map)
+  mB = L.circleMarker(B.value, { radius: 9, color: '#e11d48', fillOpacity: 1 }).addTo(map)
 })
 onBeforeUnmount(() => { if (map) map.remove() })
 </script>
