@@ -118,8 +118,7 @@ Route::middleware(['auth', 'verified'])->prefix('suivi-client')->name('charge_cl
     Route::patch('/interventions/{intervention}/statut', [ChargeClientController::class, 'updateStatut'])->name('vehicules.update-statut');
     Route::post('/vehicules/{vehicule}/interactions', [ChargeClientController::class, 'storeInteraction'])->name('vehicules.interactions.store');
 Route::get('clients/{client}/chat', [EspaceClientController::class, 'chat'])->name('clients.chat');
-Route::get('clients/{client}/demandes', [EspaceClientController::class, 'demandes'])->name('clients.demandes');
-Route::get('clients/{client}/rendez-vous', [EspaceClientController::class, 'rendezVous'])->name('clients.rendez-vous');
+Route::get('clients/{client}/demandes', [ChargeClientController::class, 'demandes'])->name('clients.demandes');Route::get('clients/{client}/rendez-vous', [EspaceClientController::class, 'rendezVous'])->name('clients.rendez-vous');
 Route::post('clients/{client}/portal-requests/{portalRequest}/refuse',
     [EspaceClientController::class, 'refuseRequest'])
     ->name('clients.portal-requests.refuse');

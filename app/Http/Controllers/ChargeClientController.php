@@ -139,6 +139,33 @@ class ChargeClientController extends Controller
         ]);
     }
 
+        // Page « Demandes » : dépannages, convoyages et messages du client
+    public function demandes(Client $client)
+    {
+        $this->autoriserClientPortail($client);
+
+        $client->load([
+            'portalRequests' => fn ($query) => $query
+                ->where('type', '!=', 'rendez_vous')
+                ->when(
+                    !$this->estAdmin(),
+                    fn ($requests) => $requests
+                        ->whereNotNull('siege')
+                        ->where('siege', auth()->user()->siege)
+                )
+                ->with([
+                    'vehicule:id,marque,modele,immatriculation',
+                    'chauffeur:id,name',
+                    'position',
+                ])
+                ->latest(),
+        ]);
+
+        return Inertia::render('ChargeClient/Clients/ClientDemandes', [
+            'client' => $client,
+        ]);
+    }
+
     public function acceptPortalAppointment(Client $client, ClientPortalRequest $portalRequest)
     {
         $this->autoriserClientPortail($client);
