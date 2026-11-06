@@ -1,0 +1,38 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        if (Schema::hasTable('notifications')) {
+            if (!Schema::hasIndex('notifications', 'notifications_notifiable_type_notifiable_id_index')) {
+                Schema::table('notifications', function (Blueprint $table) {
+                    $table->string('notifiable_type', 100)->change();
+                    $table->index(['notifiable_type', 'notifiable_id']);
+                });
+            }
+
+            return;
+        }
+
+        Schema::create('notifications', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->string('type');
+            $table->string('notifiable_type', 100);
+            $table->unsignedBigInteger('notifiable_id');
+            $table->index(['notifiable_type', 'notifiable_id']);
+            $table->json('data');
+            $table->timestamp('read_at')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('notifications');
+    }
+};

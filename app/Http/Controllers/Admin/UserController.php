@@ -122,7 +122,7 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:191|unique:users',
             'password' => 'required|string|min:6',
-            'role' => 'required|string|in:admin,receptionniste,mecanicien,administratif,charge_client,magasinier,chauffeur',
+            'role' => 'required|string|in:admin,receptionniste,mecanicien,administratif,charge_client,magasinier,depanneur,depaneur,chauffeur',
         ]);
 
         User::create([
@@ -154,7 +154,7 @@ class UserController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => ['required', 'string', 'email', 'max:191', Rule::unique('users')->ignore($user->id)],
-            'role' => 'required|string|in:admin,receptionniste,mecanicien,administratif,charge_client,magasinier,chauffeur',
+            'role' => 'required|string|in:admin,receptionniste,mecanicien,administratif,charge_client,magasinier,depanneur,depaneur,chauffeur',
             'password' => 'nullable|string|min:6',
             'siege' => [Rule::requiredIf($request->role !== 'admin'), 'nullable', Rule::in(array_keys(config('sieges')))],
         ], [
@@ -162,13 +162,13 @@ class UserController extends Controller
         ]);
 
         if (
-            $user->role === 'chauffeur'
-            && $request->role !== 'chauffeur'
+            in_array($user->role, ['chauffeur', 'depanneur', 'depaneur'], true)
+            && !in_array($request->role, ['chauffeur', 'depanneur', 'depaneur'], true)
             && ClientPortalRequest::where('chauffeur_id', $user->id)
-                ->whereIn('statut', ['accepte', 'en_cours'])
+                ->whereIn('statut', ['accepte', 'en_cours', 'en_route_recuperation', 'vehicule_recupere', 'en_route_garage'])
                 ->exists()
         ) {
-            return back()->with('error', 'Ce chauffeur ne peut pas changer de rôle tant qu’une mission est en cours.');
+            return back()->with('error', 'Ce chauffeur / dépanneur ne peut pas changer de rôle tant qu’une mission est en cours.');
         }
 
         $user->update([
@@ -192,12 +192,12 @@ class UserController extends Controller
         }
 
         if (
-            $user->role === 'chauffeur'
+            in_array($user->role, ['chauffeur', 'depanneur', 'depaneur'], true)
             && ClientPortalRequest::where('chauffeur_id', $user->id)
-                ->whereIn('statut', ['accepte', 'en_cours'])
+                ->whereIn('statut', ['accepte', 'en_cours', 'en_route_recuperation', 'vehicule_recupere', 'en_route_garage'])
                 ->exists()
         ) {
-            return back()->with('error', 'Ce chauffeur ne peut pas être supprimé tant qu’une mission est en cours.');
+            return back()->with('error', 'Ce chauffeur / dépanneur ne peut pas être supprimé tant qu’une mission est en cours.');
         }
 
         $user->delete();

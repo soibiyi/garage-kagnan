@@ -44,6 +44,7 @@ class HandleInertiaRequests extends Middleware
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error'   => fn () => $request->session()->get('error'),
+                'missionSummary' => fn () => $request->session()->get('missionSummary'),
             ],
             // Liste des sièges { SGK: 'Siège Garage Kagnan', ... } disponible dans tous les composants Vue
             'sieges' => config('sieges'),

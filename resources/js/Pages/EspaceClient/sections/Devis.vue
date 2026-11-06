@@ -15,6 +15,18 @@ const errors = reactive({})
 
 const isSelected = (devis, ligne) => (selections[devis.id] || []).includes(ligne.id)
 
+const statutAffiche = devis => {
+  if (devis?.facture) {
+    const total = Number(devis.facture.montant_total || 0)
+    const paye = Number(devis.facture.montant_paye || 0)
+    return total > 0 && paye >= total ? 'Soldé' : 'Facturé'
+  }
+
+  return devis?.statut || 'En attente'
+}
+
+const estSolde = devis => Boolean(devis?.facture) && Number(devis.facture.montant_total || 0) > 0 && Number(devis.facture.montant_paye || 0) >= Number(devis.facture.montant_total || 0)
+
 // Montant de la remise par ligne (pour le calcul précis)
 const montantRemise = l => Number(l.quantite || 0) * Number(l.pu_net || 0) * Number(l.remise || 0) / 100
 
@@ -101,6 +113,7 @@ async function enregistrerChoix(devis) {
     for (const ligne of devis.lignes) {
       ligne.is_accepted = isSelected(devis, ligne)
     }
+    devis.selectionPossible = false
     devis.statut = 'Accepté'
     toast('Votre choix de devis a été transmis au Garage Kagnan.')
   } catch (error) {
@@ -112,8 +125,18 @@ async function enregistrerChoix(devis) {
   }
 }
 
-const classeStatut = statut => (statut === 'Accepté' ? 'st-ok' : statut === 'Refusé' ? 'st-no' : 'st-wait')
-const iconeStatut = statut => (statut === 'Accepté' ? 'fa-circle-check' : statut === 'Refusé' ? 'fa-circle-xmark' : 'fa-hourglass-half')
+const classeStatut = statut => {
+  if (statut === 'Accepté' || statut === 'Soldé') return 'st-ok'
+  if (statut === 'Refusé') return 'st-no'
+  if (statut === 'Facturé') return 'st-wait'
+  return 'st-wait'
+}
+const iconeStatut = statut => {
+  if (statut === 'Accepté' || statut === 'Soldé') return 'fa-circle-check'
+  if (statut === 'Refusé') return 'fa-circle-xmark'
+  if (statut === 'Facturé') return 'fa-file-invoice-dollar'
+  return 'fa-hourglass-half'
+}
 const formatDate = date => (date ? new Date(date).toLocaleDateString('fr-FR') : '—')
 const f = n => `${Number(n || 0).toLocaleString('fr-FR')} F`
 </script>
@@ -130,13 +153,17 @@ const f = n => `${Number(n || 0).toLocaleString('fr-FR')} F`
             <span><i class="fa-regular fa-calendar"></i>{{ formatDate(devis.date || devis.created_at) }}</span>
           </p>
         </div>
-        <span class="st" :class="classeStatut(devis.statut)"><i class="fa-solid" :class="iconeStatut(devis.statut)"></i>{{ devis.statut }}</span>
+        <span class="st" :class="classeStatut(statutAffiche(devis))"><i class="fa-solid" :class="iconeStatut(statutAffiche(devis))"></i>{{ statutAffiche(devis) }}</span>
       </header>
 
       <div class="devis-body">
         <p v-if="devis.selectionPossible" class="note">
           <i class="fa-solid fa-circle-info"></i>
           Décochez les prestations ou pièces que vous ne souhaitez pas retenir, puis enregistrez votre choix.
+        </p>
+        <p v-else-if="estSolde(devis)" class="note">
+          <i class="fa-solid fa-circle-check"></i>
+          Ce devis est entièrement soldé.
         </p>
 
         <div class="qwrap" tabindex="0" role="region" :aria-label="`Lignes du devis ${devis.ref || devis.id}`">
@@ -227,3 +254,37 @@ const f = n => `${Number(n || 0).toLocaleString('fr-FR')} F`
     </div>
   </div>
 </template>
+<style scoped>
+.tick{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  margin:0;
+  cursor:pointer;
+}
+.tick input[type=checkbox]{
+  flex:none;
+  appearance:none;
+  -webkit-appearance:none;
+  display:inline-block;
+  width:18px;
+  height:18px;
+  min-height:18px;
+  margin:0;
+  padding:0;
+  border:2px solid #8a8d8f;
+  border-radius:4px;
+  background:#fff;
+  box-shadow:none;
+  transition:none;
+  cursor:pointer;
+}
+.tick input[type=checkbox]:checked{
+  border-color:#e11d48;
+  background:#e11d48 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E") center/80% no-repeat;
+}
+.tick input[type=checkbox]:focus-visible{
+  outline:2px solid #e11d48;
+  outline-offset:2px;
+}
+</style>

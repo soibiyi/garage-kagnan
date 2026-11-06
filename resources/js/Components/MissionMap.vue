@@ -23,8 +23,11 @@ const props = defineProps({
   interactive: { type: Boolean, default: false },
   selectionTarget: { type: String, default: 'start' },
   followDriver: { type: Boolean, default: false },
+  routeColor: { type: String, default: '#1769e0' },
+  showTraffic: { type: Boolean, default: false },
+  selectedRouteIndex: { type: Number, default: 0 },
 })
-const emit = defineEmits(['point-selected'])
+const emit = defineEmits(['point-selected', 'route-updated', 'routes-updated', 'route-selected'])
 
 const mapElement = ref(null)
 const mapError = ref('')
@@ -33,11 +36,14 @@ const loading = ref(true)
 let map
 let RouteClass
 let MarkerClass
+let PinElementClass
 let PolylineClass
 let startMarker
 let endMarker
 let driverMarker
-let routeLayer
+let routeLayers = []
+let routeCandidates = []
+let trafficLayer
 let routeTimer
 let lastRouteAt = 0
 let lastRouteDriverPosition = null
@@ -75,41 +81,41 @@ function pointSignature(point) {
   return isValid(point) ? `${Number(point.lat).toFixed(5)},${Number(point.lng).toFixed(5)}` : ''
 }
 
-function markerIcon(color, driver = false) {
-  return {
-    path: driver ? 'M 0,-2 5,10 0,7 -5,10 z' : google.maps.SymbolPath.CIRCLE,
-    fillColor: color,
-    fillOpacity: 1,
-    strokeColor: '#ffffff',
-    strokeWeight: driver ? 2 : 3,
-    scale: driver ? 1.8 : 8,
-    anchor: new google.maps.Point(0, driver ? 3 : 0),
-  }
+function createMapMarker(position, color, title, driver = false) {
+  const pin = new PinElementClass({
+    background: color,
+    borderColor: '#ffffff',
+    glyphColor: '#ffffff',
+    glyphText: driver ? 'D' : '',
+    scale: driver ? 1.15 : 1,
+  })
+
+  const marker = new MarkerClass({
+    map,
+    position: normalizedPoint(position),
+    title,
+    zIndex: driver ? 3 : 2,
+  })
+  marker.append(pin)
+  return marker
 }
 
 function updateStaticMarker(marker, position, color, title) {
   if (!isValid(position)) {
-    marker?.setMap(null)
+    if (marker) marker.map = null
     return null
   }
 
   if (!marker) {
-    return new MarkerClass({
-      map,
-      position: normalizedPoint(position),
-      title,
-      icon: markerIcon(color),
-      zIndex: 2,
-    })
+    return createMapMarker(position, color, title)
   }
 
-  marker.setPosition(normalizedPoint(position))
+  marker.position = normalizedPoint(position)
   return marker
 }
 
 function animateDriverMarker(target) {
-  const current = driverMarker.getPosition()
-  const from = current ? { lat: current.lat(), lng: current.lng() } : target
+  const from = driverMarker.position ? normalizedPoint(driverMarker.position) : target
   const startedAt = performance.now()
   const duration = 800
 
@@ -118,10 +124,10 @@ function animateDriverMarker(target) {
   const animate = now => {
     const progress = Math.min((now - startedAt) / duration, 1)
     const eased = 1 - (1 - progress) ** 3
-    driverMarker.setPosition({
+    driverMarker.position = {
       lat: from.lat + (target.lat - from.lat) * eased,
       lng: from.lng + (target.lng - from.lng) * eased,
-    })
+    }
 
     if (progress < 1) driverAnimationFrame = requestAnimationFrame(animate)
   }
@@ -131,7 +137,7 @@ function animateDriverMarker(target) {
 
 function updateDriverMarker() {
   if (!isValid(props.driverPosition)) {
-    driverMarker?.setMap(null)
+    if (driverMarker) driverMarker.map = null
     driverMarker = null
     if (driverAnimationFrame) cancelAnimationFrame(driverAnimationFrame)
     return
@@ -139,13 +145,7 @@ function updateDriverMarker() {
 
   const target = normalizedPoint(props.driverPosition)
   if (!driverMarker) {
-    driverMarker = new MarkerClass({
-      map,
-      position: target,
-      title: 'Position du chauffeur',
-      icon: markerIcon('#2563eb', true),
-      zIndex: 3,
-    })
+    driverMarker = createMapMarker(target, '#2563eb', 'Position du chauffeur', true)
     if (props.followDriver) map.setCenter(target)
   } else {
     animateDriverMarker(target)
@@ -157,13 +157,18 @@ function updateDriverMarker() {
 function routePoints() {
   if (props.followDriver && !isValid(props.driverPosition)) return []
 
-  return [props.driverPosition, props.startPosition, props.endPosition]
+  const points = isValid(props.driverPosition)
+    ? [props.driverPosition, props.endPosition]
+    : [props.startPosition, props.endPosition]
+
+  return points
     .filter(isValid)
     .map(normalizedPoint)
+    .filter((point, index, normalizedPoints) => index === 0 || distanceInMeters(normalizedPoints[index - 1], point) > 1)
 }
 
 function fitRoute() {
-  if (hasFittedBounds || props.followDriver) return
+  if (hasFittedBounds) return
 
   const bounds = new google.maps.LatLngBounds()
   for (const point of [props.startPosition, props.endPosition, props.driverPosition].filter(isValid)) {
@@ -175,19 +180,66 @@ function fitRoute() {
   }
 }
 
-function updateRoutePath(path) {
-  if (!routeLayer) {
-    routeLayer = new PolylineClass({
-      map,
-      path,
-      strokeColor: '#1769e0',
-      strokeOpacity: 0.9,
-      strokeWeight: 6,
-      zIndex: 1,
+function emitSelectedRoute() {
+  const selected = routeCandidates[props.selectedRouteIndex] || routeCandidates[0]
+  emit('route-updated', selected ? {
+    distanceMeters: selected.distanceMeters ?? null,
+    durationMillis: selected.durationMillis ?? null,
+  } : { distanceMeters: null, durationMillis: null })
+}
+
+function updateRouteStyles() {
+  routeLayers.forEach((layer, index) => {
+    const selected = index === props.selectedRouteIndex
+    layer.setOptions({
+      strokeColor: selected ? props.routeColor : '#7b8b9b',
+      strokeOpacity: selected ? 0.95 : 0.5,
+      strokeWeight: selected ? 7 : 4,
+      zIndex: selected ? 3 : 2,
     })
-  } else {
-    routeLayer.setPath(path)
-  }
+  })
+  emitSelectedRoute()
+}
+
+function updateRoutePaths(routes) {
+  routeLayers.forEach(layer => layer.setMap(null))
+  routeCandidates = routes.filter(route => route.path?.length > 1)
+  routeLayers = routeCandidates.map((route, index) => {
+    const layer = new PolylineClass({
+      map,
+      path: route.path,
+      strokeColor: '#7b8b9b',
+      strokeOpacity: 0.5,
+      strokeWeight: 4,
+      zIndex: 2,
+      clickable: true,
+    })
+    layer.addListener('click', () => emit('route-selected', index))
+    return layer
+  })
+  emit('routes-updated', routeCandidates.map((route, index) => ({
+    index,
+    label: route.label || (index === 0 ? 'Itinéraire principal' : `Alternative ${index}`),
+    distanceMeters: route.distanceMeters ?? null,
+    durationMillis: route.durationMillis ?? null,
+  })))
+  updateRouteStyles()
+}
+
+async function loadFallbackRoutes(points) {
+  const coordinates = points.map(point => `${point.lng},${point.lat}`).join(';')
+  const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${coordinates}?overview=full&geometries=geojson&alternatives=true&steps=true`)
+  if (!response.ok) throw new Error('Le service de routage alternatif est indisponible.')
+
+  const data = await response.json()
+  if (data.code !== 'Ok' || !data.routes?.length) throw new Error('Aucun itinéraire routier n’a été trouvé.')
+
+  return data.routes.map((route, index) => ({
+    path: route.geometry.coordinates.map(([lng, lat]) => ({ lat, lng })),
+    distanceMeters: route.distance,
+    durationMillis: route.duration * 1000,
+    label: index === 0 ? 'Itinéraire principal' : `Alternative ${index}`,
+  }))
 }
 
 async function loadRoute(points, signature) {
@@ -207,9 +259,10 @@ async function loadRoute(points, signature) {
     const { routes } = await RouteClass.computeRoutes({
       origin: points[0],
       destination: points[points.length - 1],
-      ...(points.length > 2 ? { intermediates: points.slice(1, -1) } : {}),
+      computeAlternativeRoutes: points.length === 2,
       travelMode: 'DRIVING',
-      fields: ['path'],
+      ...(props.showTraffic ? { routingPreference: 'TRAFFIC_AWARE' } : {}),
+      fields: ['path', 'distanceMeters', 'durationMillis', 'routeLabels', 'legs.distanceMeters', 'legs.durationMillis'],
     })
     if (requestId !== routeRequestId) return
 
@@ -217,12 +270,27 @@ async function loadRoute(points, signature) {
       throw new Error('Aucun itinéraire routier n’a été trouvé.')
     }
 
-    updateRoutePath(routes[0].path)
+    updateRoutePaths(routes.map((route, index) => ({
+      path: route.path,
+      distanceMeters: route.distanceMeters ?? route.legs?.[0]?.distanceMeters,
+      durationMillis: route.durationMillis ?? route.legs?.[0]?.durationMillis,
+      label: route.routeLabels?.includes('DEFAULT_ROUTE')
+        ? 'Itinéraire recommandé'
+        : index === 0 ? 'Itinéraire principal' : `Alternative ${index}`,
+    })))
     fitRoute()
   } catch (error) {
     if (requestId !== routeRequestId) return
-    routeError.value = error.message || 'Impossible de calculer le trajet.'
-    updateRoutePath(points)
+    try {
+      const routes = await loadFallbackRoutes(points)
+      if (requestId !== routeRequestId) return
+      routeError.value = 'Itinéraire routier de secours affiché.'
+      updateRoutePaths(routes)
+    } catch (fallbackError) {
+      if (requestId !== routeRequestId) return
+      routeError.value = fallbackError.message || error.message || 'Impossible de calculer le trajet.'
+      updateRoutePaths([{ path: points, label: 'Tracé direct' }])
+    }
     fitRoute()
   }
 }
@@ -230,8 +298,12 @@ async function loadRoute(points, signature) {
 function updateMap() {
   if (!map || !MarkerClass) return
 
+  updateRouteStyles()
   startMarker = updateStaticMarker(startMarker, props.startPosition, '#e11d48', 'Position du client')
-  endMarker = updateStaticMarker(endMarker, props.endPosition, '#111827', 'Destination')
+  const sameAsStart = isValid(props.startPosition)
+    && isValid(props.endPosition)
+    && distanceInMeters(props.startPosition, props.endPosition) <= 1
+  endMarker = updateStaticMarker(endMarker, sameAsStart ? null : props.endPosition, '#111827', 'Destination')
   updateDriverMarker()
 
   const staticSignature = `${pointSignature(props.startPosition)}|${pointSignature(props.endPosition)}`
@@ -246,9 +318,13 @@ function updateMap() {
     routeRequestId++
     if (routeTimer) window.clearTimeout(routeTimer)
     routeTimer = null
-    routeLayer?.setMap(null)
-    routeLayer = null
+    routeLayers.forEach(layer => layer.setMap(null))
+    routeLayers = []
+    routeCandidates = []
+    emit('routes-updated', [])
+    emitSelectedRoute()
     if (points.length === 1 && !props.followDriver) map.setCenter(points[0])
+    emit('route-updated', { distanceMeters: null, durationMillis: null })
     return
   }
 
@@ -309,12 +385,17 @@ async function initializeMap() {
     if (!importLibrary) throw new Error('La bibliothèque Google Maps est indisponible.')
 
     const { Map, Polyline } = await importLibrary('maps')
+    const { AdvancedMarkerElement, PinElement } = await importLibrary('marker')
     if (!mapElement.value) return
 
-    MarkerClass = window.google.maps.Marker
-    if (!MarkerClass) throw new Error('Les repères Google Maps sont indisponibles.')
+    MarkerClass = AdvancedMarkerElement
+    PinElementClass = PinElement
+    if (!MarkerClass || !PinElementClass) throw new Error('Les repères Google Maps avancés sont indisponibles.')
     PolylineClass = Polyline
+    const mapId = import.meta.env.VITE_GOOGLE_MAPS_MAP_ID?.trim()
+    if (!mapId && import.meta.env.PROD) throw new Error('Configurez VITE_GOOGLE_MAPS_MAP_ID pour utiliser les repères avancés en production.')
     map = new Map(mapElement.value, {
+      mapId: mapId || 'DEMO_MAP_ID',
       center: { lat: 5.35, lng: -4.01 },
       zoom: 11,
       mapTypeId: 'hybrid',
@@ -324,6 +405,9 @@ async function initializeMap() {
       clickableIcons: false,
       gestureHandling: 'greedy',
     })
+    if (props.showTraffic && window.google.maps.TrafficLayer) {
+      trafficLayer = new window.google.maps.TrafficLayer({ map })
+    }
     clickListener = map.addListener('click', event => {
       if (props.interactive) {
         emit('point-selected', {
@@ -343,7 +427,7 @@ async function initializeMap() {
 onMounted(initializeMap)
 
 watch(
-  () => [props.startPosition, props.endPosition, props.driverPosition],
+  () => [props.startPosition, props.endPosition, props.driverPosition, props.routeColor, props.showTraffic, props.selectedRouteIndex, props.followDriver],
   updateMap,
   { deep: true },
 )
@@ -354,8 +438,11 @@ onBeforeUnmount(() => {
   if (driverAnimationFrame) cancelAnimationFrame(driverAnimationFrame)
   clickListener?.remove()
   if (authFailureListener) authFailureListeners().delete(authFailureListener)
-  if (routeLayer) routeLayer.setMap(null)
-  for (const marker of [startMarker, endMarker, driverMarker]) marker?.setMap(null)
+  trafficLayer?.setMap(null)
+  routeLayers.forEach(layer => layer.setMap(null))
+  for (const marker of [startMarker, endMarker, driverMarker]) {
+    if (marker) marker.map = null
+  }
 })
 </script>
 
@@ -364,7 +451,7 @@ onBeforeUnmount(() => {
     <div ref="mapElement" class="mission-map" aria-label="Carte Google Maps du trajet" />
     <p v-if="loading" class="mt-2 text-sm text-gray-500" role="status">Chargement de Google Maps…</p>
     <p v-if="mapError" class="mt-2 text-sm text-rose-700" role="alert">{{ mapError }}</p>
-    <p v-if="routeError" class="mt-2 text-sm text-amber-700" role="status">{{ routeError }} Un tracé direct est affiché.</p>
+    <p v-if="routeError" class="mt-2 text-sm text-amber-700" role="status">{{ routeError }}</p>
   </div>
 </template>
 

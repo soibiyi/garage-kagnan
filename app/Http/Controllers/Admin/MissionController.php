@@ -14,7 +14,7 @@ class MissionController extends Controller
     {
         return ClientPortalRequest::query()
             ->whereIn('type', ['depannage', 'convoyage'])
-            ->where('statut', 'terminee')
+            ->whereIn('statut', ['terminee', 'vehicule_arrive_au_garage'])
             ->whereNotNull('chauffeur_id');
     }
 
@@ -24,7 +24,7 @@ class MissionController extends Controller
             'chauffeur_id' => ['nullable', 'integer', 'exists:users,id'],
         ]);
         $chauffeur = isset($validated['chauffeur_id'])
-            ? User::query()->where('role', 'chauffeur')->findOrFail($validated['chauffeur_id'])
+            ? User::query()->whereIn('role', ['chauffeur', 'depanneur', 'depaneur'])->findOrFail($validated['chauffeur_id'])
             : null;
 
         $missions = $this->completedMissionQuery()
@@ -42,6 +42,7 @@ class MissionController extends Controller
                 'chauffeur_accepted_at',
                 'mission_started_at',
                 'mission_completed_at',
+                'distance_parcourue_km',
                 'prix_estime',
                 'tarif_reference',
             ])
@@ -67,10 +68,10 @@ class MissionController extends Controller
     {
         $completed = fn ($query) => $query
             ->whereIn('type', ['depannage', 'convoyage'])
-            ->where('statut', 'terminee');
+            ->whereIn('statut', ['terminee', 'vehicule_arrive_au_garage']);
 
         $chauffeurs = User::query()
-            ->where('role', 'chauffeur')
+            ->whereIn('role', ['chauffeur', 'depanneur', 'depaneur'])
             ->select(['id', 'name', 'email', 'siege'])
             ->withCount(['chauffeurMissions as missions_terminees_count' => $completed])
             ->withSum(['chauffeurMissions as montant_estime_missions_terminees' => $completed], 'prix_estime')

@@ -19,24 +19,25 @@ const isConvoyage = computed(() => props.type === 'convoyage')
 const form = reactive({
   vehicule_id: '',
   lieu: '',
-  lieu_depart: '',
-  lieu_arrivee: '',
   precision: '',
   categorie_tarif: 'voiture_particuliere',
 })
 const clientPosition = ref(null)
-const destinationPosition = ref(null)
 const gpsConsent = ref(false)
-const selectionTarget = ref('start')
 const busy = ref(false)
 const locationBusy = ref(false)
 const error = ref('')
 let refreshTimer
+const garagePosition = { lat: 5.3133718, lng: -4.0893739 }
 
 const statusLabel = status => ({
   en_attente: 'En attente d’un chauffeur',
   accepte: 'Chauffeur affecté',
   en_cours: 'Mission en cours',
+  en_route_recuperation: 'En route vers le véhicule',
+  vehicule_recupere: 'Véhicule récupéré',
+  en_route_garage: 'En route vers le garage',
+  vehicule_arrive_au_garage: 'Véhicule arrivé au garage',
   terminee: 'Mission terminée',
   refuse: 'Refusée',
 })[status] || status.replaceAll('_', ' ')
@@ -45,20 +46,13 @@ const priceLabel = price => price === null || price === undefined
   ? 'Tarif à confirmer par le garage'
   : `${Number(price).toLocaleString('fr-FR')} FCFA`
 
-function choosePoint({ target, position }) {
+function choosePoint({ position }) {
   if (!gpsConsent.value) {
     error.value = 'Cochez votre consentement au partage GPS avant de choisir une position.'
     return
   }
-  if (target === 'start') {
-    clientPosition.value = position
-    const text = 'Position GPS partagée avec le chauffeur'
-    if (isConvoyage.value && !form.lieu_depart) form.lieu_depart = text
-    if (!isConvoyage.value && !form.lieu) form.lieu = text
-  } else {
-    destinationPosition.value = position
-    if (!form.lieu_arrivee) form.lieu_arrivee = 'Destination sélectionnée sur la carte'
-  }
+  clientPosition.value = position
+  if (!form.lieu) form.lieu = 'Position GPS partagée avec le chauffeur'
   error.value = ''
 }
 
@@ -93,10 +87,6 @@ function capturePosition() {
 function validateForm() {
   if (!gpsConsent.value) return 'Le consentement au partage GPS est obligatoire pour ces missions.'
   if (!clientPosition.value) return 'Indiquez le lieu du véhicule avec le GPS ou sur la carte.'
-  if (isConvoyage.value && !destinationPosition.value) return 'Indiquez le lieu d’arrivée sur la carte.'
-  if (isConvoyage.value && !form.lieu_depart.trim()) return 'Le lieu de départ est obligatoire.'
-  if (isConvoyage.value && !form.lieu_arrivee.trim()) return 'Le lieu d’arrivée est obligatoire.'
-  if (!isConvoyage.value && !form.lieu.trim()) return 'Le lieu du véhicule est obligatoire.'
   return ''
 }
 
@@ -113,16 +103,8 @@ async function submit() {
     client_lng: clientPosition.value.lng,
     precision: form.precision || null,
     ...(isConvoyage.value
-      ? {
-          lieu_depart: form.lieu_depart,
-          lieu_arrivee: form.lieu_arrivee,
-          destination_lat: destinationPosition.value.lat,
-          destination_lng: destinationPosition.value.lng,
-        }
-      : {
-          lieu: form.lieu,
-          categorie_tarif: form.categorie_tarif,
-        }),
+      ? { lieu_depart: form.lieu || null }
+      : { lieu: form.lieu || null, categorie_tarif: form.categorie_tarif }),
   }
 
   try {
@@ -132,13 +114,10 @@ async function submit() {
     Object.assign(form, {
       vehicule_id: '',
       lieu: '',
-      lieu_depart: '',
-      lieu_arrivee: '',
       precision: '',
       categorie_tarif: 'voiture_particuliere',
     })
     clientPosition.value = null
-    destinationPosition.value = null
     gpsConsent.value = false
   } catch (requestError) {
     error.value = requestError.response?.data?.message
@@ -162,8 +141,8 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
     <section class="card">
       <h3>{{ title }}</h3>
       <p class="note">
-        Chaque chauffeur de votre siège reçoit cette demande et peut l’accepter ou la refuser.
-        Une mission déjà acceptée doit être terminée avant d’en accepter une autre.
+        Indiquez où récupérer le véhicule, en choisissant un point sur la carte ou votre position actuelle.
+        Après la récupération, le chauffeur ou dépanneur sera dirigé vers le Garage Kagnan.
       </p>
 
       <form class="space-y-4" @submit.prevent="submit">
@@ -176,8 +155,8 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
           </select>
         </label>
 
-        <label class="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm">
-          <input v-model="gpsConsent" type="checkbox" class="mt-1">
+        <label class="check consent">
+          <input v-model="gpsConsent" type="checkbox">
           <span>
             J’autorise le garage et le chauffeur affecté à recevoir la position indiquée et le chauffeur à partager
             sa position pendant la mission. Les coordonnées précises sont supprimées à la clôture.
@@ -189,35 +168,24 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
           <button type="button" class="btn btn-light" :disabled="locationBusy" @click="capturePosition">
             {{ locationBusy ? 'Recherche de la position…' : 'Utiliser ma position actuelle' }}
           </button>
-          <button type="button" class="btn btn-light" :class="{ 'is-active': selectionTarget === 'start' }" @click="selectionTarget = 'start'">
-            Choisir le lieu du véhicule sur la carte
-          </button>
-          <button v-if="isConvoyage" type="button" class="btn btn-light" :class="{ 'is-active': selectionTarget === 'destination' }" @click="selectionTarget = 'destination'">
-            Choisir l’arrivée sur la carte
-          </button>
+          <span class="hint self-center">Ou cliquez sur la carte pour choisir le lieu de récupération.</span>
         </div>
 
         <MissionMap
           :start-position="clientPosition"
-          :end-position="destinationPosition"
+          :end-position="garagePosition"
           :interactive="true"
-          :selection-target="selectionTarget"
+          selection-target="start"
           @point-selected="choosePoint"
         />
 
-        <template v-if="isConvoyage">
-          <label>Lieu de départ<input v-model="form.lieu_depart" maxlength="500" required></label>
-          <label>Lieu d’arrivée<input v-model="form.lieu_arrivee" maxlength="500" required></label>
-        </template>
-        <template v-else>
-          <label>Lieu du véhicule<input v-model="form.lieu" maxlength="500" required autocomplete="street-address"></label>
-          <label>Catégorie du véhicule
+        <label>Repère ou adresse du véhicule (facultatif)<input v-model="form.lieu" maxlength="500" autocomplete="street-address"></label>
+        <label v-if="!isConvoyage">Catégorie du véhicule
             <select v-model="form.categorie_tarif">
               <option value="voiture_particuliere">Voiture particulière</option>
               <option value="autre">Autre catégorie — tarif à confirmer</option>
             </select>
-          </label>
-        </template>
+        </label>
         <label>Précisions<textarea v-model="form.precision" rows="3" maxlength="2000"></textarea></label>
 
         <button class="btn btn-primary full" :disabled="busy">
@@ -243,11 +211,12 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
         <p v-if="demand.chauffeur" class="hint">Chauffeur : {{ demand.chauffeur.name }}</p>
         <p class="hint">Prix : {{ priceLabel(demand.prix_estime) }}</p>
         <MissionTracking
-          v-if="['accepte', 'en_cours'].includes(demand.statut)"
+          v-if="['accepte', 'en_cours', 'en_route_recuperation', 'vehicule_recupere', 'en_route_garage', 'vehicule_arrive_au_garage'].includes(demand.statut)"
           class="mt-4"
           audience="client"
           :request-id="Number(demand.id)"
           :initial-client-position="demand.client_position"
+          :initial-garage-position="demand.garage_position"
           :initial-destination-position="demand.destination_position"
         />
       </article>
@@ -258,4 +227,41 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
 
 <style scoped>
 .is-active{border-color:#e11d48;color:#be123c;background:#fff1f2}
+
+.consent{
+  align-items:flex-start;
+  gap:.625rem;
+  margin-bottom:0;
+  padding:.625rem .75rem;
+  border:1px solid #fde68a;
+  border-radius:.75rem;
+  background:#fffbeb;
+  font-size:.75rem;
+  font-weight:500;
+  line-height:1.4;
+}
+.consent input{
+  flex:none;
+  appearance:none;
+  -webkit-appearance:none;
+  width:18px;
+  height:18px;
+  min-height:18px;
+  margin:.1rem 0 0;
+  padding:0;
+  border:2px solid #8a8d8f;
+  border-radius:4px;
+  background:#fff;
+  box-shadow:none;
+  transition:none;
+  cursor:pointer;
+}
+.consent input:checked{
+  border-color:#e11d48;
+  background:#e11d48 url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='white' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 8.5l3 3 6-7'/%3E%3C/svg%3E") center/80% no-repeat;
+}
+.consent input:focus-visible{
+  outline:2px solid #e11d48;
+  outline-offset:2px;
+}
 </style>

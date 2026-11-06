@@ -203,27 +203,73 @@ class ChauffeurDispatchTest extends TestCase
         $this->actingAs($driver);
         $this->post("/chauffeur/missions/{$mission->id}/accepter")->assertRedirect();
         $this->post("/chauffeur/missions/{$mission->id}/demarrer")->assertRedirect();
+        $startedAt = $mission->fresh()->mission_started_at;
+        $this->post("/chauffeur/missions/{$mission->id}/demarrer")->assertRedirect();
+        $this->assertEquals($startedAt, $mission->fresh()->mission_started_at);
         $this->putJson("/chauffeur/missions/{$mission->id}/position", [
-                'latitude' => 5.32,
-                'longitude' => -4.01,
+            'latitude' => 5.4,
+            'longitude' => -4.1,
             ])
             ->assertOk()
-            ->assertJsonPath('position.lat', 5.32);
+            ->assertJsonPath('position.lat', 5.4);
 
         $this->assertDatabaseHas('client_portal_request_positions', [
             'client_portal_request_id' => $mission->id,
-            'latitude' => 5.32,
+            'latitude' => 5.4,
         ]);
 
-        $this->post("/chauffeur/missions/{$mission->id}/terminer")
+        $this->assertDatabaseHas('client_portal_requests', [
+            'id' => $mission->id,
+            'statut' => 'en_route_recuperation',
+        ]);
+
+        $this->post("/chauffeur/missions/{$mission->id}/arrive-recuperation")
+            ->assertRedirect();
+        $this->assertDatabaseHas('client_portal_requests', [
+            'id' => $mission->id,
+            'statut' => 'vehicule_recupere',
+        ]);
+
+        $this->post("/chauffeur/missions/{$mission->id}/demarrer-garage", [
+            'vehicule_securise' => true,
+            'etat_vehicule_verifie' => true,
+        ])->assertRedirect();
+        $this->assertDatabaseHas('client_portal_requests', [
+            'id' => $mission->id,
+            'statut' => 'en_route_garage',
+        ]);
+
+        $this->putJson("/chauffeur/missions/{$mission->id}/position", [
+            'latitude' => 5.32,
+            'longitude' => -4.01,
+        ])->assertOk();
+
+        $admin = User::factory()->create(['role' => 'admin', 'siege' => 'SGK']);
+
+        $completionResponse = $this->post("/chauffeur/missions/{$mission->id}/terminer")
             ->assertRedirect();
 
         $this->assertDatabaseHas('client_portal_requests', [
             'id' => $mission->id,
-            'statut' => 'terminee',
+            'statut' => 'vehicule_arrive_au_garage',
             'client_lat' => null,
             'client_lng' => null,
         ]);
+        $this->assertDatabaseHas('client_portal_messages', [
+            'client_id' => $mission->client_id,
+            'message' => 'Votre véhicule est bien arrivé au Garage Kagnan.',
+        ]);
+        $this->assertDatabaseHas('notifications', [
+            'notifiable_id' => $admin->id,
+            'data->mission_id' => $mission->id,
+        ]);
+        $this->assertGreaterThan(0, $mission->fresh()->distance_parcourue_km);
+        $completionResponse->assertSessionHas('missionSummary.distance_parcourue_km', $mission->fresh()->distance_parcourue_km);
+
+        $this->actingAs($admin)
+            ->getJson('/admin/notifications/missions')
+            ->assertOk()
+            ->assertJsonPath('notifications.0.data.mission_id', $mission->id);
         $this->assertDatabaseMissing('client_portal_request_positions', [
             'client_portal_request_id' => $mission->id,
         ]);
@@ -232,7 +278,7 @@ class ChauffeurDispatchTest extends TestCase
     private function chauffeur(string $siege): User
     {
         return User::factory()->create([
-            'role' => 'chauffeur',
+            'role' => 'depanneur',
             'siege' => $siege,
         ]);
     }

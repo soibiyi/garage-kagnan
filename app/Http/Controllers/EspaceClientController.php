@@ -187,6 +187,10 @@ public function chat(Client $client)
                         'lat' => $demande->client_lat,
                         'lng' => $demande->client_lng,
                     ] : null,
+                    'garage_position' => $demande->garage_lat !== null ? [
+                        'lat' => $demande->garage_lat,
+                        'lng' => $demande->garage_lng,
+                    ] : null,
                     'destination_position' => $demande->destination_lat !== null ? [
                         'lat' => $demande->destination_lat,
                         'lng' => $demande->destination_lng,
@@ -283,17 +287,14 @@ public function chat(Client $client)
             );
 
             $hasPayments = $intervention->facture()->whereHas('paiements')->exists();
-            $devisEnAttente = $devis->statut === 'en_attente'
+            $devisNonValide = $devis->statut === 'en_attente'
                 && $intervention->statut === 'attente_accord'
-                && !$hasPayments;
-            $devisAccepteSansPaiement = $devis->statut === 'accepte'
-                && $intervention->statut === 'accepte'
                 && !$hasPayments;
 
             abort_unless(
-                $devisEnAttente || $devisAccepteSansPaiement,
+                $devisNonValide,
                 409,
-                'Ce devis ne peut plus être modifié.'
+                'Ce devis a déjà été validé et ne peut plus être modifié.'
             );
 
             $acceptedIds = array_map('intval', $validated['lignes_acceptees']);
@@ -335,14 +336,11 @@ public function chat(Client $client)
             'message' => ['nullable', 'required_if:type,message', 'string', 'max:2000'],
             'prestation' => ['nullable', 'required_if:type,rendez_vous', 'string', 'max:150'],
             'date_souhaitee' => ['nullable', 'required_if:type,rendez_vous', 'date', 'after_or_equal:today'],
-            'lieu' => ['nullable', 'required_if:type,depannage', 'string', 'max:500'],
-            'lieu_depart' => ['nullable', 'required_if:type,convoyage', 'string', 'max:500'],
-            'lieu_arrivee' => ['nullable', 'required_if:type,convoyage', 'string', 'max:500'],
+            'lieu' => ['nullable', 'string', 'max:500'],
+            'lieu_depart' => ['nullable', 'string', 'max:500'],
             'precision' => ['nullable', 'string', 'max:2000'],
             'client_lat' => ['nullable', 'required_if:type,depannage,convoyage', 'numeric', 'between:-90,90'],
             'client_lng' => ['nullable', 'required_if:type,depannage,convoyage', 'numeric', 'between:-180,180'],
-            'destination_lat' => ['nullable', 'required_if:type,convoyage', 'numeric', 'between:-90,90'],
-            'destination_lng' => ['nullable', 'required_if:type,convoyage', 'numeric', 'between:-180,180'],
             'gps_consent' => ['exclude_unless:type,depannage,convoyage', 'required', 'accepted'],
             'categorie_tarif' => ['nullable', 'required_if:type,depannage', Rule::in(['voiture_particuliere', 'autre'])],
         ]);
@@ -368,13 +366,12 @@ public function chat(Client $client)
                 'precision' => $validated['precision'] ?? null,
             ],
             'depannage' => [
-                'lieu' => $validated['lieu'],
+                'lieu' => $validated['lieu'] ?? null,
                 'precision' => $validated['precision'] ?? null,
                 'categorie_tarif' => $validated['categorie_tarif'],
             ],
             'convoyage' => [
-                'lieu_depart' => $validated['lieu_depart'],
-                'lieu_arrivee' => $validated['lieu_arrivee'],
+                'lieu_depart' => $validated['lieu_depart'] ?? null,
                 'precision' => $validated['precision'] ?? null,
             ],
         };
@@ -402,8 +399,10 @@ public function chat(Client $client)
             'statut' => 'en_attente',
             'client_lat' => $validated['client_lat'] ?? null,
             'client_lng' => $validated['client_lng'] ?? null,
-            'destination_lat' => $validated['destination_lat'] ?? null,
-            'destination_lng' => $validated['destination_lng'] ?? null,
+            'garage_lat' => in_array($validated['type'], ['depannage', 'convoyage'], true) ? 5.3133718 : null,
+            'garage_lng' => in_array($validated['type'], ['depannage', 'convoyage'], true) ? -4.0893739 : null,
+            'destination_lat' => in_array($validated['type'], ['depannage', 'convoyage'], true) ? 5.3133718 : null,
+            'destination_lng' => in_array($validated['type'], ['depannage', 'convoyage'], true) ? -4.0893739 : null,
             'gps_consent_at' => in_array($validated['type'], ['depannage', 'convoyage'], true) ? now() : null,
             'prix_estime' => $prixEstime,
             'tarif_reference' => $tarifReference,
@@ -438,7 +437,7 @@ public function chat(Client $client)
 
         abort_unless($portalRequest->client_id === $client->id, 404);
         abort_unless(
-            in_array($portalRequest->statut, ['accepte', 'en_cours'], true),
+            in_array($portalRequest->statut, ['accepte', 'en_cours', 'en_route_recuperation', 'vehicule_recupere', 'en_route_garage', 'vehicule_arrive_au_garage'], true),
             409,
             'Le suivi est disponible uniquement pendant une mission active.'
         );
@@ -458,6 +457,10 @@ public function chat(Client $client)
             'destination_position' => $portalRequest->destination_lat !== null ? [
                 'lat' => (float) $portalRequest->destination_lat,
                 'lng' => (float) $portalRequest->destination_lng,
+            ] : null,
+            'garage_position' => $portalRequest->garage_lat !== null ? [
+                'lat' => (float) $portalRequest->garage_lat,
+                'lng' => (float) $portalRequest->garage_lng,
             ] : null,
             'statut' => $portalRequest->statut,
         ]);

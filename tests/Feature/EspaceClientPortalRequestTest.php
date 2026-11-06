@@ -253,7 +253,67 @@ class EspaceClientPortalRequestTest extends TestCase
             'siege' => 'SGK',
             'prix_estime' => 35000,
             'client_lat' => 5.32,
+            'garage_lat' => 5.3133718,
+            'garage_lng' => -4.0893739,
+            'destination_lat' => 5.3133718,
+            'destination_lng' => -4.0893739,
         ]);
+    }
+
+    public function test_convoyage_uses_the_pickup_location_and_garage_as_its_destination(): void
+    {
+        $client = $this->registerClient('0700000213');
+
+        $this->postJson('/espace-client/api/demandes', [
+            'type' => 'convoyage',
+            'client_lat' => 5.32,
+            'client_lng' => -4.01,
+            'gps_consent' => true,
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('client_portal_requests', [
+            'client_id' => $client->id,
+            'type' => 'convoyage',
+            'client_lat' => 5.32,
+            'garage_lat' => 5.3133718,
+            'garage_lng' => -4.0893739,
+            'destination_lat' => 5.3133718,
+            'destination_lng' => -4.0893739,
+        ]);
+    }
+
+    public function test_client_tracking_returns_driver_position_and_current_trip_stage(): void
+    {
+        $client = $this->registerClient('0700000214');
+        $mission = $client->portalRequests()->create([
+            'siege' => 'SGK',
+            'type' => 'convoyage',
+            'details' => [],
+            'statut' => 'en_route_recuperation',
+            'client_lat' => 5.32,
+            'client_lng' => -4.01,
+            'garage_lat' => 5.3133718,
+            'garage_lng' => -4.0893739,
+            'destination_lat' => 5.3133718,
+            'destination_lng' => -4.0893739,
+        ]);
+        $mission->position()->create([
+            'latitude' => 5.35,
+            'longitude' => -4.03,
+        ]);
+
+        $this->getJson("/espace-client/api/demandes/{$mission->id}/position")
+            ->assertOk()
+            ->assertJsonPath('statut', 'en_route_recuperation')
+            ->assertJsonPath('position.lat', 5.35)
+            ->assertJsonPath('client_position.lat', 5.32)
+            ->assertJsonPath('garage_position.lat', 5.3133718);
+
+        $mission->update(['statut' => 'en_route_garage']);
+        $this->getJson("/espace-client/api/demandes/{$mission->id}/position")
+            ->assertOk()
+            ->assertJsonPath('statut', 'en_route_garage')
+            ->assertJsonPath('position.lng', -4.03);
     }
 
     private function registerClient(string $telephone): Client

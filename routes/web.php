@@ -4,6 +4,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\MissionController;
+use App\Http\Controllers\Admin\MissionNotificationController;
 use App\Http\Controllers\Reception\ReceptionController; 
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
@@ -53,6 +54,8 @@ Route::middleware('auth')->group(function () {
 });
 
 Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('/notifications/missions', [MissionNotificationController::class, 'index'])->name('notifications.missions');
+    Route::patch('/notifications/missions/{notification}/read', [MissionNotificationController::class, 'markRead'])->name('notifications.missions.read');
     Route::post('/siege', [UserController::class, 'changerSiege'])->name('siege.switch');
     Route::get('/chauffeurs/historique', [MissionController::class, 'chauffeursHistory'])->name('chauffeurs.history');
     Route::get('/missions/historique', [MissionController::class, 'history'])->name('missions.history');
@@ -186,6 +189,21 @@ Route::middleware(['auth', 'verified'])->prefix('chauffeur')->name('chauffeur.')
     Route::post('/missions/{portalRequest}/accepter', [ChauffeurController::class, 'accept'])->name('missions.accept');
     Route::post('/missions/{portalRequest}/refuser', [ChauffeurController::class, 'decline'])->name('missions.decline');
     Route::post('/missions/{portalRequest}/demarrer', [ChauffeurController::class, 'start'])->name('missions.start');
+    Route::post('/missions/{portalRequest}/arrive-recuperation', [ChauffeurController::class, 'arrivePickup'])->name('missions.arrive-pickup');
+    Route::post('/missions/{portalRequest}/demarrer-garage', [ChauffeurController::class, 'startGarage'])->name('missions.start-garage');
+    Route::post('/missions/{portalRequest}/terminer', [ChauffeurController::class, 'complete'])->name('missions.complete');
+    Route::put('/missions/{portalRequest}/position', [ChauffeurController::class, 'updatePosition'])
+        ->middleware('throttle:30,1')
+        ->name('missions.position');
+});
+
+Route::middleware(['auth', 'verified'])->prefix('depanneur')->name('depanneur.')->group(function () {
+    Route::get('/missions', [ChauffeurController::class, 'index'])->name('index');
+    Route::post('/missions/{portalRequest}/accepter', [ChauffeurController::class, 'accept'])->name('missions.accept');
+    Route::post('/missions/{portalRequest}/refuser', [ChauffeurController::class, 'decline'])->name('missions.decline');
+    Route::post('/missions/{portalRequest}/demarrer', [ChauffeurController::class, 'start'])->name('missions.start');
+    Route::post('/missions/{portalRequest}/arrive-recuperation', [ChauffeurController::class, 'arrivePickup'])->name('missions.arrive-pickup');
+    Route::post('/missions/{portalRequest}/demarrer-garage', [ChauffeurController::class, 'startGarage'])->name('missions.start-garage');
     Route::post('/missions/{portalRequest}/terminer', [ChauffeurController::class, 'complete'])->name('missions.complete');
     Route::put('/missions/{portalRequest}/position', [ChauffeurController::class, 'updatePosition'])
         ->middleware('throttle:30,1')

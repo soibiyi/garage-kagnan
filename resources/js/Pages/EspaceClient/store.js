@@ -16,6 +16,22 @@ const statutDevis = {
   refuse: 'Refusé',
 }
 
+function statutAffiche(intervention) {
+  const facture = intervention?.facture
+  if (!facture) {
+    return statutDevis[intervention?.devis?.statut] || intervention?.devis?.statut || 'En attente'
+  }
+
+  const total = Number(facture.montant_total || 0)
+  const paye = Number(facture.montant_paye || 0)
+
+  if (total > 0 && paye >= total) {
+    return 'Soldé'
+  }
+
+  return 'Facturé'
+}
+
 function mapClient(client) {
   const vehicles = client.vehicules.map(vehicule => ({
     id: vehicule.id,
@@ -57,16 +73,22 @@ function mapClient(client) {
       ref: `DV-${String(intervention.devis.id).padStart(6, '0')}`,
       date: intervention.devis.created_at,
       objet: `${intervention.vehicule.modele || ''}`.trim() || 'Intervention atelier',
-      statut: statutDevis[intervention.devis.statut] || intervention.devis.statut,
+      statut: statutAffiche(intervention),
+      facture: intervention.facture ? {
+        ...intervention.facture,
+        montant_total: Number(intervention.facture.montant_total || 0),
+        montant_paye: Number(intervention.facture.montant_paye || 0),
+        paiements: intervention.facture.paiements || [],
+      } : null,
       lignes,
       petite_fourniture_active: intervention.devis.petite_fourniture_active,
       petite_fourniture_montant: intervention.devis.petite_fourniture_montant === null
         ? null
         : Number(intervention.devis.petite_fourniture_montant),
       numero_ot: intervention.numero_ot,
-      selectionPossible: ['en_attente', 'accepte'].includes(intervention.devis.statut)
-        && ['attente_accord', 'accepte'].includes(intervention.statut)
-        && !intervention.facture?.paiements?.length,
+      selectionPossible: intervention.devis.statut === 'en_attente'
+        && intervention.statut === 'attente_accord'
+        && !intervention.facture,
     }]
   })
 

@@ -51,10 +51,35 @@ class EspaceClientQuoteSelectionTest extends TestCase
             ->assertJsonPath('client.vehicules.0.interventions.0.devis.lignes.0.is_accepted', true);
     }
 
-    public function test_client_cannot_change_another_clients_quote_or_submit_foreign_lines(): void
+    public function test_client_cannot_submit_the_same_quote_twice_after_first_validation(): void
     {
         $client = $this->registerClient('0700000102');
-        $otherClient = $this->createClient('0700000103');
+        $devis = $this->createQuoteFor($client);
+        $accepted = $devis->lignes()->first();
+        $rejected = $devis->lignes()->latest('id')->first();
+
+        $this->patchJson("/espace-client/api/devis/{$devis->id}/choix", [
+            'lignes_acceptees' => [$accepted->id],
+        ])->assertOk();
+
+        $this->patchJson("/espace-client/api/devis/{$devis->id}/choix", [
+            'lignes_acceptees' => [$rejected->id],
+        ])->assertStatus(409);
+
+        $this->assertDatabaseHas('devis', [
+            'id' => $devis->id,
+            'statut' => 'accepte',
+        ]);
+        $this->assertDatabaseHas('lignes_devis', [
+            'id' => $accepted->id,
+            'is_accepted' => true,
+        ]);
+    }
+
+    public function test_client_cannot_change_another_clients_quote_or_submit_foreign_lines(): void
+    {
+        $client = $this->registerClient('0700000103');
+        $otherClient = $this->createClient('0700000104');
         $ownQuote = $this->createQuoteFor($client);
         $otherQuote = $this->createQuoteFor($otherClient);
         $ownLine = $ownQuote->lignes()->first();

@@ -60,7 +60,7 @@ const details = mission => mission.details || {}
             <div class="flex flex-wrap items-center gap-2">
               <h3 class="text-lg font-black">{{ typeLabel(mission.type) }} #{{ mission.id }}</h3>
               <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800">
-                Terminée
+                {{ mission.statut === 'vehicule_arrive_au_garage' ? 'Arrivée au garage' : 'Terminée' }}
               </span>
               <span class="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-bold text-gray-700">
                 Siège {{ mission.siege || '—' }}
@@ -104,6 +104,10 @@ const details = mission => mission.details || {}
           <div>
             <dt class="font-bold text-gray-500">Mission terminée</dt>
             <dd>{{ dateLabel(mission.mission_completed_at) }}</dd>
+          </div>
+          <div v-if="mission.distance_parcourue_km !== null && mission.distance_parcourue_km !== undefined">
+            <dt class="font-bold text-gray-500">Distance parcourue</dt>
+            <dd>{{ Number(mission.distance_parcourue_km).toFixed(1) }} km</dd>
           </div>
           <div v-for="(value, key) in details(mission)" :key="key">
             <dt class="font-bold capitalize text-gray-500">{{ key.replaceAll('_', ' ') }}</dt>

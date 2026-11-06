@@ -234,7 +234,7 @@ class ChargeClientController extends Controller
         $this->autoriserClientPortail($client);
         abort_unless($portalRequest->client_id === $client->id, 404);
         abort_unless(
-            in_array($portalRequest->statut, ['accepte', 'en_cours'], true),
+            in_array($portalRequest->statut, ['accepte', 'en_cours', 'en_route_recuperation', 'vehicule_recupere', 'en_route_garage', 'vehicule_arrive_au_garage'], true),
             409,
             'Le suivi est disponible uniquement pendant une mission active.'
         );
@@ -250,6 +250,10 @@ class ChargeClientController extends Controller
             'client_position' => $portalRequest->client_lat !== null ? [
                 'lat' => (float) $portalRequest->client_lat,
                 'lng' => (float) $portalRequest->client_lng,
+            ] : null,
+            'garage_position' => $portalRequest->garage_lat !== null ? [
+                'lat' => (float) $portalRequest->garage_lat,
+                'lng' => (float) $portalRequest->garage_lng,
             ] : null,
             'destination_position' => $portalRequest->destination_lat !== null ? [
                 'lat' => (float) $portalRequest->destination_lat,
