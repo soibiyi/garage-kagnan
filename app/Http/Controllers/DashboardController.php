@@ -22,6 +22,9 @@ class DashboardController extends Controller
         if ($role === 'magasinier') {
             return redirect()->route('magasinier.pieces.index');
         }
+        if ($role === 'chauffeur') {
+            return redirect()->route('chauffeur.index');
+        }
 
         $statuts = self::STATUTS;
 

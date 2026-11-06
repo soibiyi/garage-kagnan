@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\Client;
+use App\Models\ClientPortalMessage;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -186,6 +187,72 @@ class EspaceClientPortalRequestTest extends TestCase
         $this->assertDatabaseHas('client_portal_requests', [
             'id' => $appointment->id,
             'statut' => 'en_attente',
+        ]);
+    }
+
+    public function test_charge_client_can_access_chat_for_a_client_created_offline(): void
+    {
+        $client = Client::create([
+            'nom' => 'Hors ligne',
+            'prenom' => 'Client',
+            'telephone' => '0700000210',
+            'siege' => 'SGK',
+        ]);
+        $this->assertFalse((bool) $client->portal_registered);
+
+        $message = ClientPortalMessage::create([
+            'client_id' => $client->id,
+            'sender_type' => 'client',
+            'message' => 'Bonjour, je souhaite un suivi.',
+        ]);
+        $staff = User::factory()->create([
+            'role' => 'charge_client',
+            'siege' => 'SGK',
+        ]);
+
+        $this->actingAs($staff)
+            ->get('/suivi-client/clients')
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page->has('clients', 1));
+
+        $this->getJson("/suivi-client/clients/{$client->id}/portail/messages")
+            ->assertOk()
+            ->assertJsonPath('messages.0.id', $message->id)
+            ->assertJsonPath('messages.0.message', 'Bonjour, je souhaite un suivi.');
+    }
+
+    public function test_dispatch_requests_require_location_and_explicit_gps_consent(): void
+    {
+        $this->registerClient('0700000211');
+
+        $this->postJson('/espace-client/api/demandes', [
+            'type' => 'depannage',
+            'lieu' => 'Plateau, Abidjan',
+            'categorie_tarif' => 'voiture_particuliere',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['client_lat', 'client_lng', 'gps_consent']);
+    }
+
+    public function test_abidjan_passenger_car_towing_uses_published_day_tariff(): void
+    {
+        $client = $this->registerClient('0700000212');
+        $this->travelTo(now()->setTimezone('Africa/Abidjan')->setTime(12, 0));
+
+        $this->postJson('/espace-client/api/demandes', [
+            'type' => 'depannage',
+            'lieu' => 'Plateau, Abidjan',
+            'categorie_tarif' => 'voiture_particuliere',
+            'client_lat' => 5.32,
+            'client_lng' => -4.01,
+            'gps_consent' => true,
+        ])->assertCreated()
+            ->assertJsonPath('request.prix_estime', 35000);
+
+        $this->assertDatabaseHas('client_portal_requests', [
+            'client_id' => $client->id,
+            'siege' => 'SGK',
+            'prix_estime' => 35000,
+            'client_lat' => 5.32,
         ]);
     }
 

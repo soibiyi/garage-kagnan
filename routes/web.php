@@ -3,6 +3,7 @@
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\Admin\MissionController;
 use App\Http\Controllers\Reception\ReceptionController; 
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
@@ -14,6 +15,7 @@ use App\Http\Controllers\Administrative\StockController;
 use App\Http\Controllers\ChargeClientController; 
 use App\Http\Controllers\Administrative\FactureController;
 use App\Http\Controllers\EspaceClientController;
+use App\Http\Controllers\Chauffeur\ChauffeurController;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -37,6 +39,7 @@ Route::patch('/espace-client/api/profil', [EspaceClientController::class, 'updat
 Route::post('/espace-client/api/vehicules', [EspaceClientController::class, 'addVehicle'])->name('espace-client.vehicles.store');
 Route::patch('/espace-client/api/devis/{devis}/choix', [EspaceClientController::class, 'updateQuoteSelection'])->name('espace-client.quotes.selection');
 Route::post('/espace-client/api/demandes', [EspaceClientController::class, 'storePortalRequest'])->middleware('throttle:10,1')->name('espace-client.requests.store');
+Route::get('/espace-client/api/demandes/{portalRequest}/position', [EspaceClientController::class, 'requestPosition'])->name('espace-client.requests.position');
 
 // Tableau de bord : toute la logique (filtres, onglets, compteurs, redirections de rôle) est dans le contrôleur
 Route::get('/dashboard', [DashboardController::class, 'index'])
@@ -51,6 +54,8 @@ Route::middleware('auth')->group(function () {
 
 Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.')->group(function () {
     Route::post('/siege', [UserController::class, 'changerSiege'])->name('siege.switch');
+    Route::get('/chauffeurs/historique', [MissionController::class, 'chauffeursHistory'])->name('chauffeurs.history');
+    Route::get('/missions/historique', [MissionController::class, 'history'])->name('missions.history');
     Route::get('/users', [UserController::class, 'index'])->name('users.index');
     Route::get('/users/create', [UserController::class, 'create'])->name('users.create');
     Route::post('/users', [UserController::class, 'store'])->name('users.store');
@@ -103,12 +108,25 @@ Route::middleware(['auth', 'verified'])->prefix('suivi-client')->name('charge_cl
     Route::post('/clients/{client}/portail/demandes/{portalRequest}/accepter', [ChargeClientController::class, 'acceptPortalAppointment'])->name('clients.portal-requests.accept');
     Route::get('/clients/{client}/portail/messages', [ChargeClientController::class, 'portalMessages'])->name('clients.portal-messages.index');
     Route::post('/clients/{client}/portail/messages', [ChargeClientController::class, 'sendPortalMessage'])->middleware('throttle:30,1')->name('clients.portal-messages.store');
+    Route::get('/clients/{client}/portail/demandes/{portalRequest}/position', [ChargeClientController::class, 'portalRequestPosition'])
+        ->name('clients.portal-requests.position');
     Route::get('/vehicules/{vehicule}', [ChargeClientController::class, 'showVehicule'])->name('vehicules.show');
+    Route::patch('/vehicules/{vehicule}/echeances', [ChargeClientController::class, 'updateVehiculeEcheances'])->name('vehicules.echeances.update');
     Route::get('/vehicules/{vehicule}/infos', [ChargeClientController::class, 'infosVehicule'])->name('vehicules.infos');
     Route::get('/vehicules/{vehicule}/relances', [ChargeClientController::class, 'relancesVehicule'])->name('vehicules.relances');
     Route::get('/vehicules/{vehicule}/interventions', [ChargeClientController::class, 'interventionsVehicule'])->name('vehicules.interventions');
     Route::patch('/interventions/{intervention}/statut', [ChargeClientController::class, 'updateStatut'])->name('vehicules.update-statut');
     Route::post('/vehicules/{vehicule}/interactions', [ChargeClientController::class, 'storeInteraction'])->name('vehicules.interactions.store');
+Route::get('clients/{client}/chat', [EspaceClientController::class, 'chat'])->name('clients.chat');
+Route::get('clients/{client}/demandes', [EspaceClientController::class, 'demandes'])->name('clients.demandes');
+Route::get('clients/{client}/rendez-vous', [EspaceClientController::class, 'rendezVous'])->name('clients.rendez-vous');
+Route::post('clients/{client}/portal-requests/{portalRequest}/refuse',
+    [EspaceClientController::class, 'refuseRequest'])
+    ->name('clients.portal-requests.refuse');
+
+Route::get('notifications/messages',
+    [EspaceClientController::class, 'messagesNonLus'])
+    ->name('notifications.messages');    
 });
 
 Route::middleware(['auth'])->prefix('administration')->name('administration.')->group(function () {
@@ -162,6 +180,17 @@ Route::middleware(['auth'])->prefix('administration')->name('administration.')->
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/mecanicien/interventions', [MecanicienController::class, 'index'])->name('mecanicien.index');
     Route::patch('/mecanicien/interventions/{intervention}/progres', [MecanicienController::class, 'progress'])->name('mecanicien.progress');
+});
+
+Route::middleware(['auth', 'verified'])->prefix('chauffeur')->name('chauffeur.')->group(function () {
+    Route::get('/missions', [ChauffeurController::class, 'index'])->name('index');
+    Route::post('/missions/{portalRequest}/accepter', [ChauffeurController::class, 'accept'])->name('missions.accept');
+    Route::post('/missions/{portalRequest}/refuser', [ChauffeurController::class, 'decline'])->name('missions.decline');
+    Route::post('/missions/{portalRequest}/demarrer', [ChauffeurController::class, 'start'])->name('missions.start');
+    Route::post('/missions/{portalRequest}/terminer', [ChauffeurController::class, 'complete'])->name('missions.complete');
+    Route::put('/missions/{portalRequest}/position', [ChauffeurController::class, 'updatePosition'])
+        ->middleware('throttle:30,1')
+        ->name('missions.position');
 });
 
 require __DIR__.'/auth.php';

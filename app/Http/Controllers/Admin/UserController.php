@@ -8,6 +8,7 @@ use App\Models\Vehicule;
 use App\Models\Client;
 use App\Models\InteractionClient;
 use App\Models\Consigne;
+use App\Models\ClientPortalRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -121,7 +122,7 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:191|unique:users',
             'password' => 'required|string|min:6',
-            'role' => 'required|string|in:admin,receptionniste,mecanicien,administratif,charge_client,magasinier',
+            'role' => 'required|string|in:admin,receptionniste,mecanicien,administratif,charge_client,magasinier,chauffeur',
         ]);
 
         User::create([
@@ -153,12 +154,22 @@ class UserController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => ['required', 'string', 'email', 'max:191', Rule::unique('users')->ignore($user->id)],
-            'role' => 'required|string|in:admin,receptionniste,mecanicien,administratif,charge_client,magasinier',
+            'role' => 'required|string|in:admin,receptionniste,mecanicien,administratif,charge_client,magasinier,chauffeur',
             'password' => 'nullable|string|min:6',
             'siege' => [Rule::requiredIf($request->role !== 'admin'), 'nullable', Rule::in(array_keys(config('sieges')))],
         ], [
             'siege.required' => 'Veuillez attribuer un siège à ce collaborateur.',
         ]);
+
+        if (
+            $user->role === 'chauffeur'
+            && $request->role !== 'chauffeur'
+            && ClientPortalRequest::where('chauffeur_id', $user->id)
+                ->whereIn('statut', ['accepte', 'en_cours'])
+                ->exists()
+        ) {
+            return back()->with('error', 'Ce chauffeur ne peut pas changer de rôle tant qu’une mission est en cours.');
+        }
 
         $user->update([
             'name' => $request->name,
@@ -178,6 +189,15 @@ class UserController extends Controller
 
         if ($user->id === auth()->id()) {
             return back()->with('error', 'Vous ne pouvez pas supprimer votre propre compte administrateur.');
+        }
+
+        if (
+            $user->role === 'chauffeur'
+            && ClientPortalRequest::where('chauffeur_id', $user->id)
+                ->whereIn('statut', ['accepte', 'en_cours'])
+                ->exists()
+        ) {
+            return back()->with('error', 'Ce chauffeur ne peut pas être supprimé tant qu’une mission est en cours.');
         }
 
         $user->delete();

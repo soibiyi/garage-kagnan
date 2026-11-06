@@ -11,9 +11,9 @@ const props = defineProps({
 })
 
 const config = {
-  rendez_vous: { title: 'Demander un rendez-vous', submit: 'Envoyer ma demande' },
-  depannage: { title: 'Demander un dépannage', submit: 'Envoyer ma demande' },
-  convoyage: { title: 'Demander un convoyage', submit: 'Envoyer ma demande' },
+  rendez_vous: { title: 'Demander un rendez-vous', submit: 'Envoyer ma demande', icon: 'fa-calendar-check', vide: 'Aucun rendez-vous demandé pour le moment.' },
+  depannage: { title: 'Demander un dépannage', submit: 'Envoyer ma demande', icon: 'fa-truck-medical', vide: 'Aucune demande de dépannage envoyée.' },
+  convoyage: { title: 'Demander un convoyage', submit: 'Envoyer ma demande', icon: 'fa-truck-pickup', vide: 'Aucune demande de convoyage envoyée.' },
 }
 const activeConfig = computed(() => config[props.type])
 const today = new Date().toISOString().slice(0, 10)
@@ -46,7 +46,17 @@ const statutLisible = statut => ({
   accepte: 'Acceptée par le garage',
   refuse: 'Refusée',
 })[statut] || statut.replaceAll('_', ' ')
+const classeStatut = statut => ({ en_attente: 'st-wait', accepte: 'st-ok', refuse: 'st-no' })[statut] || 'st-info'
+const iconeStatut = statut => ({ en_attente: 'fa-hourglass-half', accepte: 'fa-circle-check', refuse: 'fa-circle-xmark' })[statut] || 'fa-circle-info'
 const dateLisible = date => date ? new Date(date).toLocaleDateString('fr-FR') : '—'
+
+// Un convoyage affiche un trajet (départ vers arrivée) ; les autres détails restent en liste
+const trajet = demande => (demande.details?.lieu_depart && demande.details?.lieu_arrivee
+  ? { depart: demande.details.lieu_depart, arrivee: demande.details.lieu_arrivee }
+  : null)
+const autresDetails = demande => Object.entries(demande.details || {})
+  .filter(([key]) => !(trajet(demande) && ['lieu_depart', 'lieu_arrivee'].includes(key)))
+  .map(([key, value]) => [titresDetails[key] || key, key === 'date_souhaitee' ? dateLisible(value) : value])
 
 async function submit() {
   busy.value = true
@@ -94,8 +104,9 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
 <template>
   <div class="cols">
     <div class="card">
-      <h3>{{ activeConfig.title }}</h3>
-      <p class="hint" style="margin-bottom:14px">
+      <h3><i class="fa-solid" :class="activeConfig.icon"></i> {{ activeConfig.title }}</h3>
+      <p class="note">
+        <i class="fa-solid fa-circle-info"></i>
         Votre demande sera transmise au garage et restera en attente jusqu’à confirmation par l’équipe.
       </p>
       <form @submit.prevent="submit">
@@ -109,16 +120,20 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
         </label>
 
         <template v-if="type === 'rendez_vous'">
-          <label>Prestation souhaitée
-            <select v-model="form.prestation">
-              <option v-for="service in services" :key="service">{{ service }}</option>
-            </select>
-          </label>
+          <fieldset>
+            <legend>Prestation souhaitée</legend>
+            <div class="opts">
+              <label v-for="service in services" :key="service" class="opt">
+                <input v-model="form.prestation" type="radio" name="prestation" :value="service">
+                <span>{{ service }}</span>
+              </label>
+            </div>
+          </fieldset>
           <label>Date souhaitée<input v-model="form.date_souhaitee" type="date" :min="today" required></label>
           <label>Précisions<textarea v-model="form.precision" rows="3" maxlength="2000"></textarea></label>
         </template>
         <template v-else-if="type === 'depannage'">
-          <label>Lieu du véhicule<input v-model="form.lieu" maxlength="500" required></label>
+          <label>Lieu du véhicule<input v-model="form.lieu" maxlength="500" required autocomplete="street-address"></label>
           <label>Description du besoin<textarea v-model="form.precision" rows="3" maxlength="2000"></textarea></label>
         </template>
         <template v-else>
@@ -127,28 +142,41 @@ onBeforeUnmount(() => window.clearInterval(refreshTimer))
           <label>Précisions<textarea v-model="form.precision" rows="3" maxlength="2000"></textarea></label>
         </template>
 
-        <button class="btn btn-primary" :disabled="busy">
+        <button class="btn btn-primary full" :disabled="busy">
+          <i class="fa-solid" :class="busy ? 'fa-spinner fa-spin' : 'fa-paper-plane'"></i>
           {{ busy ? 'Envoi…' : activeConfig.submit }}
         </button>
-        <p v-if="error" class="err" role="alert">{{ error }}</p>
+        <p v-if="error" class="err" role="alert"><i class="fa-solid fa-circle-exclamation"></i>{{ error }}</p>
       </form>
     </div>
 
     <div class="card">
-      <h3>Mes demandes</h3>
-      <article v-for="demande in demandes" :key="demande.id" class="notif">
-        <div class="row-line">
-          <strong>{{ statutLisible(demande.statut) }}</strong>
+      <div class="card-head">
+        <h3><i class="fa-solid fa-list-check"></i> Mes demandes</h3>
+        <span v-if="demandes.length" class="st st-info">{{ demandes.length }}</span>
+      </div>
+      <article v-for="demande in demandes" :key="demande.id" class="req">
+        <div class="req-top">
+          <span class="st" :class="classeStatut(demande.statut)"><i class="fa-solid" :class="iconeStatut(demande.statut)"></i>{{ statutLisible(demande.statut) }}</span>
           <small class="hint">{{ dateLisible(demande.created_at) }}</small>
         </div>
-        <p v-if="demande.vehicule" class="hint">
-          {{ demande.vehicule.marque }} {{ demande.vehicule.modele }} — {{ demande.vehicule.immatriculation }}
+        <p v-if="demande.vehicule" class="req-veh">
+          <span v-if="demande.vehicule.immatriculation" class="plate">{{ demande.vehicule.immatriculation }}</span>
+          {{ demande.vehicule.marque }} {{ demande.vehicule.modele }}
         </p>
-        <p v-for="(value, key) in demande.details" :key="key" class="hint">
-          <strong>{{ titresDetails[key] || key }} :</strong> {{ value }}
-        </p>
+        <div v-if="trajet(demande)" class="route">
+          <div><small>Départ</small>{{ trajet(demande).depart }}</div>
+          <div><small>Arrivée</small>{{ trajet(demande).arrivee }}</div>
+        </div>
+        <dl v-if="autresDetails(demande).length" class="kv">
+          <div v-for="[titre, valeur] in autresDetails(demande)" :key="titre"><dt>{{ titre }}</dt><dd>{{ valeur }}</dd></div>
+        </dl>
       </article>
-      <p v-if="!demandes.length" class="hint">Aucune demande envoyée dans cette section.</p>
+      <div v-if="!demandes.length" class="empty">
+        <i class="fa-solid" :class="activeConfig.icon"></i>
+        <strong>Aucune demande</strong>
+        <p>{{ activeConfig.vide }}</p>
+      </div>
     </div>
   </div>
 </template>

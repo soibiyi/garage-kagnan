@@ -2,6 +2,8 @@
 import { computed } from 'vue';
 import { Head, Link, usePage, router } from '@inertiajs/vue3'; // 1. Ajoute Head ici
 import FlashToast from '@/Components/FlashToast.vue';
+import NotificationsMessages from '@/Components/NotificationsMessages.vue';
+
 
 const page = usePage();
 const role = computed(() => page.props.auth.user?.role);
@@ -11,6 +13,8 @@ const ACCUEIL = { label: 'Accueil', route: 'dashboard', icon: 'fa-solid fa-house
 const MENUS = {
     admin: [
         { label: 'Utilisateurs', route: 'admin.users.index', icon: 'fa-solid fa-users', match: ['admin.users.index', 'admin.users.create', 'admin.users.edit', 'admin.charge_clients.activities'] },
+        { label: 'Missions terminées', route: 'admin.missions.history', icon: 'fa-solid fa-truck-fast', match: ['admin.missions.*'] },
+        { label: 'Historique chauffeurs', route: 'admin.chauffeurs.history', icon: 'fa-solid fa-id-card-clip', match: ['admin.chauffeurs.*'] },
         { label: 'Interactions', route: 'admin.users.interactionindex', icon: 'fa-solid fa-comments', match: ['admin.users.interactionindex'] },
         { label: 'Véhicules', route: 'admin.vehicules.status', icon: 'fa-solid fa-car', match: ['admin.vehicules.*'] },
         { label: "Chiffre d'affaires", route: 'admin.chiffre-affaires', icon: 'fa-solid fa-chart-line', match: ['admin.chiffre-affaires'] },
@@ -37,6 +41,9 @@ const MENUS = {
     charge_client: [
         ACCUEIL,
         { label: 'Clients', route: 'charge_client.clients.index', icon: 'fa-solid fa-address-book', match: ['charge_client.*'] },
+    ],
+    chauffeur: [
+        { label: 'Missions', route: 'chauffeur.index', icon: 'fa-solid fa-truck-fast', match: ['chauffeur.*'] },
     ],
 };
 
@@ -68,8 +75,10 @@ const logout = () => {
                             />
                         </Link>
 
-                        <!-- DROITE : nom de l'utilisateur (lien profil) + Se déconnecter -->
+                        <!-- DROITE : notifications (chargé client) + nom de l'utilisateur (lien profil) + Se déconnecter -->
                         <div class="flex items-center gap-2 sm:gap-3">
+                            <NotificationsMessages v-if="role === 'charge_client'" />
+
                             <Link
                                 :href="route('profile.edit')"
                                 class="inline-flex max-w-[140px] items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-xs font-bold text-[#0B0F19] transition hover:border-[#0B0F19] hover:bg-gray-50 sm:max-w-[240px] sm:px-4"

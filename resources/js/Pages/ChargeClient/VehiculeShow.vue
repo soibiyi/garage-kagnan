@@ -1,12 +1,34 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import VehiculeEntete from '@/Components/VehiculeEntete.vue';
-import { Head, Link } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { Head, Link, useForm } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
 
 const props = defineProps({
     vehicule: Object,
 });
+
+const editionEcheances = ref(false);
+const echeancesForm = useForm({
+    expiration_assurance: props.vehicule.expiration_assurance || '',
+    expiration_sicta: props.vehicule.expiration_sicta || '',
+});
+
+const ouvrirEditionEcheances = () => {
+    echeancesForm.expiration_assurance = props.vehicule.expiration_assurance || '';
+    echeancesForm.expiration_sicta = props.vehicule.expiration_sicta || '';
+    echeancesForm.clearErrors();
+    editionEcheances.value = true;
+};
+
+const enregistrerEcheances = () => {
+    echeancesForm.patch(route('charge_client.vehicules.echeances.update', props.vehicule.id), {
+        preserveScroll: true,
+        onSuccess: () => {
+            editionEcheances.value = false;
+        },
+    });
+};
 
 /* ------------------------------------------------------------------ */
 /* Utilitaires                                                         */
@@ -251,10 +273,41 @@ const cartes = computed(() => [
 
                 <!-- ÉCHÉANCES ADMINISTRATIVES -->
                 <section class="space-y-4" aria-labelledby="titre-echeances">
-                    <h3 id="titre-echeances" class="flex items-center gap-2.5 text-lg font-black text-[#0B0F19]">
-                        <i class="fa-solid fa-shield-halved text-[#E11D48]"></i>
-                        <span>Assurance et visite technique</span>
-                    </h3>
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <h3 id="titre-echeances" class="flex items-center gap-2.5 text-lg font-black text-[#0B0F19]">
+                            <i class="fa-solid fa-shield-halved text-[#E11D48]"></i>
+                            <span>Assurance et visite technique</span>
+                        </h3>
+                        <div class="flex gap-2">
+                            <button
+                                v-if="!editionEcheances"
+                                type="button"
+                                class="rounded-xl border border-gray-200 px-4 py-2 text-sm font-bold text-[#0B0F19] transition hover:border-[#E11D48] hover:text-[#E11D48]"
+                                @click="ouvrirEditionEcheances"
+                            >
+                                <i class="fa-solid fa-pen mr-2"></i>Modifier les dates
+                            </button>
+                            <template v-else>
+                                <button
+                                    type="button"
+                                    class="rounded-xl border border-gray-200 px-4 py-2 text-sm font-bold text-[#0B0F19] transition hover:bg-gray-50"
+                                    :disabled="echeancesForm.processing"
+                                    @click="editionEcheances = false"
+                                >
+                                    Annuler
+                                </button>
+                                <button
+                                    type="button"
+                                    class="rounded-xl bg-[#E11D48] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#BE123C] disabled:opacity-50"
+                                    :disabled="echeancesForm.processing"
+                                    @click="enregistrerEcheances"
+                                >
+                                    <i v-if="echeancesForm.processing" class="fa-solid fa-spinner fa-spin mr-2"></i>
+                                    Enregistrer
+                                </button>
+                            </template>
+                        </div>
+                    </div>
 
                     <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                         <div
@@ -291,6 +344,22 @@ const cartes = computed(() => [
                                         {{ doc.statut.detail }}
                                     </span>
                                 </div>
+
+                                <label v-if="editionEcheances" class="mt-4 block text-xs font-bold text-[#0B0F19]">
+                                    Nouvelle date d’expiration
+                                    <input
+                                        v-model="echeancesForm[doc.cle === 'assurance' ? 'expiration_assurance' : 'expiration_sicta']"
+                                        type="date"
+                                        class="mt-1.5 block w-full rounded-xl border-gray-200 text-sm shadow-sm focus:border-[#E11D48] focus:ring-[#E11D48]"
+                                        :aria-label="`Date d’expiration ${doc.label}`"
+                                    >
+                                    <span
+                                        v-if="echeancesForm.errors[doc.cle === 'assurance' ? 'expiration_assurance' : 'expiration_sicta']"
+                                        class="mt-1 block text-xs font-semibold text-[#E11D48]"
+                                    >
+                                        {{ echeancesForm.errors[doc.cle === 'assurance' ? 'expiration_assurance' : 'expiration_sicta'] }}
+                                    </span>
+                                </label>
 
                                 <!-- Où en est-on ? Relance prévue -->
                                 <div class="mt-4 border-t border-gray-200/70 pt-3">

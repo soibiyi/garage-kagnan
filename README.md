@@ -7,6 +7,7 @@ Application web de **gestion de garage** : réception des véhicules, suivi des 
 ## Sommaire
 
 - [Fonctionnalités](#fonctionnalités)
+- [Guide fonctionnel détaillé](./GUIDE_FONCTIONNEL.md)
 - [Stack technique](#stack-technique)
 - [Architecture](#architecture)
 - [Modèle de données](#modèle-de-données)
@@ -17,6 +18,8 @@ Application web de **gestion de garage** : réception des véhicules, suivi des 
 - [Structure du projet](#structure-du-projet)
 
 ## Fonctionnalités
+
+Pour la description détaillée des rôles, parcours, options et composants, consulter le [Guide fonctionnel](./GUIDE_FONCTIONNEL.md).
 
 | Module | Description |
 |---|---|

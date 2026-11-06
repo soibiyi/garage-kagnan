@@ -30,6 +30,8 @@ import {
     faClipboardCheck,
     faFileInvoiceDollar,
     faClockRotateLeft,
+    faTruckFast,
+    faIdCardClip,
 } from '@fortawesome/free-solid-svg-icons';
 
 const props = defineProps({
@@ -302,6 +304,34 @@ const logout = () => {
           <div class="min-w-0 flex-1">
             <h3 class="text-base font-bold text-[#1A1A1A]">Suivi des Interactions</h3>
             <p class="mt-0.5 text-sm leading-snug text-[#6B6E70]">Consulter les interactions entre les chargés client et les clients.</p>
+          </div>
+          <font-awesome-icon :icon="faArrowRight" class="shrink-0 text-xs text-gray-300 transition duration-300 group-hover:translate-x-1 group-hover:text-[#C8102E]" />
+        </Link>
+
+        <Link
+          :href="route('admin.missions.history')"
+          class="group flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-[#C8102E] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E]/40 sm:p-5"
+        >
+          <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-[#C8102E] transition duration-300 group-hover:bg-[#C8102E] group-hover:text-white">
+            <font-awesome-icon :icon="faTruckFast" class="text-lg" />
+          </span>
+          <div class="min-w-0 flex-1">
+            <h3 class="text-base font-bold text-[#1A1A1A]">Historique des missions</h3>
+            <p class="mt-0.5 text-sm leading-snug text-[#6B6E70]">Consulter les missions terminées et leurs chauffeurs responsables.</p>
+          </div>
+          <font-awesome-icon :icon="faArrowRight" class="shrink-0 text-xs text-gray-300 transition duration-300 group-hover:translate-x-1 group-hover:text-[#C8102E]" />
+        </Link>
+
+        <Link
+          :href="route('admin.chauffeurs.history')"
+          class="group flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-[#C8102E] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E]/40 sm:p-5"
+        >
+          <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-[#C8102E] transition duration-300 group-hover:bg-[#C8102E] group-hover:text-white">
+            <font-awesome-icon :icon="faIdCardClip" class="text-lg" />
+          </span>
+          <div class="min-w-0 flex-1">
+            <h3 class="text-base font-bold text-[#1A1A1A]">Historique chauffeurs</h3>
+            <p class="mt-0.5 text-sm leading-snug text-[#6B6E70]">Comparer l’activité et consulter les missions de chaque chauffeur.</p>
           </div>
           <font-awesome-icon :icon="faArrowRight" class="shrink-0 text-xs text-gray-300 transition duration-300 group-hover:translate-x-1 group-hover:text-[#C8102E]" />
         </Link>

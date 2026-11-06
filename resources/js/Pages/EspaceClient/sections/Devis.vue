@@ -1,7 +1,7 @@
 <script setup>
 import { reactive, computed } from 'vue'
 import axios from 'axios'
-import { state, fcfa, toast } from '../store.js'
+import { state, fcfa, toast, go } from '../store.js'
 import { FAMILLES, FAMILLE_PAR_DEFAUT } from '@/constants/familles.js'
 
 // Initialisation des sélections des lignes acceptées pour chaque devis
@@ -16,14 +16,14 @@ const errors = reactive({})
 const isSelected = (devis, ligne) => (selections[devis.id] || []).includes(ligne.id)
 
 // Montant de la remise par ligne (pour le calcul précis)
-const montantRemise = (l) => Number(l.quantite || 0) * Number(l.pu_net || 0) * Number(l.remise || 0) / 100
+const montantRemise = l => Number(l.quantite || 0) * Number(l.pu_net || 0) * Number(l.remise || 0) / 100
 
 // Calcul des totaux identiques à FacturationShow.vue (HT, Remises, TVA, Petite Fourniture, TTC)
 const calculerTotaux = (devis, lignesSelectionnees) => {
   const ht = lignesSelectionnees.reduce((a, l) => a + Number(l.montant_ht || 0), 0)
   const ttcBrut = lignesSelectionnees.reduce((a, l) => a + Number(l.montant_ttc || 0), 0)
   const remises = Math.round(lignesSelectionnees.reduce((a, l) => a + montantRemise(l), 0))
-  
+
   const actif = devis.petite_fourniture_active === null || devis.petite_fourniture_active === undefined
     ? true : !!devis.petite_fourniture_active
   const manuel = devis.petite_fourniture_montant !== null && devis.petite_fourniture_montant !== undefined
@@ -41,13 +41,20 @@ const calculerTotaux = (devis, lignesSelectionnees) => {
   return { ht, remises, tva, pf, manuel, ttc }
 }
 
+// Totaux recalculés en direct à chaque case cochée ou décochée
+const totaux = computed(() => Object.fromEntries((state.user.devis || []).map(devis => [
+  devis.id,
+  calculerTotaux(devis, (devis.lignes || []).filter(l => isSelected(devis, l))),
+])))
+const nbRetenues = devis => (devis.lignes || []).filter(l => isSelected(devis, l)).length
+
 // Organiser et grouper les lignes par famille selon l'ordre prédéfini dans familles.js
 function groupesParFamille(devis) {
   const lignes = devis.lignes || []
   if (!lignes.length) return []
 
   const groupes = {}
-  
+
   lignes.forEach(ligne => {
     const familleNom = ligne.famille || FAMILLE_PAR_DEFAUT
     if (!groupes[familleNom]) {
@@ -64,7 +71,7 @@ function groupesParFamille(devis) {
     if (groupes[familleNom] && groupes[familleNom].length > 0) {
       resultat.push({
         famille: familleNom,
-        lignes: groupes[familleNom]
+        lignes: groupes[familleNom],
       })
     }
   })
@@ -74,7 +81,7 @@ function groupesParFamille(devis) {
     if (!ordreFamilles.includes(familleNom) && groupes[familleNom].length > 0) {
       resultat.push({
         famille: familleNom,
-        lignes: groupes[familleNom]
+        lignes: groupes[familleNom],
       })
     }
   })
@@ -105,170 +112,118 @@ async function enregistrerChoix(devis) {
   }
 }
 
-const classeStatut = statut => statut === 'Accepté' ? 'bg-emerald-100 text-emerald-800' : statut === 'Refusé' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
-const formatDate = date => date ? new Date(date).toLocaleDateString('fr-FR') : '—'
+const classeStatut = statut => (statut === 'Accepté' ? 'st-ok' : statut === 'Refusé' ? 'st-no' : 'st-wait')
+const iconeStatut = statut => (statut === 'Accepté' ? 'fa-circle-check' : statut === 'Refusé' ? 'fa-circle-xmark' : 'fa-hourglass-half')
+const formatDate = date => (date ? new Date(date).toLocaleDateString('fr-FR') : '—')
+const f = n => `${Number(n || 0).toLocaleString('fr-FR')} F`
 </script>
 
 <template>
-  <div class="space-y-6">
-    <article 
-      v-for="devis in state.user.devis" 
-      :key="devis.id" 
-      class="bg-white shadow-2xl shadow-gray-200/50 sm:rounded-2xl p-8 border border-gray-100 text-gray-800"
-    >
-      <!-- En-tête de devis -->
-      <div class="flex justify-between items-start border-b-2 border-gray-900 pb-3 mb-3">
+  <div>
+    <article v-for="(devis, i) in state.user.devis" :key="devis.id" class="card devis" :style="{ '--i': i }">
+      <header class="devis-head">
         <div>
-          <h3 class="text-sm font-bold uppercase tracking-wider text-gray-900">
-            {{ devis.ref || `Devis #${devis.id}` }} — {{ devis.objet || 'Prestations & Réparations' }}
-          </h3>
-          <p class="text-xs text-gray-500 mt-0.5">
-            Ordre de travail : <span class="font-semibold text-gray-700">{{ devis.numero_ot || '—' }}</span> · Date : {{ formatDate(devis.date || devis.created_at) }}
+          <h3>{{ devis.ref || `Devis #${devis.id}` }}</h3>
+          <p class="meta">
+            <span><i class="fa-solid fa-screwdriver-wrench"></i>{{ devis.objet || 'Prestations et réparations' }}</span>
+            <span><i class="fa-solid fa-hashtag"></i>{{ devis.numero_ot || '—' }}</span>
+            <span><i class="fa-regular fa-calendar"></i>{{ formatDate(devis.date || devis.created_at) }}</span>
           </p>
         </div>
-        <div class="text-right">
-          <span class="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider" :class="classeStatut(devis.statut)">
-            {{ devis.statut }}
-          </span>
-        </div>
-      </div>
+        <span class="st" :class="classeStatut(devis.statut)"><i class="fa-solid" :class="iconeStatut(devis.statut)"></i>{{ devis.statut }}</span>
+      </header>
 
-      <p v-if="devis.selectionPossible" class="text-xs text-gray-600 mb-3 font-medium bg-gray-50 p-2 rounded border border-gray-200">
-        <i class="fa-solid fa-circle-info text-[#E11D48] mr-1"></i>
-        Décochez les prestations ou pièces que vous ne souhaitez pas retenir, puis enregistrez votre choix.
-      </p>
-
-      <!-- Tableau REGROUPÉ PAR FAMILLE (Design identique à FacturationShow.vue) -->
-      <div class="mb-3">
-        <div class="bg-gray-900 text-white px-3 py-1 rounded-t-lg">
-          <p class="text-xs font-bold uppercase tracking-wider flex items-center gap-2">
-            <i class="fa-solid fa-list-check text-gray-400 text-[11px]"></i>
-            <span>Prestations & Pièces proposées par famille</span>
-          </p>
-        </div>
-
-        <table class="min-w-full border-collapse border border-gray-900 text-xs">
-          <thead>
-            <tr class="bg-gray-100 border-b border-gray-900 text-center font-semibold">
-              <th v-if="devis.selectionPossible" class="border-r border-gray-900 p-1 w-10">Acc.</th>
-              <th class="border-r border-gray-900 p-1 w-16">Quantité</th>
-              <th class="border-r border-gray-900 p-1 text-left">Désignation / Réf</th>
-              <th class="border-r border-gray-900 p-1 w-20">PU Net</th>
-              <th class="border-r border-gray-900 p-1 w-16">Remise</th>
-              <th class="border-r border-gray-900 p-1 w-20">TVA</th>
-              <th class="p-1 w-24">Montant HT</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="groupe in groupesParFamille(devis)" :key="groupe.famille">
-              <!-- EN-TÊTE DE LA FAMILLE -->
-              <tr class="bg-gray-200/80 border-y border-gray-900 font-bold">
-                <td :colspan="devis.selectionPossible ? 7 : 6" class="px-3 py-1 text-gray-900 uppercase tracking-wider text-[11px]">
-                  <i class="fa-solid fa-layer-group text-slate-600 mr-1.5"></i>
-                  <span>{{ groupe.famille }}</span>
-                </td>
-              </tr>
-
-              <!-- LIGNES DE LA FAMILLE -->
-              <tr 
-                v-for="ligne in groupe.lignes" 
-                :key="ligne.id" 
-                :class="{'bg-gray-50 opacity-60': devis.selectionPossible && !isSelected(devis, ligne)}" 
-                class="border-b border-gray-300 text-center hover:bg-gray-50/50"
-              >
-                <td v-if="devis.selectionPossible" class="border-r border-gray-900 p-1">
-                  <input 
-                    type="checkbox" 
-                    :value="ligne.id" 
-                    v-model="selections[devis.id]"
-                    class="rounded border-gray-300 text-[#E11D48] focus:ring-[#E11D48]"
-                  />
-                </td>
-                <td class="border-r border-gray-900 p-1 font-medium">{{ ligne.quantite }}</td>
-                <td class="border-r border-gray-900 p-1 text-left">
-                  <span class="font-medium text-gray-900">{{ ligne.designation }}</span>
-                  <span v-if="ligne.sous_famille" class="text-[10px] text-gray-500 font-semibold ml-1">({{ ligne.sous_famille }})</span>
-                  <span v-if="ligne.reference_piece" class="block text-[10px] text-gray-500 font-mono">Réf : {{ ligne.reference_piece }}</span>
-                  <span v-if="devis.selectionPossible && !isSelected(devis, ligne)" class="text-[10px] italic text-red-600 ml-1">(Non retenu)</span>
-                </td>
-                <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.pu_net).toLocaleString() }} F</td>
-                <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.remise || 0) }} %</td>
-                <td class="border-r border-gray-900 p-1 text-center">
-                  <span v-if="ligne.ne_pas_appliquer_tva" class="text-amber-600 font-semibold bg-amber-50 px-1 py-0.5 rounded border border-amber-200 text-[10px]">Exonéré</span>
-                  <span v-else class="text-gray-600">18%</span>
-                </td>
-                <td class="p-1 text-right font-bold text-gray-900">{{ Number(ligne.montant_ht).toLocaleString() }} F</td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Bloc Totaux (Identique à FacturationShow.vue) -->
-      <div class="flex justify-end mb-3">
-        <div class="w-72 border border-gray-900 text-xs rounded-lg overflow-hidden shadow-sm">
-          <div class="flex justify-between border-b border-gray-900 px-3 py-1 bg-gray-50">
-            <span class="font-semibold text-gray-700">Total HT (Accepté)</span>
-            <span class="font-medium">
-              {{ calculerTotaux(devis, devis.lignes.filter(l => isSelected(devis, l))).ht.toLocaleString() }} F
-            </span>
-          </div>
-          <div class="flex justify-between border-b border-gray-900 px-3 py-1 bg-white">
-            <span class="font-semibold text-gray-700">Total Remises</span>
-            <span class="font-medium">
-              {{ calculerTotaux(devis, devis.lignes.filter(l => isSelected(devis, l))).remises.toLocaleString() }} F
-            </span>
-          </div>
-          <div class="flex justify-between border-b border-gray-900 px-3 py-1 bg-white">
-            <span class="font-semibold text-gray-700">TVA Totale</span>
-            <span class="font-medium">
-              {{ calculerTotaux(devis, devis.lignes.filter(l => isSelected(devis, l))).tva.toLocaleString() }} F
-            </span>
-          </div>
-          <div class="flex justify-between border-b border-gray-900 px-3 py-1 bg-gray-50">
-            <span class="font-semibold text-gray-700">
-              Petite fourniture 
-              <span v-if="calculerTotaux(devis, devis.lignes.filter(l => isSelected(devis, l))).manuel" class="text-[10px] font-normal text-gray-500">(saisie)</span>
-              <span v-else class="text-[10px] font-normal text-gray-500">(3 %)</span>
-            </span>
-            <span class="font-medium">
-              {{ calculerTotaux(devis, devis.lignes.filter(l => isSelected(devis, l))).pf.toLocaleString() }} F
-            </span>
-          </div>
-          <div class="flex justify-between px-3 py-1.5 font-black bg-gray-200 text-sm text-gray-900">
-            <span>Total TTC à Payer</span>
-            <span class="text-[#E11D48]">
-              {{ calculerTotaux(devis, devis.lignes.filter(l => isSelected(devis, l))).ttc.toLocaleString() }} F
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Actions pour validation client -->
-      <div v-if="devis.selectionPossible" class="flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-200 mt-4">
-        <p class="text-xs text-gray-500 italic">
-          Le montant définitif pourra être ajusté par le garage selon les lignes retenues.
+      <div class="devis-body">
+        <p v-if="devis.selectionPossible" class="note">
+          <i class="fa-solid fa-circle-info"></i>
+          Décochez les prestations ou pièces que vous ne souhaitez pas retenir, puis enregistrez votre choix.
         </p>
-        <button 
-          class="px-4 py-2 bg-[#E11D48] hover:bg-rose-700 text-white font-bold uppercase tracking-wider rounded-lg shadow transition text-xs disabled:opacity-50" 
-          :disabled="submitting[devis.id]" 
-          @click="enregistrerChoix(devis)"
-        >
-          {{ submitting[devis.id] ? 'Enregistrement…' : 'Enregistrer mon choix' }}
-        </button>
-      </div>
 
-      <p v-if="errors[devis.id]" class="mt-2 text-[11px] font-bold text-[#E11D48]" role="alert">
-        {{ errors[devis.id] }}
-      </p>
+        <div class="qwrap" tabindex="0" role="region" :aria-label="`Lignes du devis ${devis.ref || devis.id}`">
+          <table class="qt" :class="{ 'no-chk': !devis.selectionPossible }">
+            <caption class="sr-only">Prestations et pièces proposées, regroupées par famille</caption>
+            <thead>
+              <tr>
+                <th v-if="devis.selectionPossible" class="c-chk"><span class="sr-only">Retenu</span></th>
+                <th class="c-name">Désignation</th>
+                <th>Qté</th>
+                <th>PU net</th>
+                <th>Remise</th>
+                <th>TVA</th>
+                <th>Montant HT</th>
+              </tr>
+            </thead>
+            <tbody v-for="groupe in groupesParFamille(devis)" :key="groupe.famille">
+              <tr class="fam-row">
+                <th :colspan="devis.selectionPossible ? 7 : 6">
+                  <i class="fa-solid fa-layer-group"></i>{{ groupe.famille }}<small>{{ groupe.lignes.length }} ligne{{ groupe.lignes.length > 1 ? 's' : '' }}</small>
+                </th>
+              </tr>
+              <tr
+                v-for="ligne in groupe.lignes"
+                :key="ligne.id"
+                class="ql"
+                :class="{ off: devis.selectionPossible && !isSelected(devis, ligne) }"
+              >
+                <td v-if="devis.selectionPossible" class="c-chk">
+                  <label class="tick">
+                    <input type="checkbox" :value="ligne.id" v-model="selections[devis.id]">
+                    <span class="sr-only">Retenir {{ ligne.designation }}</span>
+                  </label>
+                </td>
+                <td class="c-name">
+                  <strong>{{ ligne.designation }}</strong>
+                  <small v-if="ligne.sous_famille || ligne.reference_piece">
+                    <template v-if="ligne.sous_famille">{{ ligne.sous_famille }}</template>
+                    <template v-if="ligne.reference_piece"><template v-if="ligne.sous_famille"> – </template>Réf. {{ ligne.reference_piece }}</template>
+                  </small>
+                </td>
+                <td class="c-qty" data-l="Qté">{{ ligne.quantite }}</td>
+                <td class="c-pu" data-l="PU net">{{ f(ligne.pu_net) }}</td>
+                <td class="c-rem" data-l="Remise">{{ Number(ligne.remise || 0) }} %</td>
+                <td class="c-tva" data-l="TVA">
+                  <span v-if="ligne.ne_pas_appliquer_tva" class="exo">Exonéré</span>
+                  <template v-else>18 %</template>
+                </td>
+                <td class="c-ht">{{ f(ligne.montant_ht) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="quote-totals">
+          <div><span>Total HT {{ devis.selectionPossible ? '(retenu)' : '(accepté)' }}</span><b>{{ f(totaux[devis.id].ht) }}</b></div>
+          <div><span>Total remises</span><b>{{ f(totaux[devis.id].remises) }}</b></div>
+          <div><span>TVA totale</span><b>{{ f(totaux[devis.id].tva) }}</b></div>
+          <div>
+            <span>Petite fourniture <span class="sm">{{ totaux[devis.id].manuel ? '(saisie)' : '(3 %)' }}</span></span>
+            <b>{{ f(totaux[devis.id].pf) }}</b>
+          </div>
+          <div class="quote-grand-total"><span>Total TTC à payer</span><strong>{{ f(totaux[devis.id].ttc) }}</strong></div>
+        </div>
+
+        <div v-if="devis.selectionPossible" class="devis-actions">
+          <p>
+            <b>{{ nbRetenues(devis) }} ligne{{ nbRetenues(devis) > 1 ? 's' : '' }}</b> retenue{{ nbRetenues(devis) > 1 ? 's' : '' }} sur {{ (devis.lignes || []).length }}.
+            Le montant définitif pourra être ajusté par le garage.
+          </p>
+          <button class="btn btn-primary" :disabled="submitting[devis.id]" @click="enregistrerChoix(devis)">
+            <i class="fa-solid" :class="submitting[devis.id] ? 'fa-spinner fa-spin' : 'fa-check'"></i>
+            {{ submitting[devis.id] ? 'Enregistrement…' : 'Enregistrer mon choix' }}
+          </button>
+        </div>
+
+        <p v-if="errors[devis.id]" class="err" role="alert"><i class="fa-solid fa-circle-exclamation"></i>{{ errors[devis.id] }}</p>
+      </div>
     </article>
 
-    <div v-if="!state.user.devis || !state.user.devis.length" class="bg-white shadow-xl shadow-gray-200/50 rounded-2xl p-12 border border-gray-100 text-center">
-      <div class="w-12 h-12 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-400 mx-auto mb-3">
-        <i class="fa-solid fa-file-invoice text-xl"></i>
+    <div v-if="!state.user.devis || !state.user.devis.length" class="card">
+      <div class="empty">
+        <i class="fa-solid fa-file-invoice"></i>
+        <strong>Aucun devis disponible</strong>
+        <p>Aucun devis n’est actuellement associé à votre dossier.</p>
+        <button class="btn btn-light" @click="go('suivi')"><i class="fa-solid fa-screwdriver-wrench"></i> Voir le suivi atelier</button>
       </div>
-      <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wider">Aucun devis disponible</h3>
-      <p class="text-xs text-gray-500 mt-1">Aucun devis n’est actuellement associé à votre dossier.</p>
     </div>
   </div>
 </template>

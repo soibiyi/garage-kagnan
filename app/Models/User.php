@@ -48,4 +48,9 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
+
+    public function chauffeurMissions()
+    {
+        return $this->hasMany(ClientPortalRequest::class, 'chauffeur_id');
+    }
 }

@@ -29,6 +29,37 @@ class EspaceClientController extends Controller
         return Inertia::render('EspaceClient/Dashboard');
     }
 
+    /* ------------------------------------------------------------------ */
+    /* Vues du chargé client : fiche client séparée en 3 pages             */
+    /* ------------------------------------------------------------------ */
+
+    // Messages : conversation avec le client
+public function chat(Client $client)
+{
+    ClientPortalMessage::query()
+        ->where('client_id', $client->id)
+        ->where('sender_type', 'client')
+        ->whereNull('read_at')
+        ->update(['read_at' => now()]);
+
+    return Inertia::render('ChargeClient/Clients/ClientChat', [   // garde ton chemin Inertia
+        'client' => $client->only(['id', 'nom', 'prenom', 'telephone']),
+    ]);
+}
+    // Rendez-vous : demandes de rendez-vous à accepter
+    public function rendezVous(Client $client)
+    {
+        $client->load(['portalRequests' => fn ($query) => $query
+            ->where('type', 'rendez_vous')
+            ->with('vehicule:id,marque,modele,immatriculation')
+            ->latest(),
+        ]);
+
+        return Inertia::render('ChargeClient/Clients/ClientRendezVous', [
+            'client' => $client,
+        ]);
+    }
+
     public function login(Request $request)
     {
         $credentials = $request->validate([
@@ -122,6 +153,8 @@ class EspaceClientController extends Controller
                 ->with(['devis.lignes', 'facture.paiements'])
                 ->latest('date_reception'),
             'portalRequests.vehicule',
+            'portalRequests.chauffeur:id,name',
+            'portalRequests.position',
         ]);
 
         return response()->json([
@@ -144,6 +177,20 @@ class EspaceClientController extends Controller
                     'statut' => $demande->statut,
                     'created_at' => $demande->created_at,
                     'traite_le' => $demande->traite_le,
+                    'chauffeur' => $demande->chauffeur ? [
+                        'id' => $demande->chauffeur->id,
+                        'name' => $demande->chauffeur->name,
+                    ] : null,
+                    'prix_estime' => $demande->prix_estime,
+                    'tarif_reference' => $demande->tarif_reference,
+                    'client_position' => $demande->client_lat !== null ? [
+                        'lat' => $demande->client_lat,
+                        'lng' => $demande->client_lng,
+                    ] : null,
+                    'destination_position' => $demande->destination_lat !== null ? [
+                        'lat' => $demande->destination_lat,
+                        'lng' => $demande->destination_lng,
+                    ] : null,
                     'vehicule' => $demande->vehicule ? [
                         'marque' => $demande->vehicule->marque,
                         'modele' => $demande->vehicule->modele,
@@ -292,7 +339,19 @@ class EspaceClientController extends Controller
             'lieu_depart' => ['nullable', 'required_if:type,convoyage', 'string', 'max:500'],
             'lieu_arrivee' => ['nullable', 'required_if:type,convoyage', 'string', 'max:500'],
             'precision' => ['nullable', 'string', 'max:2000'],
+            'client_lat' => ['nullable', 'required_if:type,depannage,convoyage', 'numeric', 'between:-90,90'],
+            'client_lng' => ['nullable', 'required_if:type,depannage,convoyage', 'numeric', 'between:-180,180'],
+            'destination_lat' => ['nullable', 'required_if:type,convoyage', 'numeric', 'between:-90,90'],
+            'destination_lng' => ['nullable', 'required_if:type,convoyage', 'numeric', 'between:-180,180'],
+            'gps_consent' => ['exclude_unless:type,depannage,convoyage', 'required', 'accepted'],
+            'categorie_tarif' => ['nullable', 'required_if:type,depannage', Rule::in(['voiture_particuliere', 'autre'])],
         ]);
+
+        abort_if(
+            in_array($validated['type'], ['depannage', 'convoyage'], true) && empty($client->siege),
+            422,
+            'Aucun siège n’est associé à votre compte. Contactez le garage avant de demander une mission.'
+        );
 
         if (!empty($validated['vehicule_id'])) {
             abort_unless(
@@ -311,6 +370,7 @@ class EspaceClientController extends Controller
             'depannage' => [
                 'lieu' => $validated['lieu'],
                 'precision' => $validated['precision'] ?? null,
+                'categorie_tarif' => $validated['categorie_tarif'],
             ],
             'convoyage' => [
                 'lieu_depart' => $validated['lieu_depart'],
@@ -319,18 +379,88 @@ class EspaceClientController extends Controller
             ],
         };
 
+        $prixEstime = null;
+        $tarifReference = null;
+        if (
+            $validated['type'] === 'depannage'
+            && in_array($client->siege, config('depannage.abidjan_sieges', []), true)
+            && $validated['categorie_tarif'] === 'voiture_particuliere'
+        ) {
+            $heureAbidjan = now()->timezone('Africa/Abidjan')->format('H:i');
+            $periode = $heureAbidjan >= config('depannage.nuit_debut') || $heureAbidjan < config('depannage.jour_debut')
+                ? 'nuit'
+                : 'jour';
+            $prixEstime = config("depannage.tarifs.depannage.voiture_particuliere.{$periode}");
+            $tarifReference = config('depannage.reference');
+        }
+
         $demande = $client->portalRequests()->create([
             'vehicule_id' => $validated['vehicule_id'] ?? null,
             'siege' => $client->siege,
             'type' => $validated['type'],
             'details' => array_filter($details, fn ($value) => $value !== null && $value !== ''),
             'statut' => 'en_attente',
+            'client_lat' => $validated['client_lat'] ?? null,
+            'client_lng' => $validated['client_lng'] ?? null,
+            'destination_lat' => $validated['destination_lat'] ?? null,
+            'destination_lng' => $validated['destination_lng'] ?? null,
+            'gps_consent_at' => in_array($validated['type'], ['depannage', 'convoyage'], true) ? now() : null,
+            'prix_estime' => $prixEstime,
+            'tarif_reference' => $tarifReference,
         ]);
 
+        $message = in_array($validated['type'], ['depannage', 'convoyage'], true)
+            ? 'Votre demande a été transmise aux chauffeurs de votre siège.'
+            : 'Votre demande a été transmise au Garage Kagnan. Elle reste en attente de confirmation.';
+
         return response()->json([
-            'message' => 'Votre demande a été transmise au Garage Kagnan. Elle reste en attente de confirmation.',
-            'request' => ['id' => $demande->id, 'statut' => $demande->statut],
+            'message' => $message,
+            'request' => [
+                'id' => $demande->id,
+                'statut' => $demande->statut,
+                'prix_estime' => $demande->prix_estime,
+                'tarif_reference' => $demande->tarif_reference,
+            ],
         ], 201);
+    }
+
+    public function requestPosition(ClientPortalRequest $portalRequest)
+    {
+        $client = Auth::guard('client')->user();
+
+        if (!$client) {
+            return response()->json(['message' => 'Authentification requise.'], 401);
+        }
+
+        if ($client->portal_password_change_required) {
+            return response()->json(['message' => 'Le changement du mot de passe est obligatoire.'], 423);
+        }
+
+        abort_unless($portalRequest->client_id === $client->id, 404);
+        abort_unless(
+            in_array($portalRequest->statut, ['accepte', 'en_cours'], true),
+            409,
+            'Le suivi est disponible uniquement pendant une mission active.'
+        );
+
+        $position = $portalRequest->position;
+
+        return response()->json([
+            'position' => $position ? [
+                'lat' => (float) $position->latitude,
+                'lng' => (float) $position->longitude,
+                'updated_at' => $position->updated_at,
+            ] : null,
+            'client_position' => $portalRequest->client_lat !== null ? [
+                'lat' => (float) $portalRequest->client_lat,
+                'lng' => (float) $portalRequest->client_lng,
+            ] : null,
+            'destination_position' => $portalRequest->destination_lat !== null ? [
+                'lat' => (float) $portalRequest->destination_lat,
+                'lng' => (float) $portalRequest->destination_lng,
+            ] : null,
+            'statut' => $portalRequest->statut,
+        ]);
     }
 
     public function portalMessages(Request $request)
@@ -491,4 +621,64 @@ class EspaceClientController extends Controller
 
         return response()->json(['message' => 'Profil mis à jour.']);
     }
+
+
+
+    // Refuser une demande de rendez-vous
+public function refuseRequest(Client $client, ClientPortalRequest $portalRequest)
+{
+    abort_unless($portalRequest->client_id === $client->id, 404);
+    abort_unless(
+        $portalRequest->type === 'rendez_vous' && $portalRequest->statut === 'en_attente',
+        409,
+        'Ce rendez-vous a déjà été traité.'
+    );
+
+    $portalRequest->forceFill([
+        'statut' => 'refuse',
+        'traite_le' => now(),
+    ])->save();
+
+    return back();
+}
+
+// Messages clients non lus, tous clients confondus (pour la cloche du layout)
+public function messagesNonLus()
+{
+    $groupes = ClientPortalMessage::query()
+        ->where('sender_type', 'client')
+        ->whereNull('read_at')
+        ->select('client_id', DB::raw('COUNT(*) as nb'), DB::raw('MAX(id) as dernier_id'))
+        ->groupBy('client_id')
+        ->get();
+
+    if ($groupes->isEmpty()) {
+        return response()->json(['total' => 0, 'conversations' => []]);
+    }
+
+    $clients = Client::whereIn('id', $groupes->pluck('client_id'))
+        ->get(['id', 'nom', 'prenom'])
+        ->keyBy('id');
+    $derniers = ClientPortalMessage::whereIn('id', $groupes->pluck('dernier_id'))
+        ->get(['id', 'message', 'created_at'])
+        ->keyBy('id');
+
+    $conversations = $groupes
+        ->map(fn ($g) => [
+            'client_id' => (int) $g->client_id,
+            'nom' => $clients[$g->client_id]->nom ?? '',
+            'prenom' => $clients[$g->client_id]->prenom ?? '',
+            'nb' => (int) $g->nb,
+            'dernier_id' => (int) $g->dernier_id,
+            'apercu' => \Illuminate\Support\Str::limit($derniers[$g->dernier_id]->message ?? '', 80),
+            'created_at' => $derniers[$g->dernier_id]->created_at ?? null,
+        ])
+        ->sortByDesc('dernier_id')
+        ->values();
+
+    return response()->json([
+        'total' => $conversations->sum('nb'),
+        'conversations' => $conversations,
+    ]);
+}
 }

@@ -56,7 +56,7 @@ class ChargeClientController extends Controller
             'interventions',
             fn ($query) => $query->where('siege', auth()->user()->siege)
         )->exists();
-        $belongsToSiege = $client->portal_registered && $client->siege === auth()->user()->siege;
+        $belongsToSiege = !empty(auth()->user()->siege) && $client->siege === auth()->user()->siege;
 
         abort_unless($hasDossierAtSiege || $belongsToSiege, 404);
     }
@@ -72,9 +72,14 @@ class ChargeClientController extends Controller
             ])
             ->when(!$this->estAdmin(), fn ($q) => $q->where(function ($clients) {
                 $clients->whereHas('vehicules.interventions', fn ($i) => $i->duSiege())
-                    ->orWhere(function ($registered) {
-                        $registered->where('portal_registered', true)
-                            ->where('siege', auth()->user()->siege);
+                    ->orWhere(function ($sameSiege) {
+                        $siege = auth()->user()->siege;
+
+                        if ($siege) {
+                            $sameSiege->where('siege', $siege);
+                        } else {
+                            $sameSiege->whereRaw('1 = 0');
+                        }
                     });
             }))
             ->when($search, function ($query, $search) {
@@ -90,7 +95,9 @@ class ChargeClientController extends Controller
             ->get();
 
         $clientsFiltres = $clients->filter(function ($client) {
-            return $client->portal_registered || $client->vehicules->contains(function ($vehicule) {
+            return $this->estAdmin()
+                || (!empty(auth()->user()->siege) && $client->siege === auth()->user()->siege)
+                || $client->vehicules->contains(function ($vehicule) {
                 return $vehicule->interventions->contains(function ($intervention) {
                     return strtolower($intervention->circuit) === 'normal';
                 });
@@ -116,7 +123,7 @@ class ChargeClientController extends Controller
                 fn ($requests) => $requests
                     ->whereNotNull('siege')
                     ->where('siege', auth()->user()->siege)
-            )->with('traitePar:id,name'),
+            )->with(['traitePar:id,name', 'chauffeur:id,name', 'position']),
             'portalRequests.vehicule',
         ]);
 
@@ -195,6 +202,36 @@ class ChargeClientController extends Controller
         ]);
     }
 
+    public function portalRequestPosition(Client $client, ClientPortalRequest $portalRequest)
+    {
+        $this->autoriserClientPortail($client);
+        abort_unless($portalRequest->client_id === $client->id, 404);
+        abort_unless(
+            in_array($portalRequest->statut, ['accepte', 'en_cours'], true),
+            409,
+            'Le suivi est disponible uniquement pendant une mission active.'
+        );
+
+        $position = $portalRequest->position;
+
+        return response()->json([
+            'position' => $position ? [
+                'lat' => (float) $position->latitude,
+                'lng' => (float) $position->longitude,
+                'updated_at' => $position->updated_at,
+            ] : null,
+            'client_position' => $portalRequest->client_lat !== null ? [
+                'lat' => (float) $portalRequest->client_lat,
+                'lng' => (float) $portalRequest->client_lng,
+            ] : null,
+            'destination_position' => $portalRequest->destination_lat !== null ? [
+                'lat' => (float) $portalRequest->destination_lat,
+                'lng' => (float) $portalRequest->destination_lng,
+            ] : null,
+            'statut' => $portalRequest->statut,
+        ]);
+    }
+
     public function sendPortalMessage(Request $request, Client $client)
     {
         $this->autoriserClientPortail($client);
@@ -230,7 +267,7 @@ class ChargeClientController extends Controller
                 'interventions',
                 fn ($query) => $query->where('siege', auth()->user()->siege)
             )->exists();
-            $belongsToSiege = $client->portal_registered && $client->siege === auth()->user()->siege;
+            $belongsToSiege = !empty(auth()->user()->siege) && $client->siege === auth()->user()->siege;
 
             abort_unless($hasDossierAtSiege || $belongsToSiege, 404);
         }
@@ -258,6 +295,21 @@ class ChargeClientController extends Controller
         return Inertia::render('ChargeClient/VehiculeShow', [
             'vehicule' => $vehicule
         ]);
+    }
+
+    public function updateVehiculeEcheances(Request $request, Vehicule $vehicule)
+    {
+        abort_unless(in_array(auth()->user()->role, ['admin', 'charge_client'], true), 403);
+        $this->autoriserVehicule($vehicule);
+
+        $validated = $request->validate([
+            'expiration_assurance' => ['nullable', 'date_format:Y-m-d'],
+            'expiration_sicta' => ['nullable', 'date_format:Y-m-d'],
+        ]);
+
+        $vehicule->update($validated);
+
+        return back()->with('success', 'Les dates d’assurance et de visite technique ont été mises à jour.');
     }
 
     // 3 bis. Page dédiée : infos du véhicule

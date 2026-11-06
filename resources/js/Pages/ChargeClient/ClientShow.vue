@@ -1,39 +1,68 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
+import ClientEntete from '@/Components/ClientEntete.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { ref } from 'vue';
-import Conversation from '@/Pages/EspaceClient/sections/Conversation.vue';
+import { computed, ref } from 'vue';
 
 const props = defineProps({
     client: Object,
     portalAccess: Object,
 });
 const showTemporaryPassword = ref(false);
-const acceptingRequestId = ref(null);
 
 const regenerateTemporaryPassword = () => {
     if (!window.confirm('Générer un nouveau mot de passe provisoire ? L’ancien mot de passe sera invalidé.')) return;
     router.post(route('charge_client.clients.portal-password.reset', props.client.id));
 };
 
-const acceptAppointment = (requestId) => {
-    if (acceptingRequestId.value) return;
-    acceptingRequestId.value = requestId;
-    router.post(route('charge_client.clients.portal-requests.accept', {
-        client: props.client.id,
-        portalRequest: requestId,
-    }), {}, {
-        preserveScroll: true,
-        onFinish: () => { acceptingRequestId.value = null; },
-    });
-};
+const pluriel = (n, mot) => `${n} ${mot}${n > 1 ? 's' : ''}`;
+
+/* ------------------------------------------------------------------ */
+/* Cartes : chaque carte mène à sa propre vue                           */
+/* ------------------------------------------------------------------ */
+const requetes = computed(() => props.client.portal_requests || []);
+const enAttente = (liste) => liste.filter((r) => r.statut === 'en_attente').length;
+
+const rendezVous = computed(() => requetes.value.filter((r) => r.type === 'rendez_vous'));
+const demandes = computed(() => requetes.value.filter((r) => r.type !== 'rendez_vous' && r.type !== 'message'));
+
+const cartes = computed(() => [
+    {
+        cle: 'chat',
+        titre: 'Messages',
+        icone: 'fa-solid fa-comments',
+        href: route('charge_client.clients.chat', props.client.id),
+        resume: 'Conversation avec le client',
+        alerte: null,
+    },
+    {
+        cle: 'demandes',
+        titre: 'Demandes',
+        icone: 'fa-solid fa-truck-medical',
+        href: route('charge_client.clients.demandes', props.client.id),
+        resume: demandes.value.length ? pluriel(demandes.value.length, 'demande') : 'Aucune demande',
+        alerte: enAttente(demandes.value)
+            ? `${pluriel(enAttente(demandes.value), 'demande')} en attente`
+            : null,
+    },
+    {
+        cle: 'rendez-vous',
+        titre: 'Rendez-vous',
+        icone: 'fa-solid fa-calendar-check',
+        href: route('charge_client.clients.rendez-vous', props.client.id),
+        resume: rendezVous.value.length ? pluriel(rendezVous.value.length, 'rendez-vous') : 'Aucun rendez-vous',
+        alerte: enAttente(rendezVous.value)
+            ? `${enAttente(rendezVous.value)} à accepter`
+            : null,
+    },
+]);
 
 // Fonction pour vérifier l'expiration et la règle des 10 jours
 const checkExpirationDetail = (dateStr) => {
     if (!dateStr) return { text: 'Non renseigné', class: 'bg-gray-100 text-gray-800' };
     const date = new Date(dateStr);
     const today = new Date();
-    
+
     const tenDaysLimit = new Date();
     tenDaysLimit.setDate(today.getDate() + 10);
 
@@ -51,23 +80,48 @@ const checkExpirationDetail = (dateStr) => {
 
     <AuthenticatedLayout>
         <template #header>
-            <div class="flex justify-between items-center py-2">
-                <div>
-                    <h2 class="text-2xl font-black tracking-tight text-[#0B0F19]">
-                        Fiche Client : <span class="text-[#E11D48]">{{ client.nom }} {{ client.prenom }}</span>
-                    </h2>
-                    <p class="text-sm text-[#8A8D8F] mt-0.5 font-medium">
-                        Téléphone : <span class="text-[#0B0F19] font-bold">{{ client.telephone || 'N/A' }}</span>
-                    </p>
-                </div>
-                <Link :href="route('charge_client.clients.index')" class="text-xs font-bold text-[#0B0F19] hover:text-[#E11D48] transition">
-                    <i class="fa-solid fa-arrow-left mr-1.5"></i> Retour à la liste
-                </Link>
-            </div>
+            <ClientEntete
+                :client="client"
+                :href="route('charge_client.clients.index')"
+                libelle-retour="Retour à la liste"
+                section="Fiche client"
+            />
         </template>
 
         <div class="py-12 bg-white min-h-screen">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+
+                <!-- LES 3 CARTES -->
+                <nav aria-label="Sections du client">
+                    <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        <Link
+                            v-for="carte in cartes"
+                            :key="carte.cle"
+                            :href="carte.href"
+                            class="group flex min-h-24 items-start gap-4 rounded-2xl border border-gray-200 bg-white p-4 text-left text-[#0B0F19] transition duration-200 hover:border-[#0B0F19] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E11D48]/40 active:scale-[0.98] sm:p-5"
+                        >
+                            <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#F8FAFC] text-[#E11D48]">
+                                <i :class="carte.icone"></i>
+                            </div>
+
+                            <div class="min-w-0 flex-1">
+                                <p class="text-sm font-extrabold">{{ carte.titre }}</p>
+                                <p class="mt-0.5 truncate text-xs font-medium text-[#8A8D8F]">{{ carte.resume }}</p>
+                                <span
+                                    v-if="carte.alerte"
+                                    class="mt-2 inline-flex items-center gap-1.5 rounded-md bg-[#E11D48] px-2 py-0.5 text-[11px] font-bold text-white"
+                                >
+                                    <i class="fa-solid fa-circle-exclamation text-[10px]"></i>
+                                    {{ carte.alerte }}
+                                </span>
+                            </div>
+
+                            <i class="fa-solid fa-arrow-right mt-1 text-xs text-[#8A8D8F] transition-transform duration-200 group-hover:translate-x-0.5"></i>
+                        </Link>
+                    </div>
+                </nav>
+
+                <!-- ACCÈS À L'ESPACE CLIENT (inchangé) -->
                 <section class="rounded-3xl border border-gray-200 bg-[#F8FAFC] p-6">
                     <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                         <div>
@@ -113,52 +167,7 @@ const checkExpirationDetail = (dateStr) => {
                     </div>
                 </section>
 
-                <section v-if="client.portal_requests?.length" class="rounded-3xl border border-gray-200 bg-white p-6">
-                    <h3 class="text-lg font-black text-[#0B0F19]">Demandes de l’espace client</h3>
-                    <article v-for="demande in client.portal_requests" :key="demande.id" class="mt-4 rounded-xl border border-gray-200 bg-[#F8FAFC] p-4">
-                        <div class="flex flex-wrap items-center justify-between gap-2">
-                            <strong class="text-sm text-[#0B0F19]">
-                                {{ {
-                                    message: 'Message',
-                                    rendez_vous: 'Rendez-vous',
-                                    depannage: 'Dépannage',
-                                    convoyage: 'Convoyage'
-                                }[demande.type] || demande.type }}
-                            </strong>
-                            <span :class="[
-                                'rounded-full px-3 py-1 text-xs font-bold',
-                                demande.statut === 'accepte'
-                                    ? 'bg-emerald-100 text-emerald-800'
-                                    : demande.statut === 'refuse'
-                                        ? 'bg-rose-100 text-rose-800'
-                                        : 'bg-amber-100 text-amber-800'
-                            ]">
-                                {{ demande.statut.replaceAll('_', ' ') }}
-                            </span>
-                        </div>
-                        <p v-if="demande.vehicule" class="mt-2 text-xs text-gray-600">
-                            {{ demande.vehicule.marque }} {{ demande.vehicule.modele }} — {{ demande.vehicule.immatriculation }}
-                        </p>
-                        <p v-for="(valeur, cle) in demande.details" :key="cle" class="mt-1 text-sm text-gray-700">
-                            <strong>{{ cle.replaceAll('_', ' ') }} :</strong> {{ valeur }}
-                        </p>
-                        <p class="mt-2 text-xs text-gray-500">{{ new Date(demande.created_at).toLocaleString('fr-FR') }}</p>
-                        <button
-                            v-if="demande.type === 'rendez_vous' && demande.statut === 'en_attente'"
-                            type="button"
-                            :disabled="acceptingRequestId !== null"
-                            class="mt-3 inline-flex min-h-9 items-center rounded-lg bg-[#E11D48] px-3 text-xs font-bold text-white transition hover:bg-[#BE123C] disabled:cursor-wait disabled:opacity-60"
-                            @click="acceptAppointment(demande.id)"
-                        >
-                            {{ acceptingRequestId === demande.id ? 'Acceptation…' : 'Accepter ce rendez-vous' }}
-                        </button>
-                    </article>
-                </section>
-
-                <section v-if="client.portal_registered" class="rounded-3xl border border-gray-200 bg-white p-6">
-                    <Conversation audience="staff" :client-id="Number(client.id)" />
-                </section>
-
+                <!-- VÉHICULES (inchangé) -->
                 <h3 class="text-lg font-black text-[#0B0F19] flex items-center gap-2.5">
                     <i class="fa-solid fa-car text-[#E11D48]"></i>
                     <span>Véhicules du client</span>
@@ -176,7 +185,6 @@ const checkExpirationDetail = (dateStr) => {
                             </Link>
                         </div>
 
-                        <!-- Statut Assurance & SICTA par véhicule -->
                         <div class="space-y-2 pt-2 border-t border-gray-200/60 text-xs">
                             <div class="flex justify-between items-center">
                                 <span class="text-gray-500 font-semibold">Assurance :</span>
