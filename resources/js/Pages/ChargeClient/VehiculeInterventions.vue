@@ -53,6 +53,7 @@ const LIBELLES_STATUT = {
     atelier: 'En atelier',
     attente_accord: "En attente d'accord client",
     accepte: 'Devis accepté',
+    livre: 'Intervention terminée (véhicule livré)',
 };
 
 const libelleStatut = (statut) => {
@@ -65,6 +66,7 @@ const STYLES_STATUT = {
     accepte: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
     attente_accord: 'bg-amber-50 text-amber-700 ring-amber-200',
     atelier: 'bg-slate-100 text-slate-700 ring-slate-200',
+    livre: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
 };
 const styleStatut = (cle) => STYLES_STATUT[cle] || 'bg-gray-100 text-gray-700 ring-gray-200';
 

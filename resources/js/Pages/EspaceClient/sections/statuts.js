@@ -7,6 +7,7 @@ const LIBELLES = {
   attente_accord: 'En attente de votre accord',
   accepte: 'Devis accepté',
   facture: 'Facturé',
+  livre: 'Terminé',
   termine: 'Terminé',
   annule: 'Annulé',
 }
@@ -16,9 +17,12 @@ export const libelleStatut = statut => LIBELLES[statut] || statut?.replaceAll('_
 export const classeStatut = statut => ({
   attente_accord: 'st-wait',
   accepte: 'st-ok',
+  livre: 'st-ok',
   termine: 'st-ok',
   facture: 'st-ok',
   annule: 'st-no',
 })[statut] || 'st-info'
+
+export const estInterventionTerminee = statut => ['livre', 'termine', 'facture'].includes(statut)
 
 export const formatDate = value => value ? new Date(value).toLocaleDateString('fr-FR') : '—'

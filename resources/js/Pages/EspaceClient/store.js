@@ -1,5 +1,6 @@
 import { reactive } from 'vue'
 import axios from 'axios'
+import { estInterventionTerminee } from './sections/statuts.js'
 
 export const BASE = '/espace-client'
 export const ROUTES = { home: BASE, dashboard: BASE + '/tableau-de-bord' }
@@ -92,7 +93,7 @@ function mapClient(client) {
     }]
   })
 
-  const activeIntervention = interventions.find(({ statut }) => !['termine', 'facture', 'annule'].includes(statut))
+  const activeIntervention = interventions.find(({ statut }) => !estInterventionTerminee(statut) && statut !== 'annule')
   const lastIntervention = interventions[0]
 
   return {
@@ -110,7 +111,7 @@ function mapClient(client) {
     interventions,
     devis,
     reparations: interventions
-      .filter(({ statut }) => ['termine', 'facture'].includes(statut))
+      .filter(({ statut }) => estInterventionTerminee(statut))
       .map(intervention => ({
         date: intervention.date_reception,
         objet: intervention.numero_ot || 'Intervention atelier',

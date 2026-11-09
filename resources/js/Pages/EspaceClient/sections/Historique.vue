@@ -1,12 +1,12 @@
 <script setup>
 import { computed, ref } from 'vue'
 import { state, fcfa, go } from '../store.js'
-import { libelleStatut, classeStatut } from './statuts.js'
+import { estInterventionTerminee, libelleStatut, classeStatut } from './statuts.js'
 
 const filtre = ref('tous')
 const interventions = computed(() => state.user.interventions)
 
-const estClos = statut => ['termine', 'facture'].includes(statut)
+const estClos = estInterventionTerminee
 const estOuvert = statut => !estClos(statut) && statut !== 'annule'
 
 const filtres = computed(() => [

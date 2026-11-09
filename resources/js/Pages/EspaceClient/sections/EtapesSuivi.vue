@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue'
+import { estInterventionTerminee } from './statuts.js'
 
 const props = defineProps({
   statut: { type: String, default: '' },
@@ -13,10 +14,10 @@ const ETAPES = [
   { label: 'Réparation', icon: 'fa-screwdriver-wrench' },
   { label: 'Livraison', icon: 'fa-key' },
 ]
-const INDEX = { reception: 0, atelier: 1, diagnostic: 1, attente_accord: 2, accepte: 3, en_cours: 3, termine: 4, facture: 4 }
+const INDEX = { reception: 0, atelier: 1, diagnostic: 1, attente_accord: 2, accepte: 3, en_cours: 3, livre: 4, termine: 4, facture: 4 }
 
 const index = computed(() => INDEX[props.statut] ?? -1)
-const termine = computed(() => ['termine', 'facture'].includes(props.statut))
+const termine = computed(() => estInterventionTerminee(props.statut))
 const etat = i => (termine.value || i < index.value ? 'done' : i === index.value ? 'now' : 'todo')
 const resume = computed(() => (termine.value ? 'Intervention terminée' : `Étape en cours : ${ETAPES[index.value]?.label}`))
 </script>

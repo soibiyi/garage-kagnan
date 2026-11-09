@@ -404,7 +404,7 @@ class ChargeClientController extends Controller
             'statut' => $data['statut'],
         ]);
 
-        return back()->with('success', 'Statut du véhicule mis à jour avec succès.');
+        return back()->with('success', 'Statut de l’intervention mis à jour avec succès.');
     }
 
     // 5. Enregistre une interaction au sujet d'un véhicule

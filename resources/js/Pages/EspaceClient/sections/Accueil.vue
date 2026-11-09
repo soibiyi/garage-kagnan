@@ -2,11 +2,11 @@
 import { computed } from 'vue'
 import { state, go } from '../store.js'
 import EtapesSuivi from './EtapesSuivi.vue'
-import { libelleStatut, classeStatut } from './statuts.js'
+import { estInterventionTerminee, libelleStatut, classeStatut } from './statuts.js'
 
 const client = computed(() => state.user)
 const activeInterventions = computed(() =>
-  client.value.interventions.filter(({ statut }) => !['termine', 'facture', 'annule'].includes(statut))
+  client.value.interventions.filter(({ statut }) => !estInterventionTerminee(statut) && statut !== 'annule')
 )
 const pendingQuotes = computed(() => client.value.devis.filter(devis => devis.statut === 'En attente'))
 
