@@ -12,6 +12,7 @@ import Demandes from './sections/Demandes.vue'
 import DemandesMission from './sections/DemandesMission.vue'
 import Conversation from './sections/Conversation.vue'
 import Parametres from './sections/Parametres.vue'
+import Vehicules from './sections/Vehicules.vue'
 
 const sections = {
   accueil: { label: 'Tableau de bord', short: 'Accueil', icon: 'fa-gauge-high', group: 'Mon dossier', sub: 'Votre dossier en un coup d’œil', comp: Accueil },
@@ -23,7 +24,8 @@ const sections = {
   convoyage: { label: 'Convoyage', short: 'Convoyage', icon: 'fa-truck-pickup', group: 'Mes demandes', sub: 'Faites déplacer votre véhicule', comp: DemandesMission, props: { type: 'convoyage' } },
   messages: { label: 'Messages', short: 'Messages', icon: 'fa-comments', group: 'Échanges', sub: 'Écrivez directement au garage', comp: Conversation, props: { audience: 'client' } },
   notifications: { label: 'Notifications', short: 'Alertes', icon: 'fa-bell', group: 'Échanges', sub: 'Ce qui attend une action de votre part', comp: Notifs },
-  parametres: { label: 'Paramètres', short: 'Paramètres', icon: 'fa-sliders', group: 'Mon compte', sub: 'Profil, véhicules et mot de passe', comp: Parametres },
+  vehicules: { label: 'Mes véhicules', short: 'Véhicules', icon: 'fa-car-side', group: 'Mon compte', sub: 'Vos véhicules et leurs informations', comp: Vehicules },
+  parametres: { label: 'Paramètres', short: 'Paramètres', icon: 'fa-sliders', group: 'Mon compte', sub: 'Profil et mot de passe', comp: Parametres },
 }
 
 const groupes = Object.entries(sections).reduce((acc, [key, s]) => {

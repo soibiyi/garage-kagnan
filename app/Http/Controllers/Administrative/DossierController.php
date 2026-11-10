@@ -441,6 +441,7 @@ class DossierController extends Controller
                         [
                             'prenom' => $request->nouveau_client_prenom ?? '',
                             'telephone' => $request->nouveau_client_telephone ?: '00000000',
+                            'siege' => $siege,
                         ]
                     );
 

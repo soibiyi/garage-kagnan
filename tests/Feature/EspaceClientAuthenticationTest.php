@@ -87,14 +87,24 @@ class EspaceClientAuthenticationTest extends TestCase
             'marque' => 'Toyota',
             'modele' => 'Hilux',
             'immatriculation' => 'LATER-001',
+            'vin' => 'JT1234567890123456',
+            'expiration_assurance' => '2027-06-30',
+            'expiration_sicta' => '2027-09-30',
         ])->assertCreated()
             ->assertJsonPath('vehicle.modele', 'Toyota Hilux')
-            ->assertJsonPath('vehicle.immat', 'LATER-001');
+            ->assertJsonPath('vehicle.modele_court', 'Hilux')
+            ->assertJsonPath('vehicle.immat', 'LATER-001')
+            ->assertJsonPath('vehicle.vin', 'JT1234567890123456')
+            ->assertJsonPath('vehicle.expiration_assurance', '2027-06-30')
+            ->assertJsonPath('vehicle.expiration_sicta', '2027-09-30');
 
         $this->getJson('/espace-client/api/me')
             ->assertOk()
             ->assertJsonCount(1, 'client.vehicules')
-            ->assertJsonPath('client.vehicules.0.immatriculation', 'LATER-001');
+            ->assertJsonPath('client.vehicules.0.immatriculation', 'LATER-001')
+            ->assertJsonPath('client.vehicules.0.vin', 'JT1234567890123456')
+            ->assertJsonPath('client.vehicules.0.expiration_assurance', '2027-06-30')
+            ->assertJsonPath('client.vehicules.0.expiration_sicta', '2027-09-30');
     }
 
     public function test_client_can_register_without_a_vehicle_and_receives_a_garage_dossier(): void
@@ -138,6 +148,9 @@ class EspaceClientAuthenticationTest extends TestCase
             'vehicle_marque' => 'Toyota',
             'vehicle_modele' => 'Hilux',
             'vehicle_immatriculation' => 'SIGNUP-001',
+            'vehicle_vin' => 'JT2234567890123456',
+            'vehicle_expiration_assurance' => '2027-06-30',
+            'vehicle_expiration_sicta' => '2027-09-30',
         ])->assertCreated();
 
         $client = Client::where('telephone', '0700000002')->firstOrFail();
@@ -147,7 +160,54 @@ class EspaceClientAuthenticationTest extends TestCase
             'immatriculation' => 'SIGNUP-001',
             'marque' => 'Toyota',
             'modele' => 'Hilux',
+            'vin' => 'JT2234567890123456',
+            'expiration_assurance' => '2027-06-30',
+            'expiration_sicta' => '2027-09-30',
         ]);
+    }
+
+    public function test_client_cannot_add_a_vehicle_without_its_vin_and_expiration_dates(): void
+    {
+        $client = $this->createClient('Véhicule incomplet');
+        $temporaryPassword = $client->temporaryPortalPassword();
+
+        $this->postJson('/espace-client/connexion', [
+            'identifier' => $client->portal_identifier,
+            'password' => $temporaryPassword,
+        ])->assertOk()->assertJson(['must_change_password' => true]);
+
+        $this->patchJson('/espace-client/api/mot-de-passe', [
+            'current_password' => $temporaryPassword,
+            'password' => 'MonNouveauMotDePasse2026',
+            'password_confirmation' => 'MonNouveauMotDePasse2026',
+        ])->assertNoContent();
+
+        $this->postJson('/espace-client/api/vehicules', [
+            'modele' => 'Hilux',
+            'immatriculation' => 'INCOMPLETE-001',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['vin', 'expiration_assurance', 'expiration_sicta']);
+
+        $this->assertDatabaseCount('vehicules', 0);
+    }
+
+    public function test_registration_cannot_create_a_vehicle_without_its_vin_and_expiration_dates(): void
+    {
+        $this->postJson('/espace-client/inscription', [
+            'prenom' => 'Nouveau',
+            'nom' => 'Client',
+            'telephone' => '0700000020',
+            'siege' => 'SGK',
+            'password' => 'MotDePasseSolide2026',
+            'password_confirmation' => 'MotDePasseSolide2026',
+            'add_vehicle' => true,
+            'vehicle_modele' => 'Hilux',
+            'vehicle_immatriculation' => 'INCOMPLETE-002',
+        ])->assertUnprocessable()
+            ->assertJsonValidationErrors(['vehicle_vin', 'vehicle_expiration_assurance', 'vehicle_expiration_sicta']);
+
+        $this->assertDatabaseCount('clients', 0);
+        $this->assertDatabaseCount('vehicules', 0);
     }
 
     public function test_self_registered_client_is_visible_to_the_garage_client_directory_without_a_vehicle(): void

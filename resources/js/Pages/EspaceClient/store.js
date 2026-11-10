@@ -38,18 +38,24 @@ function mapClient(client) {
     id: vehicule.id,
     marque: vehicule.marque || '',
     modele: `${vehicule.marque || ''} ${vehicule.modele || ''}`.trim() || 'Véhicule',
+    modele_court: vehicule.modele || '',
     immat: vehicule.immatriculation,
+    vin: vehicule.vin || '',
     expiration_assurance: vehicule.expiration_assurance,
     expiration_sicta: vehicule.expiration_sicta,
-    kilometrage: vehicule.interventions[0]?.kilometrage ?? null,
+    kilometrage: vehicule.kilometrage ?? vehicule.interventions[0]?.kilometrage ?? null,
+    reparations_externes: vehicule.reparations_externes || [],
   }))
   const interventions = client.vehicules.flatMap(vehicule =>
     vehicule.interventions.map(intervention => ({
       ...intervention,
       vehicule: {
         id: vehicule.id,
+        marque: vehicule.marque || '',
         modele: `${vehicule.marque || ''} ${vehicule.modele || ''}`.trim() || 'Véhicule',
+        modele_court: vehicule.modele || '',
         immat: vehicule.immatriculation,
+        vin: vehicule.vin || '',
       },
       facture: intervention.facture ? {
         ...intervention.facture,

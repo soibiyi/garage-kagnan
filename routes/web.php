@@ -38,6 +38,8 @@ Route::post('/espace-client/api/messages', [EspaceClientController::class, 'send
 Route::patch('/espace-client/api/mot-de-passe', [EspaceClientController::class, 'changePassword'])->name('espace-client.password');
 Route::patch('/espace-client/api/profil', [EspaceClientController::class, 'updateProfile'])->name('espace-client.profile');
 Route::post('/espace-client/api/vehicules', [EspaceClientController::class, 'addVehicle'])->name('espace-client.vehicles.store');
+Route::patch('/espace-client/api/vehicules/{vehicule}', [EspaceClientController::class, 'updateVehicle'])->name('espace-client.vehicles.update');
+Route::post('/espace-client/api/vehicules/{vehicule}/reparations', [EspaceClientController::class, 'addExternalRepair'])->name('espace-client.vehicles.repairs.store');
 Route::patch('/espace-client/api/devis/{devis}/choix', [EspaceClientController::class, 'updateQuoteSelection'])->name('espace-client.quotes.selection');
 Route::post('/espace-client/api/demandes', [EspaceClientController::class, 'storePortalRequest'])->middleware('throttle:10,1')->name('espace-client.requests.store');
 Route::get('/espace-client/api/demandes/{portalRequest}/position', [EspaceClientController::class, 'requestPosition'])->name('espace-client.requests.position');

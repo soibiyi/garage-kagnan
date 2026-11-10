@@ -51,16 +51,6 @@ const onglets = [
 /* ------------------------------------------------------------------ */
 const JOURS_ALERTE = 10;
 
-// Véhicules ayant au moins une intervention au circuit "normal"
-const getNormalVehicles = (vehicules) => {
-    if (!vehicules) return [];
-    return vehicules.filter(
-        (v) =>
-            v.interventions &&
-            v.interventions.some((i) => i.circuit && i.circuit.toLowerCase() === 'normal')
-    );
-};
-
 // Retourne null si la date est absente ou lointaine, sinon { date, expiree }
 const echeance = (dateStr) => {
     if (!dateStr) return null;
@@ -89,7 +79,7 @@ const formatDate = (date) =>
 /* ------------------------------------------------------------------ */
 const rows = computed(() =>
     (props.clients || []).map((client) => {
-        const vehicules = getNormalVehicles(client.vehicules);
+        const vehicules = client.vehicules || [];
         const alertes = [];
 
         vehicules.forEach((v) => {
@@ -163,7 +153,7 @@ const messageVide = computed(() => {
                         Annuaire des clients
                     </h2>
                     <p class="mt-0.5 text-sm font-medium text-[#8A8D8F]">
-                        Circuit normal : choisissez un client pour consulter ses véhicules et son historique.
+                        Consultez les clients de votre siège, leurs véhicules et leur historique.
                     </p>
                 </div>
 

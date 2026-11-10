@@ -11,11 +11,9 @@ const profile = reactive({
   adresse: state.user.adresse,
 })
 const password = reactive({ current_password: '', password: '', password_confirmation: '' })
-const vehicle = reactive({ marque: '', modele: '', immatriculation: '' })
 const profileError = ref('')
 const passwordError = ref('')
-const vehicleError = ref('')
-const busy = reactive({ profile: false, password: false, vehicle: false })
+const busy = reactive({ profile: false, password: false })
 const showPwd = ref(false)
 
 const initials = computed(() => state.user.nom.split(' ').map(x => x[0]).join('').slice(0, 2).toUpperCase())
@@ -53,21 +51,6 @@ async function changePassword() {
     passwordError.value = messageErreur(error, 'Impossible de modifier le mot de passe.')
   } finally {
     busy.password = false
-  }
-}
-
-async function addVehicle() {
-  vehicleError.value = ''
-  busy.vehicle = true
-  try {
-    const { data } = await axios.post('/espace-client/api/vehicules', vehicle)
-    state.user.vehicules.push(data.vehicle)
-    Object.assign(vehicle, { marque: '', modele: '', immatriculation: '' })
-    toast('Véhicule ajouté à votre dossier.')
-  } catch (error) {
-    vehicleError.value = messageErreur(error, 'Impossible d’ajouter ce véhicule.')
-  } finally {
-    busy.vehicle = false
   }
 }
 
@@ -138,30 +121,6 @@ async function copyIdentifier() {
         <p class="idcard-hint">Conservez cet identifiant client pour vos prochaines connexions.</p>
       </section>
 
-      <div class="card">
-        <h3><i class="fa-solid fa-car-side"></i> Mes véhicules</h3>
-        <div v-for="item in state.user.vehicules" :key="item.id" class="veh">
-          <span class="plate">{{ item.immat || 'Sans plaque' }}</span>
-          <div><strong>{{ item.modele }}</strong></div>
-        </div>
-        <div v-if="!state.user.vehicules.length" class="empty">
-          <i class="fa-solid fa-car-side"></i>
-          <strong>Aucun véhicule</strong>
-          <p>Aucun véhicule n’est associé à votre dossier.</p>
-        </div>
-
-        <h3 style="margin-top:1.6rem"><i class="fa-solid fa-plus"></i> Ajouter un véhicule</h3>
-        <form @submit.prevent="addVehicle">
-          <label>Marque<input v-model="vehicle.marque" maxlength="100"></label>
-          <label>Modèle<input v-model="vehicle.modele" required maxlength="100"></label>
-          <label>Immatriculation<input v-model="vehicle.immatriculation" required maxlength="50" placeholder="2381 GK 01" autocapitalize="characters"></label>
-          <button class="btn btn-primary" :disabled="busy.vehicle">
-            <i class="fa-solid" :class="busy.vehicle ? 'fa-spinner fa-spin' : 'fa-plus'"></i>
-            {{ busy.vehicle ? 'Ajout…' : 'Ajouter à mon dossier' }}
-          </button>
-          <p v-if="vehicleError" class="err" role="alert"><i class="fa-solid fa-circle-exclamation"></i>{{ vehicleError }}</p>
-        </form>
-      </div>
     </div>
   </div>
 </template>

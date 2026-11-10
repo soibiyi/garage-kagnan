@@ -6,10 +6,12 @@ use App\Models\Client;
 use App\Models\ClientPortalMessage;
 use App\Models\ClientPortalRequest;
 use App\Models\Devis;
+use App\Models\Vehicule;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
@@ -92,9 +94,13 @@ public function chat(Client $client)
             'siege' => ['required', 'string', Rule::in(array_keys(config('sieges')))],
             'email' => ['nullable', 'email', 'max:191'],
             'password' => ['required', 'string', 'min:10', 'confirmed'],
+            'add_vehicle' => ['sometimes', 'boolean'],
             'vehicle_marque' => ['nullable', 'string', 'max:100'],
-            'vehicle_modele' => ['nullable', 'required_with:vehicle_marque,vehicle_immatriculation', 'string', 'max:100'],
-            'vehicle_immatriculation' => ['nullable', 'required_with:vehicle_marque,vehicle_modele', 'string', 'max:50', 'unique:vehicules,immatriculation'],
+            'vehicle_modele' => ['nullable', 'required_if:add_vehicle,1', 'required_with:vehicle_marque,vehicle_immatriculation,vehicle_vin,vehicle_expiration_assurance,vehicle_expiration_sicta', 'string', 'max:100'],
+            'vehicle_immatriculation' => ['nullable', 'required_if:add_vehicle,1', 'required_with:vehicle_marque,vehicle_modele,vehicle_vin,vehicle_expiration_assurance,vehicle_expiration_sicta', 'string', 'max:50', 'unique:vehicules,immatriculation'],
+            'vehicle_vin' => ['nullable', 'required_if:add_vehicle,1', 'required_with:vehicle_marque,vehicle_modele,vehicle_immatriculation,vehicle_expiration_assurance,vehicle_expiration_sicta', 'string', 'max:100', 'unique:vehicules,vin'],
+            'vehicle_expiration_assurance' => ['nullable', 'required_if:add_vehicle,1', 'required_with:vehicle_marque,vehicle_modele,vehicle_immatriculation,vehicle_vin,vehicle_expiration_sicta', 'date'],
+            'vehicle_expiration_sicta' => ['nullable', 'required_if:add_vehicle,1', 'required_with:vehicle_marque,vehicle_modele,vehicle_immatriculation,vehicle_vin,vehicle_expiration_assurance', 'date'],
         ]);
 
         $client = DB::transaction(function () use ($validated) {
@@ -116,6 +122,9 @@ public function chat(Client $client)
                     'marque' => $validated['vehicle_marque'] ?? null,
                     'modele' => $validated['vehicle_modele'],
                     'immatriculation' => $validated['vehicle_immatriculation'],
+                    'vin' => strtoupper(trim($validated['vehicle_vin'])),
+                    'expiration_assurance' => $validated['vehicle_expiration_assurance'],
+                    'expiration_sicta' => $validated['vehicle_expiration_sicta'],
                 ]);
             }
 
@@ -149,6 +158,7 @@ public function chat(Client $client)
         }
 
         $client->load([
+            'vehicules.reparationsExternes',
             'vehicules.interventions' => fn ($query) => $query
                 ->with(['devis.lignes', 'facture.paiements'])
                 ->latest('date_reception'),
@@ -206,8 +216,18 @@ public function chat(Client $client)
                     'marque' => $vehicule->marque,
                     'modele' => $vehicule->modele,
                     'immatriculation' => $vehicule->immatriculation,
-                    'expiration_assurance' => $vehicule->expiration_assurance,
-                    'expiration_sicta' => $vehicule->expiration_sicta,
+                    'vin' => $vehicule->vin,
+                    'expiration_assurance' => $vehicule->expiration_assurance?->toDateString(),
+                    'expiration_sicta' => $vehicule->expiration_sicta?->toDateString(),
+                    'kilometrage' => $vehicule->kilometrage,
+                    'reparations_externes' => $vehicule->reparationsExternes->map(fn ($reparation) => [
+                        'id' => $reparation->id,
+                        'date_reparation' => $reparation->date_reparation?->toDateString(),
+                        'lieu' => $reparation->lieu,
+                        'description' => $reparation->description,
+                        'kilometrage' => $reparation->kilometrage,
+                        'montant' => $reparation->montant,
+                    ]),
                     'interventions' => $vehicule->interventions->map(fn ($intervention) => [
                         'id' => $intervention->id,
                         'numero_ot' => $intervention->numero_ot,
@@ -215,9 +235,46 @@ public function chat(Client $client)
                         'kilometrage' => $intervention->kilometrage,
                         'statut' => $intervention->statut,
                         'rapport' => $intervention->rapport_mecanicien,
+                        'reception' => [
+                            'personne_a_contacter' => $intervention->personne_a_contacter,
+                            'circuit' => $intervention->circuit,
+                            'essai_effectue' => (bool) $intervention->essai_effectue || $intervention->statut === 'livre',
+                            'niveau_carburant' => $intervention->niveau_carburant,
+                            'intervalle_niveau_carburant' => $intervention->intervalle_niveau_carburant,
+                            'remarques' => $intervention->remarques_eventuelles,
+                            'enjoliveurs' => $intervention->enjoliveurs,
+                            'equipements' => [
+                                'allume_cigare' => (bool) $intervention->allume_cigare,
+                                'rk7' => (bool) $intervention->rk7,
+                                'rcd' => (bool) $intervention->rcd,
+                                'essuie_glace_av' => (bool) $intervention->essuie_glace_av,
+                                'essuie_glace_ar' => (bool) $intervention->essuie_glace_ar,
+                                'retro_ext_gauche' => (bool) $intervention->retro_ext_gauche,
+                                'retro_ext_droit' => (bool) $intervention->retro_ext_droit,
+                                'retro_int' => (bool) $intervention->retro_int,
+                                'cric' => (bool) $intervention->cric,
+                                'manivelle' => (bool) $intervention->manivelle,
+                                'roue_secours' => (bool) $intervention->roue_secours,
+                                'trousse' => (bool) $intervention->trousse,
+                                'pare_brise_fissure' => (bool) $intervention->pare_brise_fissure,
+                            ],
+                            'photos' => collect([
+                                'Avant' => $intervention->photo_avant,
+                                'Arrière' => $intervention->photo_arriere,
+                                'Côté gauche' => $intervention->photo_gauche,
+                                'Côté droit' => $intervention->photo_droite,
+                            ])->merge(collect($intervention->photos_supplementaires)
+                                ->mapWithKeys(fn ($path, $index) => ['Supplémentaire '.($index + 1) => $path]))
+                                ->filter()->map(fn ($path, $label) => [
+                                'label' => $label,
+                                'url' => Storage::disk('public')->url($path),
+                            ])->values(),
+                        ],
                         'devis' => $intervention->devis ? [
                             'id' => $intervention->devis->id,
                             'statut' => $intervention->devis->statut,
+                            'montant_diagnostic' => $intervention->devis->montant_diagnostic,
+                            'montant_total_ht' => $intervention->devis->montant_total_ht,
                             'montant_total_ttc' => $intervention->devis->montant_total_ttc,
                             'petite_fourniture_active' => (bool) $intervention->devis->petite_fourniture_active,
                             'petite_fourniture_montant' => $intervention->devis->petite_fourniture_montant,
@@ -246,6 +303,7 @@ public function chat(Client $client)
                                 'montant' => $paiement->montant,
                                 'mode_paiement' => $paiement->mode_paiement,
                                 'date_paiement' => $paiement->date_paiement,
+                                'notes' => $paiement->notes,
                             ]),
                         ] : null,
                     ]),
@@ -557,7 +615,11 @@ public function chat(Client $client)
             'marque' => ['nullable', 'string', 'max:100'],
             'modele' => ['required', 'string', 'max:100'],
             'immatriculation' => ['required', 'string', 'max:50', 'unique:vehicules,immatriculation'],
+            'vin' => ['required', 'string', 'max:100', 'unique:vehicules,vin'],
+            'expiration_assurance' => ['required', 'date'],
+            'expiration_sicta' => ['required', 'date'],
         ]);
+        $validated['vin'] = strtoupper(trim($validated['vin']));
 
         $vehicle = $client->vehicules()->create($validated);
 
@@ -566,10 +628,81 @@ public function chat(Client $client)
                 'id' => $vehicle->id,
                 'marque' => $vehicle->marque,
                 'modele' => trim(($vehicle->marque ? $vehicle->marque.' ' : '').$vehicle->modele),
+                'modele_court' => $vehicle->modele,
                 'immat' => $vehicle->immatriculation,
-                'expiration_assurance' => null,
-                'expiration_sicta' => null,
-                'kilometrage' => null,
+                'vin' => $vehicle->vin,
+                'expiration_assurance' => $vehicle->expiration_assurance?->toDateString(),
+                'expiration_sicta' => $vehicle->expiration_sicta?->toDateString(),
+                'kilometrage' => $vehicle->kilometrage,
+                'reparations_externes' => [],
+            ],
+        ], 201);
+    }
+
+    public function updateVehicle(Request $request, Vehicule $vehicule)
+    {
+        $client = Auth::guard('client')->user();
+
+        if (!$client) {
+            return response()->json(['message' => 'Authentification requise.'], 401);
+        }
+
+        if ($client->portal_password_change_required) {
+            return response()->json(['message' => 'Le changement du mot de passe est obligatoire.'], 423);
+        }
+
+        abort_unless($client->vehicules()->whereKey($vehicule->id)->exists(), 404);
+
+        $validated = $request->validate([
+            'expiration_assurance' => ['required', 'date'],
+            'expiration_sicta' => ['required', 'date'],
+            'kilometrage' => ['required', 'integer', 'min:0', 'max:99999999999'],
+        ]);
+
+        $vehicule->update($validated);
+
+        return response()->json([
+            'vehicle' => [
+                'id' => $vehicule->id,
+                'expiration_assurance' => $vehicule->expiration_assurance?->toDateString(),
+                'expiration_sicta' => $vehicule->expiration_sicta?->toDateString(),
+                'kilometrage' => $vehicule->kilometrage,
+            ],
+        ]);
+    }
+
+    public function addExternalRepair(Request $request, Vehicule $vehicule)
+    {
+        $client = Auth::guard('client')->user();
+
+        if (!$client) {
+            return response()->json(['message' => 'Authentification requise.'], 401);
+        }
+
+        if ($client->portal_password_change_required) {
+            return response()->json(['message' => 'Le changement du mot de passe est obligatoire.'], 423);
+        }
+
+        abort_unless($client->vehicules()->whereKey($vehicule->id)->exists(), 404);
+
+        $validated = $request->validate([
+            'date_reparation' => ['required', 'date', 'before_or_equal:today'],
+            'lieu' => ['required', 'string', 'max:255'],
+            'description' => ['required', 'string', 'max:2000'],
+            'kilometrage' => ['nullable', 'integer', 'min:0', 'max:99999999999'],
+            'montant' => ['nullable', 'numeric', 'min:0', 'max:9999999999.99'],
+        ]);
+
+        $reparation = $vehicule->reparationsExternes()->create($validated);
+
+        return response()->json([
+            'repair' => [
+                'id' => $reparation->id,
+                'date_reparation' => $reparation->date_reparation?->toDateString(),
+                'lieu' => $reparation->lieu,
+                'description' => $reparation->description,
+                'kilometrage' => $reparation->kilometrage,
+                'montant' => $reparation->montant,
             ],
         ], 201);
     }

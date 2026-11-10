@@ -25,23 +25,34 @@ class ChargeClientController extends Controller
         return fn ($q) => $q->duSiege();
     }
 
-    /** Contrainte « véhicules ayant au moins un dossier dans mon siège » (aucun filtre pour l'admin). */
+    /** Contrainte « véhicules de mon siège ou ayant un dossier dans mon siège » (aucun filtre pour l'admin). */
     private function vehiculesDuSiege(): \Closure
     {
         return fn ($q) => $q->when(
             !$this->estAdmin(),
-            fn ($v) => $v->whereHas('interventions', fn ($i) => $i->duSiege())
+            fn ($v) => $v->where(function ($vehicules) {
+                $vehicules->whereHas('interventions', fn ($interventions) => $interventions->duSiege());
+
+                $siege = auth()->user()->siege;
+                if ($siege) {
+                    $vehicules->orWhereHas('client', fn ($client) => $client->where('siege', $siege));
+                }
+            })
         );
     }
 
-    /** Refuse (404) l'accès à un véhicule qui n'a aucun dossier dans mon siège. */
+    /** Refuse (404) l'accès à un véhicule hors siège et sans dossier dans le siège. */
     private function autoriserVehicule(Vehicule $vehicule): void
     {
         if ($this->estAdmin()) {
             return;
         }
 
-        abort_unless($vehicule->interventions()->duSiege()->exists(), 404);
+        $hasDossierAtSiege = $vehicule->interventions()->duSiege()->exists();
+        $belongsToSiege = !empty(auth()->user()->siege)
+            && $vehicule->client()->where('siege', auth()->user()->siege)->exists();
+
+        abort_unless($hasDossierAtSiege || $belongsToSiege, 404);
     }
 
     private function autoriserClientPortail(Client $client): void
@@ -94,15 +105,7 @@ class ChargeClientController extends Controller
             ->latest()
             ->get();
 
-        $clientsFiltres = $clients->filter(function ($client) {
-            return $this->estAdmin()
-                || (!empty(auth()->user()->siege) && $client->siege === auth()->user()->siege)
-                || $client->vehicules->contains(function ($vehicule) {
-                return $vehicule->interventions->contains(function ($intervention) {
-                    return strtolower($intervention->circuit) === 'normal';
-                });
-            });
-        })->values();
+        $clientsFiltres = $clients->values();
 
         return Inertia::render('ChargeClient/ClientsIndex', [
             'clients' => $clientsFiltres,

@@ -120,8 +120,20 @@ class ReceptionController extends Controller
 
         // Un employé ne reçoit que les clients de son siège (rien des autres sièges n'arrive au navigateur).
         // L'admin reçoit tous les clients : le formulaire filtre selon le siège qu'il choisit.
-        $clients = Client::with('vehicules')
-            ->when($user->siege, fn ($q) => $q->where('siege', $user->siege))
+        $clients = Client::with([
+            'vehicules' => function ($vehicules) use ($user) {
+                $vehicules
+                    ->when($user->siege, fn ($query) => $query->where(function ($vehicles) use ($user) {
+                        $vehicles->whereHas('client', fn ($client) => $client->where('siege', $user->siege))
+                            ->orWhereHas('interventions', fn ($interventions) => $interventions->where('siege', $user->siege));
+                    }))
+                    ->with('interventions:id,vehicule_id,siege');
+            },
+        ])
+            ->when($user->siege, fn ($q) => $q->where(function ($clients) use ($user) {
+                $clients->where('siege', $user->siege)
+                    ->orWhereHas('vehicules.interventions', fn ($interventions) => $interventions->where('siege', $user->siege));
+            }))
             ->orderBy('nom')
             ->get();
 
@@ -231,9 +243,20 @@ class ReceptionController extends Controller
 
         // Gestion client
         if (!empty($validated['client_id'])) {
-            // Un client existant doit appartenir au siège concerné
+            // Un client existant doit appartenir au siège, ou le véhicule sélectionné
+            // doit déjà avoir une intervention dans ce siège (anciens clients devis direct).
+            $vehiculesCorrespondants = collect([$vehiculeParImmat, $vehiculeParVin])
+                ->filter(fn (?Vehicule $vehicule) => $vehicule && (int) $vehicule->client_id === (int) $validated['client_id'])
+                ->pluck('id');
+
             $clientAutorise = Client::where('id', $validated['client_id'])
-                ->where('siege', $siege)
+                ->where(function ($client) use ($siege, $vehiculesCorrespondants) {
+                    $client->where('siege', $siege)
+                        ->orWhereHas('vehicules', function ($vehicules) use ($siege, $vehiculesCorrespondants) {
+                            $vehicules->whereKey($vehiculesCorrespondants)
+                                ->whereHas('interventions', fn ($interventions) => $interventions->where('siege', $siege));
+                        });
+                })
                 ->exists();
 
             if (!$clientAutorise) {
@@ -267,6 +290,7 @@ class ReceptionController extends Controller
                 'vin' => isset($validated['vin']) ? strtoupper($validated['vin']) : null,
                 'expiration_assurance' => $validated['expiration_assurance'] ?? null,
                 'expiration_sicta' => $validated['expiration_sicta'] ?? null,
+                'kilometrage' => $validated['kilometrage'],
             ]
         );
 

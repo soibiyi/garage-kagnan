@@ -30,6 +30,9 @@ const registration = ref({
   vehicle_marque: '',
   vehicle_modele: '',
   vehicle_immatriculation: '',
+  vehicle_vin: '',
+  vehicle_expiration_assurance: '',
+  vehicle_expiration_sicta: '',
 })
 const registrationError = ref('')
 const mustChangePassword = ref(false)
@@ -50,7 +53,7 @@ const guideTabs = [
 
 const faq = [
   { q: 'Qui peut créer un compte ?', a: 'Tout client du Garage Kagnan. Il suffit d’indiquer votre prénom, votre nom, votre téléphone et le siège auquel vous souhaitez être rattaché. L’adresse email est facultative.' },
-  { q: 'Dois-je ajouter un véhicule dès l’inscription ?', a: 'Non. L’ajout d’un véhicule est facultatif à la création du compte. Si vous le faites, indiquez le modèle et l’immatriculation ; la marque est un plus.' },
+  { q: 'Dois-je ajouter un véhicule dès l’inscription ?', a: 'Non. L’ajout d’un véhicule est facultatif à la création du compte. Si vous le faites, le modèle, l’immatriculation, le VIN et les dates d’assurance et de SICTA sont obligatoires ; la marque est facultative.' },
   { q: 'Où trouver mon identifiant client ?', a: 'Votre identifiant client (de la forme GK-KEY-XXXXXX-ID-123) vous permet de vous reconnecter. Il est associé à votre dossier : notez-le et conservez-le. En cas de doute, demandez-le au garage.' },
   { q: 'J’ai reçu un mot de passe provisoire, que faire ?', a: 'Connectez-vous avec cet identifiant et ce mot de passe : le site vous demandera aussitôt de choisir votre mot de passe personnel (10 caractères minimum). Le mot de passe provisoire ne fonctionne qu’une seule fois.' },
   { q: 'Les informations sont-elles à jour ?', a: 'Les données affichées sont celles saisies par le Garage Kagnan sur votre dossier. Elles apparaissent dans votre espace dès que le garage les enregistre.' },
@@ -152,8 +155,10 @@ async function register() {
     delete data.vehicle_marque
     delete data.vehicle_modele
     delete data.vehicle_immatriculation
+    delete data.vehicle_vin
+    delete data.vehicle_expiration_assurance
+    delete data.vehicle_expiration_sicta
   }
-  delete data.add_vehicle
 
   try {
     await axios.post(`${ROUTES.home}/inscription`, data)
@@ -456,7 +461,7 @@ onBeforeUnmount(() => {
         <template v-else>
           <div class="auth-icon"><i class="fa-solid fa-user-plus"></i></div>
           <h2 class="auth-title">Créer mon compte</h2>
-          <p class="auth-hint">Un dossier client sera créé au siège choisi. Le véhicule est facultatif.</p>
+          <p class="auth-hint">Un dossier client sera créé au siège choisi. L’ajout d’un véhicule est facultatif, mais son VIN et ses dates d’assurance et de SICTA sont obligatoires.</p>
           <form @submit.prevent="register">
             <div class="row2">
               <label>Prénom<input v-model="registration.prenom" autocomplete="given-name" required maxlength="255"></label>
@@ -486,6 +491,11 @@ onBeforeUnmount(() => {
                 <label>Modèle<input v-model="registration.vehicle_modele" maxlength="100" required></label>
               </div>
               <label>Immatriculation<input v-model="registration.vehicle_immatriculation" maxlength="50" required placeholder="2381 GK 01"></label>
+              <label>VIN / numéro de châssis<input v-model="registration.vehicle_vin" maxlength="100" required autocomplete="off"></label>
+              <div class="row2">
+                <label>Date d’expiration de l’assurance<input v-model="registration.vehicle_expiration_assurance" type="date" required></label>
+                <label>Date d’expiration SICTA<input v-model="registration.vehicle_expiration_sicta" type="date" required></label>
+              </div>
             </div>
             <button class="btn btn-primary full" :disabled="busy">{{ busy ? 'Création du compte…' : 'Créer mon compte' }}</button>
             <p v-if="registrationError" class="err"><i class="fa-solid fa-circle-exclamation"></i>{{ registrationError }}</p>

@@ -58,7 +58,8 @@ const tiles = computed(() => [
   { to: 'convoyage', icon: 'fa-truck-pickup', title: 'Demander un convoyage', sub: 'Départ et arrivée' },
   { to: 'devis', icon: 'fa-file-invoice', title: 'Mes devis', sub: `${client.value.devis.length} au total` },
   { to: 'historique', icon: 'fa-clock-rotate-left', title: 'Factures et paiements', sub: 'Tout l’historique' },
-  { to: 'parametres', icon: 'fa-sliders', title: 'Profil et véhicules', sub: 'Mes informations' },
+  { to: 'vehicules', icon: 'fa-car-side', title: 'Mes véhicules', sub: `${client.value.vehicules.length} enregistré${client.value.vehicules.length === 1 ? '' : 's'}` },
+  { to: 'parametres', icon: 'fa-sliders', title: 'Mon profil', sub: 'Mes informations' },
 ])
 </script>
 
@@ -99,18 +100,19 @@ const tiles = computed(() => [
       <div class="card">
         <div class="card-head">
           <h3><i class="fa-solid fa-car-side"></i> Mes véhicules</h3>
-          <button class="link" @click="go('parametres')">Gérer <i class="fa-solid fa-arrow-right"></i></button>
+          <button class="link" @click="go('vehicules')">Gérer <i class="fa-solid fa-arrow-right"></i></button>
         </div>
-        <div v-for="vehicle in client.vehicules" :key="vehicle.id" class="veh">
+        <button v-for="vehicle in client.vehicules" :key="vehicle.id" class="veh vehicle-link" @click="go('vehicules')">
           <span class="plate">{{ vehicle.immat || 'Sans plaque' }}</span>
           <div><strong>{{ vehicle.modele }}</strong></div>
           <span v-if="enAtelier(vehicle)" class="st st-info"><i class="fa-solid fa-screwdriver-wrench"></i> À l’atelier</span>
-        </div>
+          <i class="fa-solid fa-chevron-right" aria-hidden="true"></i>
+        </button>
         <div v-if="!client.vehicules.length" class="empty">
           <i class="fa-solid fa-car-side"></i>
           <strong>Aucun véhicule</strong>
           <p>Aucun véhicule n’est associé à votre dossier.</p>
-          <button class="btn btn-light" @click="go('parametres')"><i class="fa-solid fa-plus"></i> Ajouter un véhicule</button>
+          <button class="btn btn-light" @click="go('vehicules')"><i class="fa-solid fa-plus"></i> Ajouter un véhicule</button>
         </div>
       </div>
 
@@ -137,3 +139,8 @@ const tiles = computed(() => [
     </div>
   </div>
 </template>
+
+<style scoped>
+.vehicle-link{width:100%;text-align:left;color:inherit;cursor:pointer}
+.vehicle-link>i{margin-left:auto;color:#5B5F66}
+</style>

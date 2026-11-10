@@ -52,19 +52,55 @@ const photoMessage = ref('');
 // Clients du siège concerné uniquement (siège de l'utilisateur connecté,
 // ou siège choisi dans le formulaire si l'utilisateur n'est rattaché à aucun siège)
 const clientsDuSiege = computed(() => {
-    const siegeActif = props.siege || form.siege;
+    const clients = props.clients || [];
+
+    // Pour un employé, le serveur a déjà limité les résultats à son siège.
+    // Ne pas les filtrer une seconde fois côté navigateur : cela masquait des
+    // clients créés depuis le portail malgré leur présence dans les données.
+    if (props.siege) return clients;
+
+    const siegeActif = form.siege;
     if (!siegeActif) return [];
-    return props.clients.filter(c => c.siege === siegeActif);
+    return clients.filter(c =>
+        c.siege === siegeActif ||
+        c.vehicules?.some(vehicule =>
+            vehicule.interventions?.some(intervention => intervention.siege === siegeActif)
+        )
+    );
 });
+
+const normaliserRechercheClient = valeur => (valeur || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
 
 const filteredClients = computed(() => {
     if (!searchQuery.value || searchQuery.value.length < 2) return [];
-    const query = searchQuery.value.toLowerCase();
-    return clientsDuSiege.value.filter(c => 
-        c.nom.toLowerCase().includes(query) || 
-        (c.prenom && c.prenom.toLowerCase().includes(query)) ||
-        (c.telephone && c.telephone.includes(query))
-    );
+    const query = normaliserRechercheClient(searchQuery.value);
+    const queryTelephone = query.replace(/\D/g, '');
+
+    return clientsDuSiege.value.filter(client => {
+        const noms = [
+            client.nom,
+            client.prenom,
+            `${client.prenom || ''} ${client.nom || ''}`,
+            `${client.nom || ''} ${client.prenom || ''}`,
+        ].map(normaliserRechercheClient);
+        const telephone = (client.telephone || '').replace(/\D/g, '');
+        const vehiculeCorrespond = (client.vehicules || []).some(vehicule =>
+            [
+                vehicule.immatriculation,
+                vehicule.vin,
+                vehicule.marque,
+                vehicule.modele,
+            ].some(valeur => normaliserRechercheClient(valeur).includes(query))
+        );
+
+        return noms.some(nom => nom.includes(query))
+            || (queryTelephone.length >= 2 && telephone.includes(queryTelephone))
+            || vehiculeCorrespond;
+    });
 });
 
 const selectClient = (client) => {
@@ -72,7 +108,7 @@ const selectClient = (client) => {
     searchQuery.value = `${client.nom} ${client.prenom || ''} (${client.telephone})`;
     showDropdown.value = false;
     isNewClientMode.value = false;
-    clientVehicleMode.value = 'new';
+    clientVehicleMode.value = client.vehicules?.length ? 'edit_existing' : 'new';
     selectedExistingVehiculeId.value = '';
     form.clearErrors();
 };
@@ -88,7 +124,7 @@ const enableNewClientForm = () => {
 
 const selectedClientObj = computed(() => {
     if (!form.client_id) return null;
-    return props.clients.find(c => c.id === form.client_id);
+    return props.clients.find(c => Number(c.id) === Number(form.client_id));
 });
 
 const selectExistingVehicule = (vehicule) => {
@@ -698,12 +734,12 @@ const submit = () => {
                                     </label>
                                     <label class="flex items-center gap-2.5 text-xs font-bold text-[#0B0F19] cursor-pointer">
                                         <input type="radio" value="edit_existing" v-model="clientVehicleMode" class="text-[#E11D48] focus:ring-[#E11D48]" />
-                                        Modifier un véhicule existant
+                                        Sélectionner un véhicule existant
                                     </label>
                                 </div>
 
                                 <div v-if="clientVehicleMode === 'edit_existing'" class="space-y-3 pt-2">
-                                    <p class="text-xs text-[#8A8D8F] font-medium">Cliquez sur le véhicule à modifier :</p>
+                                    <p class="text-xs text-[#8A8D8F] font-medium">Sélectionnez le véhicule pour enregistrer une nouvelle intervention :</p>
                                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div 
                                             v-for="vehicule in selectedClientObj.vehicules" 
