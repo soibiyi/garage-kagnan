@@ -28,6 +28,7 @@ class Client extends Authenticatable
         return [
             'portal_password_change_required' => 'boolean',
             'portal_registered' => 'boolean',
+            'banned_at' => 'datetime',
         ];
     }
 
@@ -102,7 +103,33 @@ class Client extends Authenticatable
     }
 
     public function consignes()
-{
-    return $this->hasMany(Consigne::class)->latest();
-}
+    {
+        return $this->hasMany(Consigne::class)->latest();
+    }
+
+    public function isActive(): bool
+    {
+        return $this->status !== 'banni' && $this->banned_at === null;
+    }
+
+    public function isBanni(): bool
+    {
+        return $this->status === 'banni' || $this->banned_at !== null;
+    }
+
+    public function bannir(): void
+    {
+        $this->forceFill([
+            'status' => 'banni',
+            'banned_at' => now(),
+        ])->save();
+    }
+
+    public function reactiver(): void
+    {
+        $this->forceFill([
+            'status' => 'actif',
+            'banned_at' => null,
+        ])->save();
+    }
 }

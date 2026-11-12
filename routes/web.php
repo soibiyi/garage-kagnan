@@ -67,6 +67,11 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/users/{user}/edit', [UserController::class, 'edit'])->name('users.edit');
     Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
     Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy'); 
+    Route::get('/clients', [ChargeClientController::class, 'index'])->name('clients.index');
+    Route::get('/clients/gestion', [\App\Http\Controllers\Admin\ClientManagementController::class, 'index'])->name('clients.gestion');
+    Route::get('/clients/gestion/{client}', [\App\Http\Controllers\Admin\ClientManagementController::class, 'show'])->name('clients.gestion.show');
+    Route::patch('/clients/gestion/{client}/status', [\App\Http\Controllers\Admin\ClientManagementController::class, 'toggleStatus'])->name('clients.gestion.status');
+    Route::delete('/clients/gestion/{client}', [\App\Http\Controllers\Admin\ClientManagementController::class, 'destroy'])->name('clients.gestion.destroy');
     Route::get('/charge-clients/{user}/activites', [UserController::class, 'chargeClientActivities'])->name('charge_clients.activities');
     Route::get('/users/interactions', [UserController::class, 'interactionIndex'])->name('users.interactionindex');
     

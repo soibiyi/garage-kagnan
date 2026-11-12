@@ -77,6 +77,10 @@ public function chat(Client $client)
             return response()->json(['message' => 'Identifiant ou mot de passe incorrect.'], 422);
         }
 
+        if ($client->isBanni()) {
+            return response()->json(['message' => 'Ce compte client a été banni. Contactez le garage.'], 403);
+        }
+
         Auth::guard('client')->login($client);
         $request->session()->regenerate();
 
