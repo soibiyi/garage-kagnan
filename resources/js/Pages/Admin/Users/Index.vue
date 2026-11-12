@@ -76,6 +76,15 @@ onBeforeUnmount(() => {
     cancelAnimationFrame(rafId);
 });
 
+// ─── Reflet de lumière qui suit le pointeur ─────────────────────────
+const onMove = (e) => {
+    const el = e.target?.closest?.('.glass');
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty('--mx', `${e.clientX - r.left}px`);
+    el.style.setProperty('--my', `${e.clientY - r.top}px`);
+};
+
 // ─── Chiffre d'affaires par mois ────────────────────────────────────
 const moisSelectionne = ref(props.stats?.chiffre_affaires_mensuel?.[0]?.cle ?? '');
 
@@ -274,27 +283,34 @@ const logout = () => {
 <template>
   <Head title="Gestion des utilisateurs" />
 
-  <!-- ÉCRAN DE CHARGEMENT -->
-  <Transition name="kg-fade">
-    <div v-if="isLoading" class="fixed inset-0 z-50 flex items-center justify-center bg-white px-6">
-      <div class="w-full max-w-xs text-center">
-        <span class="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#C8102E] text-white shadow-lg shadow-[#C8102E]/25">
-          <font-awesome-icon :icon="faGear" class="kg-gear text-2xl" />
-        </span>
-        <h1 class="text-xl font-extrabold tracking-tight text-[#1A1A1A]">
-          Garage Kagnan <span class="text-[#C8102E]">Administration</span>
-        </h1>
-        <p class="mt-1.5 text-xs font-medium text-[#6B6E70]">Chargement de l'espace d'administration…</p>
+  <div class="page" @pointermove="onMove">
+    <!-- Lumière d'arrière-plan : ce que le verre réfracte -->
+    <div class="orbs" aria-hidden="true">
+      <span class="orb orb-1"></span>
+      <span class="orb orb-2"></span>
+      <span class="orb orb-3"></span>
+    </div>
 
-        <div class="mt-6 h-1 w-full overflow-hidden rounded-full bg-gray-100">
-          <div class="kg-loader h-full rounded-full bg-[#C8102E]"></div>
+    <!-- ÉCRAN DE CHARGEMENT -->
+    <Transition name="kg-fade">
+      <div v-if="isLoading" class="loader fixed inset-0 z-50 flex items-center justify-center px-6">
+        <div class="glass glass-lg w-full max-w-xs p-8 text-center">
+          <span class="tile-base tile-red-solid mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl text-white">
+            <font-awesome-icon :icon="faGear" class="kg-gear text-2xl" />
+          </span>
+          <h1 class="text-xl font-extrabold tracking-tight text-[#1A1A1A]">
+            Garage Kagnan <span class="text-[#C8102E]">Administration</span>
+          </h1>
+          <p class="mt-1.5 text-xs font-medium text-[#6B6E70]">Chargement de l'espace d'administration…</p>
+
+          <div class="progress mt-6">
+            <div class="kg-loader h-full rounded-full bg-[#C8102E]"></div>
+          </div>
         </div>
       </div>
-    </div>
-  </Transition>
+    </Transition>
 
-  <div class="min-h-screen bg-[#F5F5F6]">
-    <div class="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:space-y-8 sm:px-6 sm:py-10 lg:px-8">
+    <div class="relative mx-auto max-w-7xl space-y-5 px-4 py-6 sm:space-y-7 sm:px-6 sm:py-10 lg:px-8">
 
       <!-- ═══ EN-TÊTE ═══ -->
       <header
@@ -303,11 +319,11 @@ const logout = () => {
         style="--d: 0ms"
       >
         <div class="flex items-center gap-4">
-          <span class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#C8102E] text-white">
+          <span class="tile-base tile-red-solid flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-white">
             <font-awesome-icon :icon="faGear" class="text-xl" />
           </span>
           <div class="min-w-0">
-            <h1 class="text-2xl font-bold tracking-tight text-[#1A1A1A] sm:text-3xl">Tableau de bord</h1>
+            <h1 class="text-2xl font-black tracking-tight text-[#1A1A1A] sm:text-3xl">Tableau de bord</h1>
             <p class="mt-0.5 text-sm text-[#6B6E70]">
               Vue d'ensemble de la gestion et des activités
               <span v-if="siegeFiltre" class="font-semibold text-[#C8102E]">, siège {{ siegeFiltre }}</span>
@@ -319,12 +335,7 @@ const logout = () => {
           <div class="min-w-0 flex-1 sm:flex-none">
             <SiegeSwitcher :current="siegeFiltre" />
           </div>
-          <button
-            type="button"
-            @click="logout"
-            aria-label="Se déconnecter"
-            class="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-3 text-sm font-semibold text-[#1A1A1A] shadow-sm transition duration-200 hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E]/40 sm:px-4"
-          >
+          <button type="button" @click="logout" aria-label="Se déconnecter" class="gbtn gbtn-neutral shrink-0 !px-3.5 sm:!px-5">
             <font-awesome-icon :icon="faRightFromBracket" class="text-sm" />
             <span class="hidden sm:inline">Déconnexion</span>
           </button>
@@ -338,13 +349,13 @@ const logout = () => {
         style="--d: 90ms"
         aria-label="Statistiques"
       >
-        <!-- Chiffre d'affaires : le seul bloc "fort" de l'écran -->
-        <div class="relative col-span-2 flex flex-col justify-between overflow-hidden rounded-2xl bg-[#1A1A1A] p-5 text-white shadow-lg shadow-black/10 sm:p-7 lg:col-span-6">
-          <span class="absolute left-0 top-0 h-1 w-16 bg-[#C8102E]"></span>
+        <!-- Chiffre d'affaires : verre sombre, le seul bloc « fort » de l'écran -->
+        <div class="glass glass-dark glass-lg col-span-2 flex flex-col justify-between p-5 sm:p-7 lg:col-span-6">
+          <span class="absolute left-0 top-0 h-1 w-16 rounded-br-full bg-[#C8102E]"></span>
 
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div class="flex items-center gap-3">
-              <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-white">
+              <span class="tile-base flex h-10 w-10 items-center justify-center rounded-xl bg-white/12 text-white">
                 <font-awesome-icon :icon="faSackDollar" />
               </span>
               <div>
@@ -354,28 +365,21 @@ const logout = () => {
             </div>
 
             <div class="relative">
-              <select
-                v-model="moisSelectionne"
-                aria-label="Mois du chiffre d'affaires"
-                class="min-h-[44px] max-w-[11rem] cursor-pointer appearance-none rounded-xl border border-white/15 bg-white/10 py-2 pl-3 pr-9 text-xs font-semibold text-white transition duration-200 hover:bg-white/15 focus:border-[#C8102E] focus:outline-none focus:ring-2 focus:ring-[#C8102E]/50"
-              >
+              <select v-model="moisSelectionne" aria-label="Mois du chiffre d'affaires" class="select-dark">
                 <option v-for="m in stats?.chiffre_affaires_mensuel" :key="m.cle" :value="m.cle" class="bg-white text-[#1A1A1A]">
                   {{ m.label }}
                 </option>
               </select>
-              <font-awesome-icon :icon="faChevronDown" class="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] text-white/60" />
+              <font-awesome-icon :icon="faChevronDown" class="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[10px] text-white/60" />
             </div>
           </div>
 
           <div class="mt-8 flex flex-wrap items-end justify-between gap-x-4 gap-y-4 sm:mt-10">
-            <p class="min-w-0 text-[clamp(2rem,6vw,3.25rem)] font-black leading-none tabular-nums tracking-tight" aria-live="polite">
+            <p class="min-w-0 text-[clamp(2rem,6vw,3.25rem)] font-black leading-none tabular-nums tracking-tight text-white" aria-live="polite">
               {{ chiffreAffairesAffiche }}
               <span class="ml-1 text-base font-bold text-white/55 sm:text-lg">FCFA</span>
             </p>
-            <Link
-              :href="route('admin.chiffre-affaires')"
-              class="group inline-flex min-h-[44px] shrink-0 items-center gap-2 rounded-xl bg-[#C8102E] px-4 text-sm font-semibold text-white transition duration-200 hover:bg-[#a90d26] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-            >
+            <Link :href="route('admin.chiffre-affaires')" class="gbtn gbtn-red group shrink-0">
               <span>Voir le détail</span>
               <font-awesome-icon :icon="faArrowRight" class="text-xs transition-transform duration-300 group-hover:translate-x-1" />
             </Link>
@@ -383,15 +387,12 @@ const logout = () => {
         </div>
 
         <!-- Voitures enregistrées (cliquable) -->
-        <Link
-          :href="route('admin.vehicules.status')"
-          class="group flex flex-col justify-between rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-[#C8102E] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E]/40 sm:p-6 lg:col-span-3"
-        >
+        <Link :href="route('admin.vehicules.status')" class="glass glass-lg lift group flex flex-col justify-between p-4 sm:p-6 lg:col-span-3">
           <div class="flex items-center justify-between">
-            <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-[#C8102E]/10 text-[#C8102E] transition duration-300 group-hover:bg-[#C8102E] group-hover:text-white">
+            <span class="tile-base tile-red tile-hover flex h-10 w-10 items-center justify-center rounded-xl">
               <font-awesome-icon :icon="faCar" />
             </span>
-            <font-awesome-icon :icon="faArrowRight" class="text-xs text-gray-300 transition duration-300 group-hover:translate-x-1 group-hover:text-[#C8102E]" />
+            <font-awesome-icon :icon="faArrowRight" class="text-xs text-gray-400 transition duration-300 group-hover:translate-x-1 group-hover:text-[#C8102E]" />
           </div>
           <div class="mt-6">
             <p class="text-3xl font-black tabular-nums tracking-tight text-[#1A1A1A] sm:text-4xl">{{ stats?.nombre_voitures || '0' }}</p>
@@ -399,14 +400,14 @@ const logout = () => {
           </div>
         </Link>
 
-        <!-- Clients totaux (information, non cliquable : plus à plat) -->
-        <Link
-          :href="route('admin.clients.gestion')"
-          class="group flex flex-col justify-between rounded-2xl border border-gray-200 bg-white p-4 sm:p-6 lg:col-span-3"
-        >
-          <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 text-[#1A1A1A]">
-            <font-awesome-icon :icon="faUsers" />
-          </span>
+        <!-- Clients totaux -->
+        <Link :href="route('admin.clients.gestion')" class="glass glass-lg lift group flex flex-col justify-between p-4 sm:p-6 lg:col-span-3">
+          <div class="flex items-center justify-between">
+            <span class="tile-base tile-ink flex h-10 w-10 items-center justify-center rounded-xl">
+              <font-awesome-icon :icon="faUsers" />
+            </span>
+            <font-awesome-icon :icon="faArrowRight" class="text-xs text-gray-400 transition duration-300 group-hover:translate-x-1 group-hover:text-[#C8102E]" />
+          </div>
           <div class="mt-6">
             <p class="text-3xl font-black tabular-nums tracking-tight text-[#1A1A1A] sm:text-4xl">{{ stats?.nombre_clients || '0' }}</p>
             <p class="mt-1 text-sm font-medium text-[#6B6E70]">Clients totaux</p>
@@ -422,25 +423,24 @@ const logout = () => {
         aria-label="Accès rapide"
       >
         <!-- Colonne gauche : circuit des devis -->
-        <div class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-          <div class="border-b border-gray-100 px-4 py-4 sm:px-5">
-            <h2 class="text-base font-bold text-[#1A1A1A]">Devis</h2>
-            <p class="mt-0.5 text-xs text-[#6B6E70]">De la validation client à l'archivage.</p>
+        <div class="glass glass-lg">
+          <div class="card-head">
+            <div>
+              <h2 class="text-base font-black text-[#1A1A1A]">Devis</h2>
+              <p class="mt-0.5 text-xs text-[#6B6E70]">De la validation client à l'archivage.</p>
+            </div>
           </div>
-          <ul class="divide-y divide-gray-100">
+          <ul class="p-2">
             <li v-for="acces in accesDevis" :key="acces.label">
-              <Link
-                :href="acces.href"
-                class="group flex min-h-[68px] items-center gap-4 px-4 py-3.5 transition duration-200 hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C8102E]/40 sm:px-5"
-              >
-                <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-[#C8102E] transition duration-300 group-hover:bg-[#C8102E] group-hover:text-white">
+              <Link :href="acces.href" class="nav-row group">
+                <span class="tile-base tile-link flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
                   <font-awesome-icon :icon="acces.icone" />
                 </span>
                 <span class="min-w-0 flex-1">
                   <span class="block text-sm font-bold text-[#1A1A1A]">{{ acces.label }}</span>
                   <span class="mt-0.5 block text-xs leading-snug text-[#6B6E70]">{{ acces.description }}</span>
                 </span>
-                <font-awesome-icon :icon="faArrowRight" class="shrink-0 text-xs text-gray-300 transition duration-300 group-hover:translate-x-1 group-hover:text-[#C8102E]" />
+                <font-awesome-icon :icon="faArrowRight" class="shrink-0 text-xs text-gray-400 transition duration-300 group-hover:translate-x-1 group-hover:text-[#C8102E]" />
               </Link>
             </li>
           </ul>
@@ -448,40 +448,35 @@ const logout = () => {
 
         <!-- Colonne droite : pièces + suivi -->
         <div class="flex flex-col gap-4 sm:gap-5">
-          <Link
-            :href="route('admin.pieces.index')"
-            class="group relative flex items-center gap-4 overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 shadow-sm transition duration-300 hover:-translate-y-0.5 hover:border-[#C8102E] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E]/40 sm:p-5"
-          >
-            <span class="absolute inset-y-0 left-0 w-1 bg-[#C8102E]"></span>
-            <span class="ml-1 flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-[#C8102E]/10 text-xl text-[#C8102E] transition duration-300 group-hover:bg-[#C8102E] group-hover:text-white">
+          <Link :href="route('admin.pieces.index')" class="glass glass-lg lift group flex items-center gap-4 p-4 sm:p-5">
+            <span class="tile-base tile-red tile-hover flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-xl">
               <font-awesome-icon :icon="faWrench" />
             </span>
             <div class="min-w-0 flex-1">
-              <h2 class="text-base font-bold text-[#1A1A1A]">Gestion de pièces</h2>
+              <h2 class="text-base font-black text-[#1A1A1A]">Gestion de pièces</h2>
               <p class="mt-0.5 text-sm leading-snug text-[#6B6E70]">Entrées, prix d'achat, marges, sorties et stock en temps réel par siège.</p>
             </div>
-            <font-awesome-icon :icon="faArrowRight" class="shrink-0 text-xs text-gray-300 transition duration-300 group-hover:translate-x-1 group-hover:text-[#C8102E]" />
+            <font-awesome-icon :icon="faArrowRight" class="shrink-0 text-xs text-gray-400 transition duration-300 group-hover:translate-x-1 group-hover:text-[#C8102E]" />
           </Link>
 
-          <div class="flex-1 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-            <div class="border-b border-gray-100 px-4 py-4 sm:px-5">
-              <h2 class="text-base font-bold text-[#1A1A1A]">Suivi de l'activité</h2>
-              <p class="mt-0.5 text-xs text-[#6B6E70]">Équipes, missions et chauffeurs.</p>
+          <div class="glass glass-lg flex-1">
+            <div class="card-head">
+              <div>
+                <h2 class="text-base font-black text-[#1A1A1A]">Suivi de l'activité</h2>
+                <p class="mt-0.5 text-xs text-[#6B6E70]">Équipes, missions et chauffeurs.</p>
+              </div>
             </div>
-            <ul class="divide-y divide-gray-100">
+            <ul class="p-2">
               <li v-for="acces in accesSuivi" :key="acces.label">
-                <Link
-                  :href="acces.href"
-                  class="group flex min-h-[68px] items-center gap-4 px-4 py-3.5 transition duration-200 hover:bg-gray-50 focus-visible:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C8102E]/40 sm:px-5"
-                >
-                  <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-[#C8102E] transition duration-300 group-hover:bg-[#C8102E] group-hover:text-white">
+                <Link :href="acces.href" class="nav-row group">
+                  <span class="tile-base tile-link flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
                     <font-awesome-icon :icon="acces.icone" />
                   </span>
                   <span class="min-w-0 flex-1">
                     <span class="block text-sm font-bold text-[#1A1A1A]">{{ acces.label }}</span>
                     <span class="mt-0.5 block text-xs leading-snug text-[#6B6E70]">{{ acces.description }}</span>
                   </span>
-                  <font-awesome-icon :icon="faArrowRight" class="shrink-0 text-xs text-gray-300 transition duration-300 group-hover:translate-x-1 group-hover:text-[#C8102E]" />
+                  <font-awesome-icon :icon="faArrowRight" class="shrink-0 text-xs text-gray-400 transition duration-300 group-hover:translate-x-1 group-hover:text-[#C8102E]" />
                 </Link>
               </li>
             </ul>
@@ -490,11 +485,7 @@ const logout = () => {
       </nav>
 
       <!-- ═══ LISTE DES EMPLOYÉS ═══ -->
-      <section
-        class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
-        :class="ready ? 'kg-rise' : 'opacity-0'"
-        style="--d: 270ms"
-      >
+      <section class="glass glass-lg" :class="ready ? 'kg-rise' : 'opacity-0'" style="--d: 270ms">
         <!-- En-tête du menu -->
         <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:p-6">
           <button
@@ -502,19 +493,19 @@ const logout = () => {
             @click="toggleEmployeesMenu"
             :aria-expanded="isEmployeesMenuOpen"
             aria-controls="employees-panel"
-            class="flex min-h-[44px] flex-1 items-center gap-4 rounded-xl text-left transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E]/40"
+            class="focus-ring flex min-h-[44px] flex-1 items-center gap-4 rounded-2xl text-left"
           >
-            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#1A1A1A] text-white">
+            <span class="tile-base tile-ink-solid flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-white">
               <font-awesome-icon :icon="faPeopleGroup" class="text-lg" />
             </span>
             <span class="min-w-0 flex-1">
-              <span class="block text-lg font-extrabold tracking-tight text-[#1A1A1A] sm:text-xl">Liste des employés</span>
+              <span class="block text-lg font-black tracking-tight text-[#1A1A1A] sm:text-xl">Liste des employés</span>
               <span class="block text-xs text-[#6B6E70]">
                 {{ users?.length || 0 }} {{ (users?.length || 0) > 1 ? 'collaborateurs' : 'collaborateur' }}
                 <template v-if="nombreRoles > 0">répartis sur {{ nombreRoles }} {{ nombreRoles > 1 ? 'rôles' : 'rôle' }}</template>
               </span>
             </span>
-            <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-500">
+            <span class="icon-pill">
               <font-awesome-icon
                 :icon="faChevronDown"
                 class="kg-ease text-sm transition-transform duration-300"
@@ -523,29 +514,21 @@ const logout = () => {
             </span>
           </button>
 
-          <Link
-            :href="route('admin.users.create')"
-            class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-[#C8102E] px-4 text-sm font-semibold text-white shadow-sm transition duration-200 hover:bg-[#a90d26] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E]/40 focus-visible:ring-offset-2"
-          >
+          <Link :href="route('admin.users.create')" class="gbtn gbtn-red">
             <font-awesome-icon :icon="faPlus" class="text-xs" />
             <span>Ajouter un employé</span>
           </Link>
         </div>
 
         <!-- Panneau principal (hauteur animée) -->
-        <div
-          id="employees-panel"
-          class="kg-collapse"
-          :class="{ 'kg-open': isEmployeesMenuOpen }"
-          :inert="!isEmployeesMenuOpen"
-        >
+        <div id="employees-panel" class="kg-collapse" :class="{ 'kg-open': isEmployeesMenuOpen }" :inert="!isEmployeesMenuOpen">
           <div class="kg-collapse-inner">
-            <div class="border-t border-gray-100 bg-gray-50/60">
+            <div class="panel-divider">
 
               <!-- Barre d'outils : recherche + filtre par rôle -->
-              <div v-if="users && users.length > 0" class="space-y-3 border-b border-gray-100 bg-white p-4 sm:p-6">
+              <div v-if="users && users.length > 0" class="space-y-3 p-4 sm:p-6 sm:pb-2">
                 <div class="relative">
-                  <font-awesome-icon :icon="faMagnifyingGlass" class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-gray-400" />
+                  <font-awesome-icon :icon="faMagnifyingGlass" class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-gray-500" />
                   <input
                     v-model="recherche"
                     type="search"
@@ -553,14 +536,14 @@ const logout = () => {
                     autocomplete="off"
                     placeholder="Rechercher un collaborateur par nom ou e-mail"
                     aria-label="Rechercher un collaborateur"
-                    class="min-h-[44px] w-full rounded-xl border border-gray-200 bg-gray-50 py-2 pl-10 pr-11 text-sm text-[#1A1A1A] placeholder:text-gray-400 transition duration-200 focus:border-[#C8102E] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#C8102E]/25 [&::-webkit-search-cancel-button]:hidden"
+                    class="field-input [&::-webkit-search-cancel-button]:hidden"
                   />
                   <button
                     v-if="recherche"
                     type="button"
                     @click="recherche = ''"
                     aria-label="Effacer la recherche"
-                    class="absolute right-0.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-xl text-gray-400 transition duration-200 hover:text-[#1A1A1A] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E]/40"
+                    class="icon-btn focus-ring absolute right-1.5 top-1/2 -translate-y-1/2"
                   >
                     <font-awesome-icon :icon="faXmark" class="text-sm" />
                   </button>
@@ -571,13 +554,11 @@ const logout = () => {
                     type="button"
                     @click="roleFiltre = 'tous'"
                     :aria-pressed="roleFiltre === 'tous'"
-                    class="inline-flex min-h-[44px] shrink-0 items-center gap-2 rounded-xl border px-3.5 text-xs font-semibold transition duration-200 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E]/40 sm:min-h-[36px]"
-                    :class="roleFiltre === 'tous'
-                      ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white'
-                      : 'border-gray-200 bg-white text-[#1A1A1A] hover:border-gray-300 hover:bg-gray-50'"
+                    class="pill"
+                    :class="roleFiltre === 'tous' ? 'pill-active' : ''"
                   >
                     Tous
-                    <span class="tabular-nums" :class="roleFiltre === 'tous' ? 'text-white/70' : 'text-gray-400'">{{ usersRecherches.length }}</span>
+                    <span class="tabular-nums opacity-60">{{ usersRecherches.length }}</span>
                   </button>
                   <button
                     v-for="chip in chipsRoles"
@@ -585,13 +566,11 @@ const logout = () => {
                     type="button"
                     @click="roleFiltre = chip.key"
                     :aria-pressed="roleFiltre === chip.key"
-                    class="inline-flex min-h-[44px] shrink-0 items-center gap-2 rounded-xl border px-3.5 text-xs font-semibold transition duration-200 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E]/40 sm:min-h-[36px]"
-                    :class="roleFiltre === chip.key
-                      ? 'border-[#1A1A1A] bg-[#1A1A1A] text-white'
-                      : 'border-gray-200 bg-white text-[#1A1A1A] hover:border-gray-300 hover:bg-gray-50'"
+                    class="pill"
+                    :class="roleFiltre === chip.key ? 'pill-active' : ''"
                   >
                     {{ chip.label }}
-                    <span class="tabular-nums" :class="roleFiltre === chip.key ? 'text-white/70' : 'text-gray-400'">{{ chip.count }}</span>
+                    <span class="tabular-nums opacity-60">{{ chip.count }}</span>
                   </button>
                 </div>
               </div>
@@ -599,18 +578,18 @@ const logout = () => {
               <div class="space-y-3 p-4 sm:p-6">
 
                 <template v-for="[roleKey, usersList] in groupesVisibles" :key="roleKey">
-                  <div class="overflow-hidden rounded-xl border border-gray-200 bg-white">
+                  <div class="surface">
 
                     <!-- Sous-menu rôle -->
                     <button
                       type="button"
                       @click="toggleRole(roleKey)"
                       :aria-expanded="isRoleOpen(roleKey)"
-                      class="flex min-h-[56px] w-full items-center justify-between gap-3 p-3.5 text-left transition duration-200 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C8102E]/40 sm:p-4"
+                      class="role-head focus-ring"
                     >
                       <div class="flex min-w-0 items-center gap-3">
                         <span
-                          class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm"
+                          class="tile-base flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm"
                           :class="ROLES_CONFIG[roleKey]?.tint || 'bg-gray-100 text-gray-700'"
                         >
                           <font-awesome-icon :icon="ROLES_CONFIG[roleKey]?.icone || faUserGroup" />
@@ -621,12 +600,10 @@ const logout = () => {
                       </div>
 
                       <div class="flex shrink-0 items-center gap-3">
-                        <span class="min-w-[1.75rem] rounded-full bg-gray-100 px-2 py-0.5 text-center text-xs font-bold tabular-nums text-gray-700">
-                          {{ usersList.length }}
-                        </span>
+                        <span class="count">{{ usersList.length }}</span>
                         <font-awesome-icon
                           :icon="faChevronDown"
-                          class="kg-ease text-xs text-gray-400 transition-transform duration-300"
+                          class="kg-ease text-xs text-gray-500 transition-transform duration-300"
                           :class="{ 'rotate-180': isRoleOpen(roleKey) }"
                         />
                       </div>
@@ -635,17 +612,13 @@ const logout = () => {
                     <!-- Cartes employés (hauteur animée) -->
                     <div class="kg-collapse" :class="{ 'kg-open': isRoleOpen(roleKey) }" :inert="!isRoleOpen(roleKey)">
                       <div class="kg-collapse-inner">
-                        <div class="border-t border-gray-100 bg-gray-50/50 p-3.5 sm:p-5">
+                        <div class="panel-divider p-3.5 sm:p-5">
                           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
-                            <article
-                              v-for="user in usersList"
-                              :key="user.id"
-                              class="flex flex-col justify-between rounded-xl border border-gray-200 bg-white p-4 transition duration-300 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-md"
-                            >
+                            <article v-for="user in usersList" :key="user.id" class="surface surface-card lift-soft flex flex-col justify-between p-4">
                               <div>
                                 <div class="flex items-start gap-3">
                                   <span
-                                    class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-sm font-extrabold"
+                                    class="tile-base flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-sm font-extrabold"
                                     :class="ROLES_CONFIG[user.role]?.avatar || 'bg-gray-100 text-gray-700'"
                                     aria-hidden="true"
                                   >
@@ -654,12 +627,7 @@ const logout = () => {
                                   <div class="min-w-0 flex-1">
                                     <div class="flex items-center gap-2">
                                       <h4 class="truncate text-sm font-bold text-[#1A1A1A]" :title="user.name">{{ user.name }}</h4>
-                                      <span
-                                        v-if="user.id === meId"
-                                        class="shrink-0 rounded-full bg-[#C8102E]/10 px-2 py-0.5 text-[11px] font-semibold leading-4 text-[#C8102E]"
-                                      >
-                                        Vous
-                                      </span>
+                                      <span v-if="user.id === meId" class="chip-you">Vous</span>
                                     </div>
                                     <p class="mt-0.5 truncate text-xs text-[#6B6E70]">{{ formatRole(user.role) }}</p>
                                   </div>
@@ -681,20 +649,12 @@ const logout = () => {
                                 </ul>
                               </div>
 
-                              <div class="mt-4 flex items-center justify-end gap-2 border-t border-gray-100 pt-3 text-xs font-semibold">
-                                <Link
-                                  :href="route('admin.users.edit', user.id)"
-                                  class="inline-flex min-h-[44px] items-center gap-2 rounded-lg px-3 text-blue-700 transition duration-200 hover:bg-blue-50 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/50"
-                                >
+                              <div class="card-foot">
+                                <Link :href="route('admin.users.edit', user.id)" class="gbtn gbtn-sm gbtn-ghost-blue">
                                   <font-awesome-icon :icon="faPen" class="text-[11px]" />
                                   <span>Modifier</span>
                                 </Link>
-                                <button
-                                  v-if="user.id !== meId"
-                                  type="button"
-                                  @click="demanderSuppression(user)"
-                                  class="inline-flex min-h-[44px] items-center gap-2 rounded-lg px-3 text-red-700 transition duration-200 hover:bg-red-50 active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50"
-                                >
+                                <button v-if="user.id !== meId" type="button" @click="demanderSuppression(user)" class="gbtn gbtn-sm gbtn-ghost-red">
                                   <font-awesome-icon :icon="faTrashCan" class="text-[11px]" />
                                   <span>Supprimer</span>
                                 </button>
@@ -709,39 +669,22 @@ const logout = () => {
                 </template>
 
                 <!-- Aucun résultat pour la recherche -->
-                <div
-                  v-if="users && users.length > 0 && groupesVisibles.length === 0"
-                  class="flex flex-col items-center rounded-xl border border-dashed border-gray-300 bg-white px-6 py-10 text-center"
-                >
-                  <span class="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 text-gray-500">
-                    <font-awesome-icon :icon="faMagnifyingGlass" class="text-lg" />
-                  </span>
+                <div v-if="users && users.length > 0 && groupesVisibles.length === 0" class="empty">
+                  <span class="empty-icon"><font-awesome-icon :icon="faMagnifyingGlass" class="text-lg" /></span>
                   <p class="mt-4 text-sm font-semibold text-[#1A1A1A]">Aucun collaborateur ne correspond à « {{ recherche }} »</p>
                   <p class="mt-1 text-xs text-[#6B6E70]">Vérifiez l'orthographe ou essayez avec une partie de l'adresse e-mail.</p>
-                  <button
-                    type="button"
-                    @click="reinitialiserFiltres"
-                    class="mt-5 inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 text-sm font-semibold text-[#1A1A1A] transition duration-200 hover:border-gray-300 hover:bg-gray-50 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E]/40"
-                  >
+                  <button type="button" @click="reinitialiserFiltres" class="gbtn gbtn-neutral mt-5">
                     <font-awesome-icon :icon="faXmark" class="text-xs" />
                     <span>Effacer les filtres</span>
                   </button>
                 </div>
 
                 <!-- État vide -->
-                <div
-                  v-if="!users || users.length === 0"
-                  class="flex flex-col items-center rounded-xl border border-dashed border-gray-300 bg-white px-6 py-10 text-center"
-                >
-                  <span class="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 text-gray-500">
-                    <font-awesome-icon :icon="faUserGroup" class="text-lg" />
-                  </span>
+                <div v-if="!users || users.length === 0" class="empty">
+                  <span class="empty-icon"><font-awesome-icon :icon="faUserGroup" class="text-lg" /></span>
                   <p class="mt-4 text-sm font-semibold text-[#1A1A1A]">Aucun collaborateur pour le moment</p>
                   <p class="mt-1 text-xs text-[#6B6E70]">Ajoutez votre premier employé pour constituer l'équipe du garage.</p>
-                  <Link
-                    :href="route('admin.users.create')"
-                    class="mt-5 inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-[#C8102E] px-4 text-sm font-semibold text-white transition duration-200 hover:bg-[#a90d26] active:scale-[0.98]"
-                  >
+                  <Link :href="route('admin.users.create')" class="gbtn gbtn-red mt-5">
                     <font-awesome-icon :icon="faPlus" class="text-xs" />
                     <span>Ajouter un employé</span>
                   </Link>
@@ -754,150 +697,597 @@ const logout = () => {
       </section>
 
     </div>
-  </div>
 
-  <!-- ═══ CONFIRMATION DE SUPPRESSION ═══ -->
-  <Transition name="kg-modal">
-    <div
-      v-if="userASupprimer"
-      class="fixed inset-0 z-40 flex items-end justify-center sm:items-center sm:p-6"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="kg-suppr-titre"
-    >
-      <div class="kg-backdrop absolute inset-0 bg-[#1A1A1A]/50" @click="fermerSuppression"></div>
+    <!-- ═══ CONFIRMATION DE SUPPRESSION ═══ -->
+    <Transition name="kg-modal">
+      <div
+        v-if="userASupprimer"
+        class="fixed inset-0 z-40 flex items-end justify-center p-3 sm:items-center sm:p-6"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="kg-suppr-titre"
+      >
+        <div class="kg-backdrop absolute inset-0" @click="fermerSuppression"></div>
 
-      <div class="kg-sheet relative w-full max-w-md rounded-t-2xl bg-white p-5 shadow-2xl sm:rounded-2xl sm:p-6">
-        <div class="flex items-start gap-4">
-          <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#C8102E]/10 text-[#C8102E]">
-            <font-awesome-icon :icon="faTriangleExclamation" />
-          </span>
-          <div class="min-w-0">
-            <h2 id="kg-suppr-titre" class="text-base font-bold text-[#1A1A1A]">Supprimer ce collaborateur ?</h2>
-            <p class="mt-1 text-sm leading-relaxed text-[#6B6E70]">
-              Le compte de <span class="font-semibold text-[#1A1A1A]">{{ userASupprimer.name }}</span>
-              sera définitivement supprimé. Cette action est irréversible.
-            </p>
+        <div class="kg-sheet glass glass-strong glass-lg relative w-full max-w-md p-6 pt-4 sm:pt-6">
+          <span class="mx-auto mb-4 block h-1 w-9 rounded-full bg-[#1A1A1A]/20 sm:hidden" aria-hidden="true"></span>
+
+          <div class="flex items-start gap-4">
+            <span class="tile-base tile-red flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl">
+              <font-awesome-icon :icon="faTriangleExclamation" />
+            </span>
+            <div class="min-w-0">
+              <h2 id="kg-suppr-titre" class="text-base font-black text-[#1A1A1A]">Supprimer ce collaborateur ?</h2>
+              <p class="mt-1.5 text-sm leading-relaxed text-[#6B6E70]">
+                Le compte de <span class="font-semibold text-[#1A1A1A]">{{ userASupprimer.name }}</span>
+                sera définitivement supprimé. Cette action est irréversible.
+              </p>
+            </div>
+          </div>
+
+          <div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button ref="boutonAnnuler" type="button" @click="fermerSuppression" :disabled="suppressionEnCours" class="gbtn gbtn-neutral">
+              Annuler
+            </button>
+            <button type="button" @click="confirmerSuppression" :disabled="suppressionEnCours" class="gbtn gbtn-red">
+              <font-awesome-icon :icon="suppressionEnCours ? faCircleNotch : faTrashCan" :class="{ 'animate-spin': suppressionEnCours }" class="text-xs" />
+              <span>{{ suppressionEnCours ? 'Suppression…' : 'Supprimer' }}</span>
+            </button>
           </div>
         </div>
-
-        <div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <button
-            ref="boutonAnnuler"
-            type="button"
-            @click="fermerSuppression"
-            :disabled="suppressionEnCours"
-            class="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-gray-200 bg-white px-4 text-sm font-semibold text-[#1A1A1A] transition duration-200 hover:bg-gray-50 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E]/40 disabled:opacity-50"
-          >
-            Annuler
-          </button>
-          <button
-            type="button"
-            @click="confirmerSuppression"
-            :disabled="suppressionEnCours"
-            class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-[#C8102E] px-4 text-sm font-semibold text-white transition duration-200 hover:bg-[#a90d26] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8102E]/50 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            <font-awesome-icon :icon="suppressionEnCours ? faCircleNotch : faTrashCan" :class="{ 'animate-spin': suppressionEnCours }" class="text-xs" />
-            <span>{{ suppressionEnCours ? 'Suppression…' : 'Supprimer' }}</span>
-          </button>
-        </div>
       </div>
-    </div>
-  </Transition>
+    </Transition>
+  </div>
 </template>
 
 <style scoped>
-/* Courbe "premium" partagée */
+/* ════════════ Tokens ════════════ */
+.page {
+  --red: #c8102e;
+  --red-dark: #a90d26;
+  --ink: #1a1a1a;
+  --muted: #6b6e70;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+  position: relative;
+  min-height: 100vh;
+  overflow-x: clip;
+  background: #f5f5f6;
+}
 .kg-ease {
-  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  transition-timing-function: var(--ease);
 }
 
-/* Disparition douce du loader */
-.kg-fade-leave-active {
-  transition: opacity 0.4s ease-out;
+/* ════════════ Lumière d'arrière-plan ════════════ */
+.orbs {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
 }
-.kg-fade-leave-to {
+.orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(70px);
+  will-change: transform;
+}
+.orb-1 {
+  top: -12%;
+  left: -8%;
+  height: 46vmax;
+  width: 46vmax;
+  background: radial-gradient(circle, rgba(200, 16, 46, 0.34), rgba(200, 16, 46, 0) 70%);
+  animation: drift-a 22s ease-in-out infinite alternate;
+}
+.orb-2 {
+  top: 30%;
+  right: -14%;
+  height: 40vmax;
+  width: 40vmax;
+  background: radial-gradient(circle, rgba(26, 26, 26, 0.2), rgba(26, 26, 26, 0) 70%);
+  animation: drift-b 28s ease-in-out infinite alternate;
+}
+.orb-3 {
+  bottom: -18%;
+  left: 22%;
+  height: 38vmax;
+  width: 38vmax;
+  background: radial-gradient(circle, rgba(200, 16, 46, 0.2), rgba(255, 255, 255, 0) 70%);
+  animation: drift-a 32s ease-in-out infinite alternate-reverse;
+}
+@keyframes drift-a {
+  to { transform: translate3d(6vmax, 5vmax, 0) scale(1.1); }
+}
+@keyframes drift-b {
+  to { transform: translate3d(-7vmax, -4vmax, 0) scale(1.08); }
+}
+
+/* ════════════ Liquid Glass ════════════ */
+.glass {
+  --mx: 50%;
+  --my: 0%;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.66), rgba(255, 255, 255, 0.38));
+  -webkit-backdrop-filter: blur(26px) saturate(190%);
+  backdrop-filter: blur(26px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.35),
+    inset 1px 0 0 rgba(255, 255, 255, 0.5),
+    0 1px 2px rgba(26, 26, 26, 0.05),
+    0 18px 40px -18px rgba(26, 26, 26, 0.28);
+}
+.glass-lg { border-radius: 28px; }
+.glass-strong {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.7));
+}
+.glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 38%);
+  pointer-events: none;
+}
+.glass::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: radial-gradient(260px circle at var(--mx) var(--my), rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0) 65%);
   opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+.glass:hover::after { opacity: 1; }
+
+/* Verre sombre (chiffre d'affaires) */
+.glass-dark {
+  background: linear-gradient(140deg, rgba(34, 34, 36, 0.9), rgba(26, 26, 26, 0.72));
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.05),
+    0 22px 44px -18px rgba(26, 26, 26, 0.55);
+}
+.glass-dark::before {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 42%);
+}
+.glass-dark::after {
+  background: radial-gradient(300px circle at var(--mx) var(--my), rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0) 65%);
 }
 
-/* Barre de chargement : une seule progression, sans boucle */
+/* Carte cliquable qui se soulève */
+.lift {
+  transition: transform 0.4s var(--ease), box-shadow 0.4s ease;
+}
+.lift:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.35),
+    0 1px 2px rgba(26, 26, 26, 0.05),
+    0 26px 48px -18px rgba(200, 16, 46, 0.3);
+}
+.lift:focus-visible,
+.nav-row:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 3px;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass { background: rgba(255, 255, 255, 0.94); }
+  .glass-dark { background: rgba(26, 26, 26, 0.95); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass {
+    background: #fff;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .glass-dark { background: #1a1a1a; }
+}
+
+/* ════════════ En-têtes et séparateurs ════════════ */
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid rgba(26, 26, 26, 0.06);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+@media (min-width: 640px) {
+  .card-head { padding: 1.15rem 1.5rem; }
+}
+.panel-divider {
+  border-top: 1px solid rgba(26, 26, 26, 0.06);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* ════════════ Tuiles d'icônes ════════════ */
+.tile-base {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 0 0 1px rgba(26, 26, 26, 0.06);
+}
+.tile-red {
+  color: var(--red);
+  background: linear-gradient(160deg, rgba(200, 16, 46, 0.16), rgba(200, 16, 46, 0.07));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 0 0 1px rgba(200, 16, 46, 0.14);
+}
+.tile-ink {
+  color: var(--ink);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.5));
+  box-shadow: inset 0 1px 0 #fff, 0 0 0 1px rgba(26, 26, 26, 0.07), 0 4px 10px -6px rgba(26, 26, 26, 0.25);
+}
+.tile-red-solid {
+  background: linear-gradient(160deg, #e0213f, var(--red) 55%, var(--red-dark));
+  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.45), inset 0 -3px 8px rgba(0, 0, 0, 0.18), 0 10px 20px -10px rgba(200, 16, 46, 0.7);
+}
+.tile-ink-solid {
+  background: linear-gradient(150deg, #3a3a3c, #1a1a1a);
+  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.35), inset 0 -4px 10px rgba(0, 0, 0, 0.25), 0 8px 18px -10px rgba(26, 26, 26, 0.6);
+}
+/* Tuile qui devient rouge quand la carte parente est survolée */
+.tile-hover,
+.tile-link {
+  transition: background 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
+}
+.tile-link {
+  color: var(--red);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.5));
+  box-shadow: inset 0 1px 0 #fff, 0 0 0 1px rgba(26, 26, 26, 0.07), 0 4px 10px -6px rgba(26, 26, 26, 0.25);
+}
+.group:hover .tile-hover,
+.group:hover .tile-link {
+  color: #fff;
+  background: linear-gradient(160deg, #e0213f, var(--red) 55%, var(--red-dark));
+  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.45), 0 8px 16px -8px rgba(200, 16, 46, 0.7);
+}
+
+/* ════════════ Lignes de navigation ════════════ */
+.nav-row {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: 20px;
+  transition: background-color 0.25s ease;
+}
+.nav-row:hover {
+  background: rgba(255, 255, 255, 0.6);
+}
+li + li > .nav-row {
+  position: relative;
+}
+
+/* ════════════ Sélecteur du mois (verre sombre) ════════════ */
+.select-dark {
+  min-height: 44px;
+  max-width: 11rem;
+  cursor: pointer;
+  appearance: none;
+  border-radius: 9999px;
+  padding: 0.5rem 2.25rem 0.5rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+.select-dark:hover { background: rgba(255, 255, 255, 0.18); }
+.select-dark:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(200, 16, 46, 0.7), 0 0 0 6px rgba(200, 16, 46, 0.2);
+}
+
+/* ════════════ Boutons en capsule ════════════ */
+.gbtn {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0 1.15rem;
+  border-radius: 9999px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  white-space: nowrap;
+  transition: transform 0.25s var(--ease), box-shadow 0.25s ease, background 0.25s ease, filter 0.25s ease;
+}
+.gbtn-sm {
+  min-height: 40px;
+  padding: 0 0.95rem;
+  font-size: 0.78rem;
+}
+.gbtn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.04);
+}
+.gbtn:active:not(:disabled) { transform: scale(0.96); }
+.gbtn:disabled { opacity: 0.6; cursor: not-allowed; }
+.gbtn:focus-visible,
+.icon-btn:focus-visible,
+.pill:focus-visible,
+.focus-ring:focus-visible {
+  outline: 2px solid var(--red);
+  outline-offset: 2px;
+}
+.gbtn-neutral {
+  color: var(--ink);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.55));
+  box-shadow: inset 0 1px 0 #fff, 0 0 0 1px rgba(26, 26, 26, 0.08), 0 6px 14px -8px rgba(26, 26, 26, 0.3);
+}
+.gbtn-red {
+  color: #fff;
+  background: linear-gradient(180deg, #e0213f, var(--red) 55%, var(--red-dark));
+  box-shadow: inset 0 1.5px 0 rgba(255, 255, 255, 0.45), inset 0 -2px 6px rgba(0, 0, 0, 0.18), 0 8px 18px -8px rgba(200, 16, 46, 0.7);
+}
+.gbtn-ghost-blue {
+  color: #1d4ed8;
+}
+.gbtn-ghost-blue:hover { background: rgba(37, 99, 235, 0.1); }
+.gbtn-ghost-red {
+  color: var(--red);
+}
+.gbtn-ghost-red:hover { background: rgba(200, 16, 46, 0.1); }
+.gbtn-ghost-blue:hover,
+.gbtn-ghost-red:hover { filter: none; }
+
+.icon-btn {
+  display: inline-flex;
+  height: 36px;
+  width: 36px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  color: var(--muted);
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.15s ease;
+}
+.icon-btn:hover {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.85);
+}
+.icon-btn:active { transform: scale(0.88); }
+.icon-pill {
+  display: inline-flex;
+  height: 36px;
+  width: 36px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 1px 0 #fff, 0 0 0 1px rgba(26, 26, 26, 0.06);
+}
+
+/* ════════════ Recherche + filtres ════════════ */
+.field-input {
+  min-height: 46px;
+  width: 100%;
+  padding: 0 2.75rem 0 2.6rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid transparent;
+  box-shadow: inset 0 1px 3px rgba(26, 26, 26, 0.07), inset 0 0 0 1px rgba(26, 26, 26, 0.06), 0 1px 0 rgba(255, 255, 255, 0.8);
+  outline: none;
+  transition: box-shadow 0.25s ease, background 0.25s ease;
+}
+.field-input::placeholder { color: #8e9194; }
+.field-input:focus {
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: inset 0 1px 2px rgba(26, 26, 26, 0.04), 0 0 0 2px rgba(200, 16, 46, 0.55), 0 0 0 6px rgba(200, 16, 46, 0.12);
+}
+
+.pill {
+  display: inline-flex;
+  min-height: 44px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 1rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--ink);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.5));
+  box-shadow: inset 0 1px 0 #fff, 0 0 0 1px rgba(26, 26, 26, 0.07);
+  transition: transform 0.2s var(--ease), background 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+}
+@media (min-width: 640px) {
+  .pill { min-height: 36px; }
+}
+.pill:hover:not(.pill-active) { background: rgba(255, 255, 255, 0.95); }
+.pill:active { transform: scale(0.96); }
+.pill-active {
+  color: #fff;
+  background: linear-gradient(180deg, #3a3a3c, #1a1a1a);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 6px 14px -6px rgba(26, 26, 26, 0.5);
+}
+
+/* ════════════ Surfaces imbriquées (sans flou, plus légères) ════════════ */
+.surface {
+  overflow: hidden;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 0 0 1px rgba(26, 26, 26, 0.06), 0 8px 20px -14px rgba(26, 26, 26, 0.25);
+}
+.surface-card {
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.78);
+}
+.lift-soft {
+  transition: transform 0.35s var(--ease), box-shadow 0.35s ease;
+}
+.lift-soft:hover {
+  transform: translateY(-2px);
+  box-shadow: inset 0 1px 0 #fff, 0 0 0 1px rgba(26, 26, 26, 0.08), 0 16px 28px -14px rgba(26, 26, 26, 0.3);
+}
+.role-head {
+  display: flex;
+  min-height: 58px;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  text-align: left;
+  transition: background-color 0.25s ease;
+}
+.role-head:hover { background: rgba(255, 255, 255, 0.6); }
+.count {
+  min-width: 1.75rem;
+  border-radius: 9999px;
+  padding: 0.18rem 0.6rem;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: inset 0 1px 0 #fff, 0 0 0 1px rgba(26, 26, 26, 0.06);
+}
+.chip-you {
+  flex-shrink: 0;
+  border-radius: 9999px;
+  padding: 0.1rem 0.55rem;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1rem;
+  color: var(--red);
+  background: rgba(200, 16, 46, 0.1);
+  border: 1px solid rgba(200, 16, 46, 0.2);
+}
+.card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  margin-top: 1rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid rgba(26, 26, 26, 0.07);
+}
+
+/* ════════════ États vides ════════════ */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px dashed rgba(26, 26, 26, 0.2);
+}
+.empty-icon {
+  display: inline-flex;
+  height: 48px;
+  width: 48px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  color: #8e9194;
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: inset 0 1px 0 #fff, 0 0 0 1px rgba(26, 26, 26, 0.06);
+}
+
+/* ════════════ Écran de chargement ════════════ */
+.loader {
+  background: rgba(245, 245, 246, 0.55);
+  -webkit-backdrop-filter: blur(30px) saturate(160%);
+  backdrop-filter: blur(30px) saturate(160%);
+}
+.progress {
+  height: 5px;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: rgba(26, 26, 26, 0.08);
+  box-shadow: inset 0 1px 2px rgba(26, 26, 26, 0.1);
+}
+.kg-fade-leave-active { transition: opacity 0.4s ease-out; }
+.kg-fade-leave-to { opacity: 0; }
+
 @keyframes kgLoading {
   from { width: 0%; }
   to { width: 100%; }
 }
-.kg-loader {
-  animation: kgLoading 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
+.kg-loader { animation: kgLoading 1.5s var(--ease) forwards; }
 
-/* Engrenage du loader : un tour lent */
 @keyframes kgGear {
   from { transform: rotate(0deg); }
   to { transform: rotate(180deg); }
 }
-.kg-gear {
-  animation: kgGear 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
+.kg-gear { animation: kgGear 1.5s var(--ease) forwards; }
 
-/* Moment fort : entrée échelonnée des sections après le chargement */
+/* ════════════ Entrée échelonnée après le chargement ════════════ */
 @keyframes kgRise {
-  from { opacity: 0; transform: translateY(14px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(14px) scale(0.985); }
+  to { opacity: 1; transform: none; }
 }
 .kg-rise {
-  animation: kgRise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: kgRise 0.7s var(--ease) both;
   animation-delay: var(--d, 0ms);
 }
 
-/* Accordéons : hauteur animée sans valeur fixe */
+/* ════════════ Accordéons : hauteur animée ════════════ */
 .kg-collapse {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: grid-template-rows 0.35s var(--ease);
 }
-.kg-collapse.kg-open {
-  grid-template-rows: 1fr;
-}
+.kg-collapse.kg-open { grid-template-rows: 1fr; }
 .kg-collapse-inner {
   min-height: 0;
   overflow: hidden;
 }
 
-/* Feuille de confirmation : fond qui s'estompe, panneau qui monte */
-.kg-modal-enter-active,
-.kg-modal-leave-active {
-  transition: opacity 0.25s ease-out;
+/* ════════════ Feuille de confirmation ════════════ */
+.kg-backdrop {
+  background: rgba(26, 26, 26, 0.35);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
 }
+.kg-modal-enter-active,
+.kg-modal-leave-active { transition: opacity 0.25s ease-out; }
 .kg-modal-enter-active .kg-sheet,
 .kg-modal-leave-active .kg-sheet {
-  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s ease-out;
+  transition: transform 0.45s var(--ease), opacity 0.25s ease-out;
 }
 .kg-modal-enter-from,
-.kg-modal-leave-to {
-  opacity: 0;
-}
+.kg-modal-leave-to { opacity: 0; }
 .kg-modal-enter-from .kg-sheet,
 .kg-modal-leave-to .kg-sheet {
-  transform: translateY(24px);
+  transform: translateY(40px) scale(0.97);
   opacity: 0;
 }
 
-/* Accessibilité : mouvement réduit */
+/* ════════════ Accessibilité : mouvement réduit ════════════ */
 @media (prefers-reduced-motion: reduce) {
   .kg-rise,
   .kg-loader,
-  .kg-gear {
-    animation: none;
-  }
-  .kg-loader {
-    width: 100%;
-  }
+  .kg-gear,
+  .orb { animation: none; }
+  .kg-loader { width: 100%; }
   .kg-collapse,
   .kg-fade-leave-active,
   .kg-modal-enter-active,
   .kg-modal-leave-active,
   .kg-modal-enter-active .kg-sheet,
-  .kg-modal-leave-active .kg-sheet {
-    transition: none;
-  }
+  .kg-modal-leave-active .kg-sheet,
+  .lift,
+  .lift-soft { transition: none; }
 }
 </style>
