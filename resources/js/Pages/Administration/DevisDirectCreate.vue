@@ -5,7 +5,10 @@ import { computed, ref, watch } from 'vue';
 import axios from 'axios';
 import { FAMILLES, FAMILLE_PAR_DEFAUT } from '@/constants/familles.js';
 const props = defineProps({
-    vehicules: Array,
+    clients: {
+        type: Array,
+        default: () => [],
+    },
 });
 
 // Détection automatique de la Famille & Sous-famille selon les mots-clés
@@ -39,6 +42,9 @@ const activeDropdownIndex = ref(null);
 const searchResults = ref([]);
 
 const form = useForm({
+    client_mode: 'nouveau',
+    client_id: '',
+    vehicule_mode: 'nouveau',
     vehicule_id: '',
     nouveau_client_nom: '',
     nouveau_client_prenom: '', 
@@ -62,6 +68,34 @@ const form = useForm({
             ne_pas_appliquer_tva: true,
         }
     ],
+});
+
+const clientSelectionne = computed(() =>
+    props.clients.find((client) => String(client.id) === String(form.client_id))
+);
+const vehiculesDuClient = computed(() => clientSelectionne.value?.vehicules ?? []);
+
+watch(() => form.client_mode, () => {
+    form.client_id = '';
+    form.vehicule_id = '';
+    form.clearErrors('client_id', 'vehicule_id');
+});
+
+watch(() => form.client_id, () => {
+    form.vehicule_id = '';
+    form.vehicule_mode = 'nouveau';
+    form.clearErrors('client_id', 'vehicule_id');
+});
+
+watch(vehiculesDuClient, (vehicules) => {
+    if (form.client_mode === 'existant' && vehicules.length === 0) {
+        form.vehicule_mode = 'nouveau';
+        form.vehicule_id = '';
+    }
+});
+
+watch(() => form.vehicule_mode, (mode) => {
+    if (mode === 'nouveau') form.vehicule_id = '';
 });
 
 // Saisie dans le champ désignation avec autocomplétion & détection auto
@@ -205,10 +239,13 @@ watch(petiteFournitureManuelle, (manuel) => {
 
 // Soumission : on retire le drapeau interne famille_verrouillee avant l'envoi
 const submitDevis = () => {
-    form.transform((data) => ({
-        ...data,
-        lignes: data.lignes.map(({ famille_verrouillee, ...ligne }) => ligne),
-    })).post(route('administration.devis.directs.store'), {
+    form.transform((data) => {
+        const { client_mode, vehicule_mode, ...payload } = data;
+        return {
+            ...payload,
+            lignes: data.lignes.map(({ famille_verrouillee, ...ligne }) => ligne),
+        };
+    }).post(route('administration.devis.directs.store'), {
         preserveScroll: true,
     });
 };
@@ -254,36 +291,83 @@ const submitDevis = () => {
                         </div>
 
                         <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Nom du Client <span class="text-[#E11D48]">*</span></label>
-                                <input type="text" v-model="form.nouveau_client_nom" required placeholder="Ex: Kouassi" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
-                                <p v-if="form.errors.nouveau_client_nom" class="mt-1 text-[11px] font-bold text-[#E11D48]">{{ form.errors.nouveau_client_nom }}</p>
+                            <div class="sm:col-span-2 md:col-span-4">
+                                <label class="block text-xs font-semibold text-slate-600 mb-1">Client</label>
+                                <select v-model="form.client_mode" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]">
+                                    <option value="nouveau">Créer une nouvelle fiche client</option>
+                                    <option value="existant">Utiliser un client déjà enregistré</option>
+                                </select>
                             </div>
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Prénom du Client <span class="text-[#E11D48]">*</span></label>
-                                <input type="text" v-model="form.nouveau_client_prenom" required placeholder="Ex: Jean" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
-                                <p v-if="form.errors.nouveau_client_prenom" class="mt-1 text-[11px] font-bold text-[#E11D48]">{{ form.errors.nouveau_client_prenom }}</p>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Numéro de téléphone</label>
-                                <input type="text" v-model="form.nouveau_client_telephone" placeholder="Ex: 0700000000" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
-                                <p v-if="form.errors.nouveau_client_telephone" class="mt-1 text-[11px] font-bold text-[#E11D48]">{{ form.errors.nouveau_client_telephone }}</p>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Marque du Véhicule <span class="text-[#E11D48]">*</span></label>
-                                <input type="text" v-model="form.nouvelle_marque" required placeholder="Ex: Toyota" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
-                                <p v-if="form.errors.nouvelle_marque" class="mt-1 text-[11px] font-bold text-[#E11D48]">{{ form.errors.nouvelle_marque }}</p>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Modèle du Véhicule <span class="text-[#E11D48]">*</span></label>
-                                <input type="text" v-model="form.nouveau_modele" required placeholder="Ex: Corolla" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
-                                <p v-if="form.errors.nouveau_modele" class="mt-1 text-[11px] font-bold text-[#E11D48]">{{ form.errors.nouveau_modele }}</p>
-                            </div>
-                            <div>
-                                <label class="block text-xs font-semibold text-slate-600 mb-1">Immatriculation</label>
-                                <input type="text" v-model="form.nouvelle_immatriculation" placeholder="Ex: 1234 AB 01" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
-                                <p v-if="form.errors.nouvelle_immatriculation" class="mt-1 text-[11px] font-bold text-[#E11D48]">{{ form.errors.nouvelle_immatriculation }}</p>
-                            </div>
+
+                            <template v-if="form.client_mode === 'existant'">
+                                <div class="sm:col-span-2">
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Sélectionner le client <span class="text-[#E11D48]">*</span></label>
+                                    <select v-model="form.client_id" required class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]">
+                                        <option value="" disabled>Choisir un client</option>
+                                        <option v-for="client in clients" :key="client.id" :value="client.id">
+                                            {{ client.nom }} {{ client.prenom }} — {{ client.telephone }}
+                                        </option>
+                                    </select>
+                                    <p v-if="form.errors.client_id" class="mt-1 text-[11px] font-bold text-[#E11D48]">{{ form.errors.client_id }}</p>
+                                    <p v-if="!clients.length" class="mt-1 text-[11px] text-slate-500">Aucun client enregistré pour ce siège. Créez une nouvelle fiche client.</p>
+                                </div>
+
+                                <div v-if="clientSelectionne" class="sm:col-span-2">
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Véhicule</label>
+                                    <select v-model="form.vehicule_mode" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]">
+                                        <option value="nouveau">Ajouter un véhicule à ce client</option>
+                                        <option v-if="vehiculesDuClient.length" value="existant">Choisir un véhicule déjà enregistré</option>
+                                    </select>
+                                </div>
+
+                                <div v-if="form.vehicule_mode === 'existant' && clientSelectionne" class="sm:col-span-2">
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Véhicule enregistré <span class="text-[#E11D48]">*</span></label>
+                                    <select v-model="form.vehicule_id" required class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]">
+                                        <option value="" disabled>Choisir un véhicule</option>
+                                        <option v-for="vehicule in vehiculesDuClient" :key="vehicule.id" :value="vehicule.id">
+                                            {{ vehicule.marque }} {{ vehicule.modele }} — {{ vehicule.immatriculation }}
+                                        </option>
+                                    </select>
+                                    <p v-if="form.errors.vehicule_id" class="mt-1 text-[11px] font-bold text-[#E11D48]">{{ form.errors.vehicule_id }}</p>
+                                </div>
+                            </template>
+
+                            <template v-else>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Nom du Client <span class="text-[#E11D48]">*</span></label>
+                                    <input type="text" v-model="form.nouveau_client_nom" required placeholder="Ex: Kouassi" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+                                    <p v-if="form.errors.nouveau_client_nom" class="mt-1 text-[11px] font-bold text-[#E11D48]">{{ form.errors.nouveau_client_nom }}</p>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Prénom du Client <span class="text-[#E11D48]">*</span></label>
+                                    <input type="text" v-model="form.nouveau_client_prenom" required placeholder="Ex: Jean" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+                                    <p v-if="form.errors.nouveau_client_prenom" class="mt-1 text-[11px] font-bold text-[#E11D48]">{{ form.errors.nouveau_client_prenom }}</p>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Numéro de téléphone</label>
+                                    <input type="text" v-model="form.nouveau_client_telephone" placeholder="Ex: 0700000000" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+                                    <p v-if="form.errors.nouveau_client_telephone" class="mt-1 text-[11px] font-bold text-[#E11D48]">{{ form.errors.nouveau_client_telephone }}</p>
+                                </div>
+                            </template>
+
+                            <template v-if="form.client_mode === 'nouveau' || form.vehicule_mode === 'nouveau'">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Marque du Véhicule <span class="text-[#E11D48]">*</span></label>
+                                    <input type="text" v-model="form.nouvelle_marque" required placeholder="Ex: Toyota" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+                                    <p v-if="form.errors.nouvelle_marque" class="mt-1 text-[11px] font-bold text-[#E11D48]">{{ form.errors.nouvelle_marque }}</p>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Modèle du Véhicule <span class="text-[#E11D48]">*</span></label>
+                                    <input type="text" v-model="form.nouveau_modele" required placeholder="Ex: Corolla" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+                                    <p v-if="form.errors.nouveau_modele" class="mt-1 text-[11px] font-bold text-[#E11D48]">{{ form.errors.nouveau_modele }}</p>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-600 mb-1">Immatriculation</label>
+                                    <input type="text" v-model="form.nouvelle_immatriculation" placeholder="Ex: 1234 AB 01" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />
+                                    <p v-if="form.errors.nouvelle_immatriculation" class="mt-1 text-[11px] font-bold text-[#E11D48]">{{ form.errors.nouvelle_immatriculation }}</p>
+                                </div>
+                            </template>
+
                             <div>
                                 <label class="block text-xs font-semibold text-slate-600 mb-1">Kilométrage</label>
                                 <input type="number" min="0" v-model="form.kilometrage" placeholder="Ex: 45000" class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]" />

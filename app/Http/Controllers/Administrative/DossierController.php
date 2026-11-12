@@ -8,7 +8,10 @@ use App\Models\Devis;
 use App\Models\LigneDevis;
 use App\Models\Facture;
 use App\Models\Paiement;
+use App\Models\Client;
+use App\Models\Vehicule;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -375,19 +378,35 @@ class DossierController extends Controller
     // Affiche le formulaire de création d'un devis direct
     public function devisDirectCreate()
     {
-        $vehicules = \App\Models\Vehicule::with('client')->latest()->get();
+        $user = auth()->user();
+        $siege = $user->siege ?: array_key_first(config('sieges'));
+        $clients = Client::query()
+            ->where(function ($query) use ($siege) {
+                $query->where('siege', $siege)
+                    ->orWhereHas('vehicules.interventions', fn ($interventions) => $interventions->where('siege', $siege));
+            })
+            ->with(['vehicules' => function ($vehicules) use ($siege) {
+                $vehicules->where(function ($query) use ($siege) {
+                    $query->whereHas('client', fn ($client) => $client->where('siege', $siege))
+                        ->orWhereHas('interventions', fn ($interventions) => $interventions->where('siege', $siege));
+                })->orderBy('immatriculation');
+            }])
+            ->orderBy('nom')
+            ->orderBy('prenom')
+            ->get(['id', 'nom', 'prenom', 'telephone', 'siege']);
 
         return Inertia::render('Administration/DevisDirectCreate', [
-            'vehicules' => $vehicules
+            'clients' => $clients
         ]);
     }
 
     public function storeDevisDirect(Request $request)
     {
         $request->validate([
+            'client_id' => 'nullable|required_with:vehicule_id|exists:clients,id',
             'vehicule_id' => 'nullable|exists:vehicules,id',
-            'nouveau_client_nom' => 'required_without:vehicule_id|nullable|string|max:255',
-            'nouveau_client_prenom' => 'required_without:vehicule_id|nullable|string|max:255',
+            'nouveau_client_nom' => 'required_without:client_id|nullable|string|max:255',
+            'nouveau_client_prenom' => 'required_without:client_id|nullable|string|max:255',
             'nouveau_client_telephone' => 'nullable|string|max:50',
             'nouvelle_marque' => 'required_without:vehicule_id|nullable|string|max:255',
             'nouveau_modele' => 'required_without:vehicule_id|nullable|string|max:255',
@@ -421,43 +440,82 @@ class DossierController extends Controller
         $siege = $user->siege ?: array_key_first(config('sieges'));
 
         DB::transaction(function () use ($request, $siege) {
-            $vehiculeId = $request->vehicule_id;
+            $clientId = $request->input('client_id');
+            $client = null;
 
-            if (!$vehiculeId) {
-                // Immatriculation facultative : si elle existe déjà, on réutilise ce véhicule
+            if ($clientId) {
+                $client = Client::query()
+                    ->whereKey($clientId)
+                    ->where(function ($query) use ($siege) {
+                        $query->where('siege', $siege)
+                            ->orWhereHas('vehicules.interventions', fn ($interventions) => $interventions->where('siege', $siege));
+                    })
+                    ->first();
+
+                if (!$client) {
+                    throw ValidationException::withMessages([
+                        'client_id' => 'Ce client ne peut pas être utilisé depuis votre siège.',
+                    ]);
+                }
+            }
+
+            if ($request->filled('vehicule_id')) {
+                $vehicule = Vehicule::query()
+                    ->whereKey($request->vehicule_id)
+                    ->where('client_id', $client->id)
+                    ->where(function ($query) use ($siege) {
+                        $query->whereHas('client', fn ($clientQuery) => $clientQuery->where('siege', $siege))
+                            ->orWhereHas('interventions', fn ($interventions) => $interventions->where('siege', $siege));
+                    })
+                    ->first();
+
+                if (!$vehicule) {
+                    throw ValidationException::withMessages([
+                        'vehicule_id' => 'Ce véhicule n’est pas associé au client sélectionné.',
+                    ]);
+                }
+            } else {
+                if (!$client) {
+                    $client = Client::create([
+                        'nom' => $request->nouveau_client_nom,
+                        'prenom' => $request->nouveau_client_prenom,
+                        'telephone' => $request->nouveau_client_telephone ?: '00000000',
+                        'siege' => $siege,
+                    ]);
+                }
+
                 $immat = $request->filled('nouvelle_immatriculation')
                     ? strtoupper(trim($request->nouvelle_immatriculation))
                     : null;
 
-                $vehiculeExistant = $immat
-                    ? \App\Models\Vehicule::where('immatriculation', $immat)->first()
-                    : null;
+                if ($immat) {
+                    $immatNormalisee = preg_replace('/[^A-Z0-9]/', '', $immat);
+                    $expressionImmat = "UPPER(immatriculation)";
+                    foreach ([' ', '-', '.', '/', '_'] as $caractere) {
+                        $expressionImmat = "REPLACE({$expressionImmat}, '{$caractere}', '')";
+                    }
 
-                if ($vehiculeExistant) {
-                    $vehiculeId = $vehiculeExistant->id;
-                } else {
-                    $client = \App\Models\Client::firstOrCreate(
-                        ['nom' => $request->nouveau_client_nom],
-                        [
-                            'prenom' => $request->nouveau_client_prenom ?? '',
-                            'telephone' => $request->nouveau_client_telephone ?: '00000000',
-                            'siege' => $siege,
-                        ]
-                    );
+                    $vehiculeExistant = Vehicule::whereRaw("{$expressionImmat} = ?", [$immatNormalisee])
+                        ->with('client')
+                        ->first();
 
-                    $vehicule = \App\Models\Vehicule::create([
-                        'client_id' => $client->id,
-                        'marque' => $request->nouvelle_marque,
-                        'modele' => $request->nouveau_modele,
-                        'immatriculation' => $immat ?: 'TEMP-' . uniqid(),
-                    ]);
-
-                    $vehiculeId = $vehicule->id;
+                    if ($vehiculeExistant) {
+                        throw ValidationException::withMessages([
+                            'nouvelle_immatriculation' => "Cette immatriculation est déjà enregistrée pour {$vehiculeExistant->client->nom} {$vehiculeExistant->client->prenom}. Sélectionnez ce client et son véhicule existant.",
+                        ]);
+                    }
                 }
+
+                $vehicule = Vehicule::create([
+                    'client_id' => $client->id,
+                    'marque' => $request->nouvelle_marque,
+                    'modele' => $request->nouveau_modele,
+                    'immatriculation' => $immat ?: 'TEMP-' . uniqid(),
+                ]);
             }
 
             $dossier = Intervention::create([
-                'vehicule_id' => $vehiculeId,
+                'vehicule_id' => $vehicule->id,
                 'circuit' => 'devis_direct',
                 'siege' => $siege,
                 'kilometrage' => (int) $request->input('kilometrage', 0),
