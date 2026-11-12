@@ -102,7 +102,7 @@ const formatDate = (dateString) => {
 };
 
 const aujourdhui = new Date().toISOString().slice(0, 10);
-const modesPaiement = ['Especes', 'Carte Bancaire', 'Virement', 'Orange Money', 'MTN Money', 'Moov Money'];
+const modesPaiement = ['Especes', 'Carte Bancaire', 'Virement', 'Orange Money', 'MTN Money', 'Moov Money','Chèque', 'Wave','Djamo'];
 
 const form = useForm({
     montant: '',
