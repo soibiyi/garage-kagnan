@@ -64,7 +64,7 @@ const logout = () => {
 </script>
 
 <template>
-    <div>
+    <div class="kg-internal-theme">
         <!-- 2. Ajoute la balise Head ici pour définir le titre de l'application -->
         <Head title="Garage Kagnan" />
 

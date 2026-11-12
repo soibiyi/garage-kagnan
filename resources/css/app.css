@@ -1,3 +1,107 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+.kg-internal-theme {
+    --kg-ink: #1a1a1a;
+    --kg-muted: #6b6e70;
+    --kg-red: #c8102e;
+    --kg-red-dark: #a50d25;
+    min-height: 100vh;
+    color: var(--kg-ink);
+    background-color: #f4f4f5;
+    background-image:
+        radial-gradient(ellipse at 12% 0%, rgba(200, 16, 46, 0.13), transparent 34rem),
+        radial-gradient(ellipse at 100% 38%, rgba(26, 26, 26, 0.08), transparent 32rem),
+        linear-gradient(135deg, #f8f8f8, #f0f0f1);
+}
+
+.kg-internal-theme > nav {
+    border-color: rgba(26, 26, 26, 0.08);
+    background: rgba(255, 255, 255, 0.78);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    backdrop-filter: blur(20px) saturate(160%);
+}
+
+.kg-internal-theme > header {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.8);
+    background: rgba(255, 255, 255, 0.68);
+    box-shadow: 0 12px 30px -24px rgba(26, 26, 26, 0.4);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    backdrop-filter: blur(18px) saturate(160%);
+}
+
+.kg-internal-theme main {
+    background: transparent;
+}
+
+.kg-internal-theme [class~="min-h-screen"]:not(.kg-internal-theme) {
+    background-color: transparent;
+}
+
+.kg-internal-theme [class~="bg-white"][class*="rounded-2xl"][class*="shadow"],
+.kg-internal-theme [class~="bg-white"][class*="rounded-xl"][class*="shadow"] {
+    border-color: rgba(255, 255, 255, 0.82);
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.68));
+    box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.94),
+        0 1px 2px rgba(26, 26, 26, 0.04),
+        0 18px 38px -22px rgba(26, 26, 26, 0.34);
+    -webkit-backdrop-filter: blur(20px) saturate(170%);
+    backdrop-filter: blur(20px) saturate(170%);
+}
+
+.kg-internal-theme button[class*="rounded-xl"] {
+    transition: transform 0.22s ease, box-shadow 0.22s ease, background-color 0.22s ease;
+}
+
+.kg-internal-theme button[class*="rounded-xl"]:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+.kg-internal-theme input:not([type="checkbox"]):not([type="radio"]),
+.kg-internal-theme select,
+.kg-internal-theme textarea {
+    border-color: rgba(26, 26, 26, 0.14);
+    background-color: rgba(255, 255, 255, 0.76);
+}
+
+.kg-internal-theme input:focus,
+.kg-internal-theme select:focus,
+.kg-internal-theme textarea:focus {
+    border-color: var(--kg-red);
+    --tw-ring-color: rgba(200, 16, 46, 0.22);
+}
+
+.kg-internal-theme a:focus-visible,
+.kg-internal-theme button:focus-visible,
+.kg-internal-theme input:focus-visible,
+.kg-internal-theme select:focus-visible,
+.kg-internal-theme textarea:focus-visible {
+    outline-color: var(--kg-red);
+}
+
+.kg-internal-theme button[class*="bg-[#C8102E]"],
+.kg-internal-theme button[class*="bg-[#E11D48]"],
+.kg-internal-theme a[class*="bg-[#C8102E]"],
+.kg-internal-theme a[class*="bg-[#E11D48]"] {
+    border-radius: 9999px;
+    box-shadow: 0 10px 20px -12px rgba(200, 16, 46, 0.72);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .kg-internal-theme > nav,
+    .kg-internal-theme > header,
+    .kg-internal-theme [class~="bg-white"][class*="rounded-2xl"][class*="shadow"],
+    .kg-internal-theme [class~="bg-white"][class*="rounded-xl"][class*="shadow"] {
+        background: rgba(255, 255, 255, 0.95);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .kg-internal-theme button[class*="rounded-xl"],
+    .kg-internal-theme button[class*="rounded-xl"]:hover:not(:disabled) {
+        transform: none;
+        transition: none;
+    }
+}

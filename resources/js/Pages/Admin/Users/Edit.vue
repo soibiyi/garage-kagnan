@@ -34,7 +34,7 @@ const submit = () => {
 
 <template>
   <Head title="Modifier un utilisateur" />
-  <div class="min-h-screen bg-gray-50 py-10 px-4 sm:px-6 lg:px-8">
+  <div class="kg-internal-theme min-h-screen py-10 px-4 sm:px-6 lg:px-8">
     <div class="max-w-3xl mx-auto">
       
       <!-- Lien retour -->

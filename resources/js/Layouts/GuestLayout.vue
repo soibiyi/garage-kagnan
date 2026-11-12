@@ -4,12 +4,10 @@ import { Link } from '@inertiajs/vue3';
 
 <template>
     <div
-        class="flex min-h-screen flex-col items-center pt-6 sm:justify-center sm:pt-0"
-        style="background-color: #8A8D8F;"
+        class="kg-internal-theme flex min-h-screen flex-col items-center pt-6 sm:justify-center sm:pt-0"
     >
         <div
-            class="w-full overflow-hidden px-6 py-4 sm:max-w-md sm:rounded-lg"
-            style="background-color: #8A8D8F;"
+            class="w-full overflow-hidden rounded-2xl border border-white/70 bg-white/70 px-6 py-4 shadow-xl sm:max-w-md"
         >
             <slot />
         </div>
