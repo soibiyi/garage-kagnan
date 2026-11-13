@@ -36,6 +36,8 @@ import {
     faXmark,
     faTriangleExclamation,
     faCircleNotch,
+    faListCheck,
+    faUserTie,
 } from '@fortawesome/free-solid-svg-icons';
 
 const props = defineProps({
@@ -140,6 +142,7 @@ const accesDevis = [
 ];
 
 const accesSuivi = [
+    { label: 'Secrétariat', description: 'Confier des tâches avec un délai et échanger avec les secrétaires.', icone: faListCheck, href: route('admin.secretariat.index') },
     { label: 'Suivi des interactions', description: 'Échanges entre les chargés client et les clients.', icone: faFileLines, href: route('admin.users.interactionindex') },
     { label: 'Historique des missions', description: 'Missions terminées et chauffeurs responsables.', icone: faTruckFast, href: route('admin.missions.history') },
     { label: 'Historique chauffeurs', description: "Comparer l'activité et consulter les missions de chaque chauffeur.", icone: faIdCardClip, href: route('admin.chauffeurs.history') },
@@ -152,6 +155,7 @@ const ROLES_CONFIG = {
     mecanicien: { label: 'Mécaniciens', icone: faScrewdriverWrench, tint: 'bg-amber-50 text-amber-800', avatar: 'bg-amber-50 text-amber-800' },
     administratif: { label: 'Administratifs', icone: faUserGear, tint: 'bg-purple-50 text-purple-700', avatar: 'bg-purple-50 text-purple-700' },
     charge_client: { label: 'Chargés de suivi client', icone: faHeadset, tint: 'bg-rose-50 text-rose-700', avatar: 'bg-rose-50 text-rose-700' },
+    secretaire: { label: 'Secrétaires', icone: faUserTie, tint: 'bg-teal-50 text-teal-700', avatar: 'bg-teal-50 text-teal-700' },
 };
 
 // Accordéon principal
@@ -167,6 +171,7 @@ const activeRoles = ref({
     mecanicien: false,
     administratif: false,
     charge_client: false,
+    secretaire: false,
     autre: false,
 });
 const toggleRole = (roleKey) => {
@@ -463,7 +468,7 @@ const logout = () => {
             <div class="card-head">
               <div>
                 <h2 class="text-base font-black text-[#1A1A1A]">Suivi de l'activité</h2>
-                <p class="mt-0.5 text-xs text-[#6B6E70]">Équipes, missions et chauffeurs.</p>
+                <p class="mt-0.5 text-xs text-[#6B6E70]">Équipes, secrétariat, missions et chauffeurs.</p>
               </div>
             </div>
             <ul class="p-2">

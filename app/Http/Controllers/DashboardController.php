@@ -24,6 +24,9 @@ class DashboardController extends Controller
         if ($role === 'magasinier') {
             return redirect()->route('magasinier.pieces.index');
         }
+        if ($role === 'secretaire') {
+            return redirect()->route('secretaire.index');
+        }
         if ($role === 'chauffeur') {
             return redirect()->route('chauffeur.index');
         }

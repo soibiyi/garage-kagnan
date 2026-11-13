@@ -17,6 +17,9 @@ use App\Http\Controllers\ChargeClientController;
 use App\Http\Controllers\Administrative\FactureController;
 use App\Http\Controllers\EspaceClientController;
 use App\Http\Controllers\Chauffeur\ChauffeurController;
+use App\Http\Controllers\Admin\SecretariatController;
+use App\Http\Controllers\SecretaireController;
+use App\Http\Controllers\SecretariatChatController;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -85,6 +88,29 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/stocks/historique', [StockController::class, 'historiqueMouvements'])->name('stocks.historique');
     // Annulation d'une sortie (Admin)
     Route::delete('/stocks/mouvements/{mouvement}', [StockController::class, 'annulerSortie'])->name('stocks.mouvements.annuler');
+
+    // Secrétariat : tâches confiées aux secrétaires
+    Route::get('/secretariat', [SecretariatController::class, 'index'])->name('secretariat.index');
+    Route::post('/secretariat/taches', [SecretariatController::class, 'store'])->name('secretariat.taches.store');
+    Route::put('/secretariat/taches/{tache}', [SecretariatController::class, 'update'])->name('secretariat.taches.update');
+    Route::delete('/secretariat/taches/{tache}', [SecretariatController::class, 'destroy'])->name('secretariat.taches.destroy');
+});
+
+// Espace de la secrétaire : checklist des tâches reçues
+Route::middleware(['auth', 'verified', 'role:secretaire'])->prefix('secretaire')->name('secretaire.')->group(function () {
+    Route::get('/taches', [SecretaireController::class, 'index'])->name('index');
+    Route::patch('/taches/{tache}/statut', [SecretaireController::class, 'updateStatut'])->name('taches.statut');
+    Route::post('/taches/{tache}/etapes', [SecretaireController::class, 'storeItem'])->name('items.store');
+    Route::patch('/etapes/{item}', [SecretaireController::class, 'toggleItem'])->name('items.toggle');
+    Route::delete('/etapes/{item}', [SecretaireController::class, 'destroyItem'])->name('items.destroy');
+});
+
+// Messagerie admin <-> secrétaire et notifications du secrétariat (JSON)
+Route::middleware(['auth', 'verified', 'role:admin,secretaire'])->prefix('secretariat')->name('secretariat.')->group(function () {
+    Route::get('/chat/{secretaire}/messages', [SecretariatChatController::class, 'messages'])->name('chat.index');
+    Route::post('/chat/{secretaire}/messages', [SecretariatChatController::class, 'store'])->middleware('throttle:30,1')->name('chat.store');
+    Route::get('/notifications', [SecretariatChatController::class, 'notifications'])->name('notifications');
+    Route::patch('/notifications/{notification}/read', [SecretariatChatController::class, 'markRead'])->name('notifications.read');
 });
 
 // Routes dédiées au Magasinier

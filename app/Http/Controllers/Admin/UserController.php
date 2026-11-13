@@ -123,7 +123,7 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:191|unique:users',
             'password' => 'required|string|min:6',
-            'role' => 'required|string|in:admin,receptionniste,mecanicien,administratif,charge_client,magasinier,depanneur,depaneur,chauffeur',
+            'role' => 'required|string|in:admin,receptionniste,mecanicien,administratif,charge_client,magasinier,depanneur,depaneur,chauffeur,secretaire',
         ]);
 
         User::create([
@@ -155,7 +155,7 @@ class UserController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => ['required', 'string', 'email', 'max:191', Rule::unique('users')->ignore($user->id)],
-            'role' => 'required|string|in:admin,receptionniste,mecanicien,administratif,charge_client,magasinier,depanneur,depaneur,chauffeur',
+            'role' => 'required|string|in:admin,receptionniste,mecanicien,administratif,charge_client,magasinier,depanneur,depaneur,chauffeur,secretaire',
             'password' => 'nullable|string|min:6',
             'siege' => [Rule::requiredIf($request->role !== 'admin'), 'nullable', Rule::in(array_keys(config('sieges')))],
         ], [

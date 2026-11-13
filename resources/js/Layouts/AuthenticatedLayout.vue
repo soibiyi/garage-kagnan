@@ -5,6 +5,7 @@ import FlashToast from '@/Components/FlashToast.vue';
 import NotificationsMessages from '@/Components/NotificationsMessages.vue';
 import ChargeClientInstructions from '@/Components/ChargeClientInstructions.vue';
 import AdminMissionNotifications from '@/Components/AdminMissionNotifications.vue';
+import SecretariatNotifications from '@/Components/SecretariatNotifications.vue';
 
 
 const page = usePage();
@@ -17,6 +18,7 @@ const MENUS = {
         { label: 'Utilisateurs', route: 'admin.users.index', icon: 'fa-solid fa-users', match: ['admin.users.index', 'admin.users.create', 'admin.users.edit', 'admin.charge_clients.activities'] },
         { label: 'Missions terminées', route: 'admin.missions.history', icon: 'fa-solid fa-truck-fast', match: ['admin.missions.*'] },
         { label: 'Historique chauffeurs', route: 'admin.chauffeurs.history', icon: 'fa-solid fa-id-card-clip', match: ['admin.chauffeurs.*'] },
+        { label: 'Secrétariat', route: 'admin.secretariat.index', icon: 'fa-solid fa-list-check', match: ['admin.secretariat.*'] },
         { label: 'Interactions', route: 'admin.users.interactionindex', icon: 'fa-solid fa-comments', match: ['admin.users.interactionindex'] },
         { label: 'Véhicules', route: 'admin.vehicules.status', icon: 'fa-solid fa-car', match: ['admin.vehicules.*'] },
         { label: "Chiffre d'affaires", route: 'admin.chiffre-affaires', icon: 'fa-solid fa-chart-line', match: ['admin.chiffre-affaires'] },
@@ -43,6 +45,9 @@ const MENUS = {
     charge_client: [
         ACCUEIL,
         { label: 'Clients', route: 'charge_client.clients.index', icon: 'fa-solid fa-address-book', match: ['charge_client.*'] },
+    ],
+    secretaire: [
+        { label: 'Mes tâches', route: 'secretaire.index', icon: 'fa-solid fa-list-check', match: ['secretaire.*'] },
     ],
     chauffeur: [
         { label: 'Missions', route: 'chauffeur.index', icon: 'fa-solid fa-truck-fast', match: ['chauffeur.*'] },
@@ -90,6 +95,7 @@ const logout = () => {
                             <NotificationsMessages v-if="role === 'charge_client'" />
                             <ChargeClientInstructions v-if="role === 'charge_client'" />
                             <AdminMissionNotifications v-if="role === 'admin'" />
+                            <SecretariatNotifications v-if="role === 'admin' || role === 'secretaire'" />
 
                             <Link
                                 :href="route('profile.edit')"

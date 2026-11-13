@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // 2. Enregistrement de l'alias du middleware admin
         $middleware->alias([
             'admin' => AdminMiddleware::class,
+            'role' => \App\Http\Middleware\RoleMiddleware::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

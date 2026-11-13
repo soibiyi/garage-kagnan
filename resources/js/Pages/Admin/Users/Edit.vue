@@ -124,6 +124,7 @@ const submit = () => {
                 <option value="mecanicien">Mécanicien (Essais, diagnostic, réparations)</option>
                 <option value="administratif">Administratif (Devis, facturation)</option>
                 <option value="charge_client">Chargé de Suivi Client & Relances</option>
+                <option value="secretaire">Secrétaire (Tâches confiées par l'administration)</option>
                 <option value="magasinier">Magasinier (Gestion des sorties et des sièges)</option>
                 <option value="depanneur">Dépanneur (Dépannage uniquement)</option>
                 <option value="chauffeur">Chauffeur (Convoyage uniquement)</option>
