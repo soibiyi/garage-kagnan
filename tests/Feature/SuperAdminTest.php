@@ -131,6 +131,26 @@ class SuperAdminTest extends TestCase
                 ->where('admin.users', fn ($users) => collect($users)->pluck('id')->contains($this->superAdmin->id)));
     }
 
+    public function test_role_superadmin_written_by_hand_is_normalised(): void
+    {
+        // Création via le modèle (tinker, seeder…)
+        $cree = User::factory()->create(['role' => 'superadmin', 'siege' => 'SGK']);
+        $this->assertSame('admin', $cree->fresh()->role);
+        $this->assertTrue($cree->fresh()->estSuperAdmin());
+        $this->assertNull($cree->fresh()->siege);
+
+        // Compte déjà en base (SQL / phpMyAdmin) : corrigé par la migration
+        $id = \Illuminate\Support\Facades\DB::table('users')->insertGetId([
+            'name' => 'Super Admin', 'email' => 'brut@example.com', 'password' => bcrypt('secret123'),
+            'role' => 'superadmin', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        (require database_path('migrations/2026_11_14_120000_normaliser_role_superadmin.php'))->up();
+
+        $brut = User::find($id);
+        $this->assertTrue($brut->estSuperAdmin());
+        $this->actingAs($brut)->get(route('dashboard'))->assertRedirect(route('superadmin.accueil'));
+    }
+
     // ─── Accès à tous les espaces ─────────────────────────────────────
 
     public function test_superadmin_passes_role_restricted_routes(): void
