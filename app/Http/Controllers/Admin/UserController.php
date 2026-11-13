@@ -274,7 +274,9 @@ class UserController extends Controller
 
         $destinataires = User::query()
             ->where('role', 'charge_client')
-            ->where('siege', $this->siegeActif())
+            // Le siège du client fait foi : le siège sélectionné dans le menu admin
+            // peut différer et ne doit pas empêcher la notification.
+            ->where('siege', $client->siege ?: $this->siegeActif())
             ->whereIn('id', InteractionClient::query()
                 ->where('client_id', $client->id)
                 ->select('user_id'))

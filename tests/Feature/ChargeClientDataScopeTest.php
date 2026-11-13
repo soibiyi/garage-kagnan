@@ -120,6 +120,52 @@ class ChargeClientDataScopeTest extends TestCase
                 ->where('interventionsAtelier.data.0.vehicule.client.id', $client->id));
     }
 
+    public function test_orphan_client_is_visible_to_every_charge_client_of_the_siege_until_taken(): void
+    {
+        $charge = User::factory()->create(['role' => 'charge_client', 'siege' => 'SGK']);
+        $otherCharge = User::factory()->create(['role' => 'charge_client', 'siege' => 'SGK']);
+        $foreignCharge = User::factory()->create(['role' => 'charge_client', 'siege' => 'ZGK']);
+        $orphan = $this->createClient('Nouveau client');
+        $vehicleId = DB::table('vehicules')->insertGetId([
+            'client_id' => $orphan->id,
+            'immatriculation' => 'NEW-001',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        foreach ([$charge, $otherCharge] as $user) {
+            $this->actingAs($user)
+                ->get(route('charge_client.clients.index'))
+                ->assertOk()
+                ->assertInertia(fn ($page) => $page
+                    ->where('orphelins.0.id', $orphan->id)
+                    ->where('chargesClients', fn ($cards) => collect($cards)->pluck('id')->sort()->values()->all()
+                        === collect([$charge->id, $otherCharge->id])->sort()->values()->all()));
+        }
+
+        $this->actingAs($foreignCharge)
+            ->get(route('charge_client.clients.show', $orphan))
+            ->assertNotFound();
+
+        // Le premier chargé qui enregistre une interaction prend le client en charge
+        $this->actingAs($charge)
+            ->post(route('charge_client.vehicules.interactions.store', $vehicleId), [
+                'type' => 'appel',
+                'objet' => 'Premier contact',
+            ])
+            ->assertRedirect();
+
+        $this->actingAs($charge)
+            ->get(route('charge_client.clients.index'))
+            ->assertInertia(fn ($page) => $page
+                ->where('clients.0.id', $orphan->id)
+                ->where('orphelins', []));
+
+        $this->actingAs($otherCharge)
+            ->get(route('charge_client.clients.show', $orphan))
+            ->assertNotFound();
+    }
+
     private function createClient(string $name): Client
     {
         return Client::create([

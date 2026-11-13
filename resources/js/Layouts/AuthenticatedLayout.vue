@@ -60,6 +60,8 @@ const menu = computed(() => MENUS[role.value] ?? []);
 const logout = () => {
     sessionStorage.removeItem('dashboard_loaded');
     sessionStorage.removeItem('admin_loaded');
+    // Prochaine connexion : réafficher les consignes reçues pendant l'absence
+    sessionStorage.removeItem('instructions_resume_connexion');
     router.post(route('logout'));
 };
 </script>

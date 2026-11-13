@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\InteractionClient;
+use App\Models\Vehicule;
 use App\Notifications\AdminInstructionReceived;
 use Illuminate\Http\Request;
 
@@ -32,6 +34,7 @@ class ChargeClientInstructionNotificationController extends Controller
             ->map(fn ($notification) => [
                 'id' => $notification->id,
                 'data' => $notification->data,
+                'url' => $this->urlSuivi($request->user()->id, $notification->data),
                 'created_at' => $notification->created_at,
                 'read_at' => $notification->read_at,
             ]);
@@ -45,6 +48,30 @@ class ChargeClientInstructionNotificationController extends Controller
             'notifications' => $notifications,
             'unread_count' => $unreadCount,
         ]);
+    }
+
+    /**
+     * Page « Suivi des relances / interactions » du véhicule concerné : le dernier véhicule
+     * sur lequel ce chargé client a interagi avec le client, sinon le premier véhicule du client.
+     */
+    private function urlSuivi(int $userId, array $data): ?string
+    {
+        $clientId = $data['client_id'] ?? null;
+        if (! $clientId) {
+            return null;
+        }
+
+        $vehiculeId = InteractionClient::query()
+            ->where('client_id', $clientId)
+            ->where('user_id', $userId)
+            ->whereNotNull('vehicule_id')
+            ->latest()
+            ->value('vehicule_id')
+            ?? Vehicule::query()->where('client_id', $clientId)->orderBy('id')->value('id');
+
+        return $vehiculeId
+            ? route('charge_client.vehicules.relances', $vehiculeId)
+            : route('charge_client.clients.show', $clientId);
     }
 
     public function markRead(Request $request, string $notification)

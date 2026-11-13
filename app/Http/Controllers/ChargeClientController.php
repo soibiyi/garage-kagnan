@@ -24,11 +24,12 @@ class ChargeClientController extends Controller
         return auth()->user()->role === 'charge_client';
     }
 
-    private function clientAttribueAuChargeClient(Client $client): bool
+    /** Ses propres clients, ou un client orphelin de son siège (qu'il peut prendre en charge). */
+    private function clientAttribueAuChargeClient(Client|int $client): bool
     {
-        return InteractionClient::query()
-            ->where('client_id', $client->id)
-            ->where('user_id', auth()->id())
+        return Client::query()
+            ->whereKey($client instanceof Client ? $client->id : $client)
+            ->accessiblesAuChargeClient(auth()->user())
             ->exists();
     }
 
@@ -45,9 +46,7 @@ class ChargeClientController extends Controller
             $this->estChargeClient(),
             fn ($v) => $v->whereIn(
                 'client_id',
-                InteractionClient::query()
-                    ->select('client_id')
-                    ->where('user_id', auth()->id())
+                Client::query()->accessiblesAuChargeClient(auth()->user())->select('id')
             )
         )->when(
             !$this->estAdmin() && !$this->estChargeClient(),
@@ -78,13 +77,7 @@ class ChargeClientController extends Controller
         }
 
         if ($this->estChargeClient()) {
-            abort_unless(
-                InteractionClient::query()
-                    ->where('client_id', $vehicule->client_id)
-                    ->where('user_id', auth()->id())
-                    ->exists(),
-                404
-            );
+            abort_unless($this->clientAttribueAuChargeClient($vehicule->client_id), 404);
 
             return;
         }
@@ -124,10 +117,24 @@ class ChargeClientController extends Controller
     {
         $search = $request->input('search');
 
+        $user = auth()->user();
+        $siege = $user->siege;
+
+        // Chargés clients du siège : chacun a sa carte, ses clients s'affichent quand on clique dessus.
+        $chargesClients = \App\Models\User::query()
+            ->where('role', 'charge_client')
+            ->when(!$this->estAdmin(), fn ($q) => $q->where('siege', $siege))
+            ->orderBy('name')
+            ->get(['id', 'name', 'siege']);
+
         $clients = Client::with([
                 'vehicules' => $this->vehiculesDuSiege(),
                 'vehicules.interventions' => $this->dossiersDuSiege(),
             ])
+            // Pour l'admin : les chargés qui suivent chaque client (regroupement par carte)
+            ->when($this->estAdmin(), fn ($q) => $q->with([
+                'interactions' => fn ($i) => $i->whereIn('user_id', $chargesClients->pluck('id'))->select('id', 'client_id', 'user_id'),
+            ]))
             ->when(
                 $this->estChargeClient(),
                 fn ($q) => $q->whereIn(
@@ -161,10 +168,59 @@ class ChargeClientController extends Controller
             ->latest()
             ->get();
 
-        $clientsFiltres = $clients->values();
+        // Clients orphelins : aucun chargé client du siège ne les suit encore.
+        // Visibles par tous les chargés du siège ; la première interaction les attribue.
+        $orphelins = collect();
+        if ($this->estChargeClient() || $this->estAdmin()) {
+            $orphelins = Client::with([
+                    'vehicules' => $this->vehiculesDuSiege(),
+                    'vehicules.interventions' => $this->dossiersDuSiege(),
+                ])
+                ->when(
+                    $this->estAdmin(),
+                    // Admin : aucun chargé client (tous sièges confondus) ne suit le client
+                    fn ($q) => $q->whereDoesntHave('interactions', fn ($i) => $i->whereHas('user', fn ($u) => $u->where('role', 'charge_client'))),
+                    fn ($q) => $q->orphelins($siege)
+                )
+                ->when($search, fn ($query) => $query->where(fn ($q) => $q
+                    ->where('nom', 'like', "%{$search}%")
+                    ->orWhere('prenom', 'like', "%{$search}%")
+                    ->orWhereHas('vehicules.interventions', fn ($i) => $i->where('numero_ot', 'like', "%{$search}%"))))
+                ->latest()
+                ->get();
+        }
+
+        // Nombre de clients suivis par chaque chargé (pour les cartes)
+        $nbParCharge = InteractionClient::query()
+            ->whereIn('user_id', $chargesClients->pluck('id'))
+            ->whereNotNull('client_id')
+            ->selectRaw('user_id, COUNT(DISTINCT client_id) as nb')
+            ->groupBy('user_id')
+            ->pluck('nb', 'user_id');
+
+        if ($this->estAdmin()) {
+            $clients->each(function ($client) {
+                $client->setAttribute('charge_ids', $client->interactions->pluck('user_id')->unique()->values());
+                $client->unsetRelation('interactions');
+            });
+            $orphelinIds = $orphelins->pluck('id');
+            $clients = $clients->reject(fn ($c) => $orphelinIds->contains($c->id));
+        } else {
+            $clients->each(fn ($client) => $client->setAttribute('charge_ids', [auth()->id()]));
+        }
 
         return Inertia::render('ChargeClient/ClientsIndex', [
-            'clients' => $clientsFiltres,
+            'clients' => $clients->values(),
+            'orphelins' => $orphelins->values(),
+            'chargesClients' => $chargesClients->map(fn ($charge) => [
+                'id' => $charge->id,
+                'name' => $charge->name,
+                'nb_clients' => (int) ($nbParCharge[$charge->id] ?? 0),
+                'est_moi' => $charge->id === auth()->id(),
+                // Un chargé client n'ouvre que sa propre carte ; l'admin les ouvre toutes.
+                'accessible' => $this->estAdmin() || $charge->id === auth()->id(),
+            ])->values(),
+            'peutVoirGroupes' => $this->estChargeClient() || $this->estAdmin(),
             'filters' => $request->only(['search']),
         ]);
     }
@@ -445,10 +501,7 @@ class ChargeClientController extends Controller
     {
         if ($this->estChargeClient()) {
             $clientId = $intervention->vehicule()->value('client_id');
-            abort_unless($clientId && InteractionClient::query()
-                ->where('client_id', $clientId)
-                ->where('user_id', auth()->id())
-                ->exists(), 404);
+            abort_unless($clientId && $this->clientAttribueAuChargeClient($clientId), 404);
         }
 
         abort_unless($intervention->estVisiblePar(auth()->user()), 404);

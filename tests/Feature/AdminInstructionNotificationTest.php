@@ -64,7 +64,8 @@ class AdminInstructionNotificationTest extends TestCase
             ->assertOk()
             ->assertJsonPath('notifications.0.data.message', "Vous venez de recevoir une instruction de la part de l'administrateur.")
             ->assertJsonPath('notifications.0.data.consigne_id', $consigne->id)
-            ->assertJsonPath('notifications.0.data.client_id', $client->id);
+            ->assertJsonPath('notifications.0.data.client_id', $client->id)
+            ->assertJsonPath('notifications.0.url', route('charge_client.clients.show', $client->id));
 
         $notificationId = $response->json('notifications.0.id');
         $this->actingAs($assignedCharge)

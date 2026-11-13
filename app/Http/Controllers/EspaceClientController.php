@@ -28,11 +28,9 @@ class EspaceClientController extends Controller
             return;
         }
 
+        // Ses clients, ou un client orphelin de son siège (pas encore pris en charge)
         abort_unless(
-            InteractionClient::query()
-                ->where('client_id', $client->id)
-                ->where('user_id', $user->id)
-                ->exists(),
+            Client::query()->whereKey($client->id)->accessiblesAuChargeClient($user)->exists(),
             404
         );
     }
@@ -832,9 +830,10 @@ public function messagesNonLus()
     $groupes = ClientPortalMessage::query()
         ->where('sender_type', 'client')
         ->whereNull('read_at')
-        ->whereIn('client_id', InteractionClient::query()
-            ->where('user_id', auth()->id())
-            ->select('client_id'))
+        // Messages de ses clients + des clients orphelins du siège (nouveaux comptes en ligne)
+        ->whereIn('client_id', Client::query()
+            ->accessiblesAuChargeClient(auth()->user())
+            ->select('id'))
         ->select('client_id', DB::raw('COUNT(*) as nb'), DB::raw('MAX(id) as dernier_id'))
         ->groupBy('client_id')
         ->get();

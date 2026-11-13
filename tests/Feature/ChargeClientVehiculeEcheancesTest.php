@@ -132,10 +132,12 @@ class ChargeClientVehiculeEcheancesTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('ChargeClient/ClientsIndex')
-                ->has('clients', 1)
-                ->where('clients.0.id', $client->id)
-                ->where('clients.0.vehicules.0.id', $vehicle->id)
-                ->where('clients.0.vehicules.0.immatriculation', 'PORTAL-001')
+                // Pas encore suivi par un chargé client : listé parmi les clients non attribués
+                ->has('clients', 0)
+                ->has('orphelins', 1)
+                ->where('orphelins.0.id', $client->id)
+                ->where('orphelins.0.vehicules.0.id', $vehicle->id)
+                ->where('orphelins.0.vehicules.0.immatriculation', 'PORTAL-001')
             );
 
         $this->actingAs($staff)

@@ -107,6 +107,41 @@ class Client extends Authenticatable
         return $this->hasMany(Consigne::class)->latest();
     }
 
+    public function interactions()
+    {
+        return $this->hasMany(InteractionClient::class);
+    }
+
+    /** Clients rattachés au siège : par leur fiche ou par un dossier ouvert dans ce siège. */
+    public function scopeDuSiegeDe($query, ?string $siege)
+    {
+        if (empty($siege)) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->where(fn ($clients) => $clients
+            ->where('siege', $siege)
+            ->orWhereHas('vehicules.interventions', fn ($interventions) => $interventions->where('siege', $siege)));
+    }
+
+    /** Clients qu'aucun chargé client du siège n'a encore pris en charge (aucune interaction). */
+    public function scopeOrphelins($query, ?string $siege)
+    {
+        return $query->duSiegeDe($siege)
+            ->whereDoesntHave('interactions', fn ($interactions) => $interactions
+                ->whereHas('user', fn ($users) => $users
+                    ->where('role', 'charge_client')
+                    ->where('siege', $siege)));
+    }
+
+    /** Ce qu'un chargé client peut ouvrir : ses clients + les clients orphelins de son siège. */
+    public function scopeAccessiblesAuChargeClient($query, User $user)
+    {
+        return $query->where(fn ($clients) => $clients
+            ->whereHas('interactions', fn ($interactions) => $interactions->where('user_id', $user->id))
+            ->orWhere(fn ($orphelins) => $orphelins->orphelins($user->siege)));
+    }
+
     public function isActive(): bool
     {
         return $this->status !== 'banni' && $this->banned_at === null;
