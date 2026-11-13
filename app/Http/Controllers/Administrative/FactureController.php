@@ -93,9 +93,10 @@ class FactureController extends Controller
                 });
             })
             ->latest()
-            ->get();
+            ->paginate(25)
+            ->withQueryString();
 
-        $factures = Facture::whereIn('intervention_id', $dossiers->pluck('id'))
+        $factures = Facture::whereIn('intervention_id', collect($dossiers->items())->pluck('id'))
             ->get()
             ->keyBy('intervention_id');
 
@@ -104,7 +105,7 @@ class FactureController extends Controller
             ->pluck('facture_id')
             ->unique();
 
-        $dossiers->each(function ($d) use ($factures, $facturesAvecPaiement) {
+        collect($dossiers->items())->each(function ($d) use ($factures, $facturesAvecPaiement) {
             $facture = $factures->get($d->id);
             $paye = (int) round((float) optional($facture)->montant_paye);
             $d->setAttribute('resume_paiement', $this->resume($d, $paye));
@@ -113,7 +114,7 @@ class FactureController extends Controller
 
         return Inertia::render('Administration/Factures/Index', [
             'dossiers' => $dossiers,
-            'filters' => $request->only(['search']),
+            'filters'  => $request->only(['search']),
         ]);
     }
 
@@ -143,10 +144,8 @@ class FactureController extends Controller
 
         $callback = function() use ($dossiers, $factures) {
             $file = fopen('php://output', 'w');
-            // Ajout du BOM UTF-8 pour la reconnaissance correcte des caractères spéciaux dans Excel
             fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
 
-            // En-têtes conformes au modèle fourni
             fputcsv($file, [
                 "Numéro Facture",
                 "Immatriculation",
@@ -174,12 +173,11 @@ class FactureController extends Controller
 
                 $dateFacture = optional($dossier->created_at)->format('d/m/Y') ?? '';
                 $totalTtc = $resume['total_ttc'];
-                $remise = 0; // Ajustable selon votre gestion des remises
+                $remise = 0;
                 $netTtc = $totalTtc - $remise;
                 $encaissement = $resume['montant_paye'];
                 $creance = $resume['reste'];
 
-                // Récupération du mode de paiement du dernier versement ou par défaut
                 $dernierPaiement = $facture ? Paiement::where('facture_id', $facture->id)->latest('date_paiement')->first() : null;
                 $modePaiement = $dernierPaiement?->mode_paiement ?? 'ESPECES';
 
@@ -236,7 +234,7 @@ class FactureController extends Controller
     }
 
     /**
-     * Enregistre un versement. La facture est créée au premier versement.
+     * Enregistre un versement.
      */
     public function storeEncaissement(Request $request, $id)
     {

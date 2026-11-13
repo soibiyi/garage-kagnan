@@ -5,13 +5,19 @@ import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
 
 const props = defineProps({
     dossiers: {
-        type: Array,
+        type: [Array, Object],
         default: () => [],
     },
     filters: Object,
 });
 
 const page = usePage();
+const dossiersListe = computed(() =>
+    Array.isArray(props.dossiers) ? props.dossiers : (props.dossiers?.data || [])
+);
+const pagination = computed(() =>
+    Array.isArray(props.dossiers) ? null : props.dossiers
+);
 
 // ─────────────────────────────────────────────
 // RECHERCHE
@@ -21,7 +27,7 @@ const search = ref(props.filters?.search || '');
 watch(search, (value) => {
     router.get(
         route('administration.factures.index'),
-        { search: value },
+        { search: value, onglet: onglet.value },
         { preserveState: true, replace: true }
     );
 });
@@ -46,14 +52,23 @@ const onglet = ref(
     ['soldes', 'temp'].includes(ongletInitial) ? ongletInitial : 'non_soldes'
 );
 
+const changerOnglet = (valeur) => {
+    onglet.value = valeur;
+    router.get(
+        route('administration.factures.index'),
+        { search: search.value, onglet: valeur },
+        { preserveState: true, preserveScroll: true, replace: true }
+    );
+};
+
 // Dossiers normaux non soldés (exclut les devis directs)
-const dossiersNonSoldes = computed(() => (props.dossiers || []).filter((d) => !estDevisDirect(d) && !estSolde(d)));
+const dossiersNonSoldes = computed(() => dossiersListe.value.filter((d) => !estDevisDirect(d) && !estSolde(d)));
 
 // Dossiers normaux soldés (exclut les devis directs)
-const dossiersSoldes = computed(() => (props.dossiers || []).filter((d) => !estDevisDirect(d) && estSolde(d)));
+const dossiersSoldes = computed(() => dossiersListe.value.filter((d) => !estDevisDirect(d) && estSolde(d)));
 
 // Uniquement les devis directs (qu'ils soient soldés ou non)
-const dossiersDevisDirects = computed(() => (props.dossiers || []).filter((d) => estDevisDirect(d)));
+const dossiersDevisDirects = computed(() => dossiersListe.value.filter((d) => estDevisDirect(d)));
 
 const dossiersAffiches = computed(() => {
     if (onglet.value === 'soldes') return dossiersSoldes.value;
@@ -124,7 +139,7 @@ const notification = ref(null);
 let notifTimer = null;
 
 watch(
-    () => props.dossiers,
+    dossiersListe,
     (nouveaux, anciens) => {
         if (!nouveaux || !anciens) return;
 
@@ -249,7 +264,7 @@ const backText = computed(() => {
                     <div class="flex flex-wrap items-center gap-2">
                         <button
                             type="button"
-                            @click="onglet = 'non_soldes'"
+                            @click="changerOnglet('non_soldes')"
                             :class="[
                                 'inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold rounded-xl border transition',
                                 onglet === 'non_soldes'
@@ -269,7 +284,7 @@ const backText = computed(() => {
 
                         <button
                             type="button"
-                            @click="onglet = 'soldes'"
+                            @click="changerOnglet('soldes')"
                             :class="[
                                 'inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold rounded-xl border transition',
                                 onglet === 'soldes'
@@ -289,7 +304,7 @@ const backText = computed(() => {
 
                         <button
                             type="button"
-                            @click="onglet = 'temp'"
+                            @click="changerOnglet('temp')"
                             :class="[
                                 'inline-flex items-center gap-2 px-3.5 py-2.5 text-xs font-bold rounded-xl border transition',
                                 onglet === 'temp'
@@ -411,6 +426,35 @@ const backText = computed(() => {
                         </table>
                     </div>
 
+                    <div
+                        v-if="pagination && pagination.last_page > 1"
+                        class="mt-5 flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                        <p class="text-xs font-medium text-gray-500">
+                            Affichage de {{ pagination.from }} à {{ pagination.to }} sur {{ pagination.total }} dossiers
+                        </p>
+                        <nav class="flex flex-wrap items-center gap-1" aria-label="Pagination des factures">
+                            <template v-for="lien in pagination.links" :key="lien.label">
+                                <Link
+                                    v-if="lien.url"
+                                    :href="lien.url"
+                                    preserve-scroll
+                                    class="min-w-9 rounded-lg border px-3 py-2 text-center text-xs font-bold transition"
+                                    :class="lien.active
+                                        ? 'border-[#E11D48] bg-[#E11D48] text-white'
+                                        : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'"
+                                >
+                                    {{ lien.label.includes('Previous') ? 'Précédent' : lien.label.includes('Next') ? 'Suivant' : lien.label }}
+                                </Link>
+                                <span
+                                    v-else
+                                    class="min-w-9 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-center text-xs font-semibold text-gray-400"
+                                >
+                                    {{ lien.label.includes('Previous') ? 'Précédent' : lien.label.includes('Next') ? 'Suivant' : lien.label }}
+                                </span>
+                            </template>
+                        </nav>
+                    </div>
                 </div>
             </div>
         </div>
