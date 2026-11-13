@@ -1,10 +1,35 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, usePage } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
-defineProps({
-    dossiers: Array,
+const props = defineProps({
+    dossiers: { type: Array, default: () => [] },
+});
+
+const recherche = ref('');
+const normaliser = (valeur) => String(valeur ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase()
+    .trim();
+
+const dossiersFiltres = computed(() => {
+    const terme = normaliser(recherche.value);
+    if (!terme) return props.dossiers;
+
+    return props.dossiers.filter((dossier) => {
+        const client = dossier.vehicule?.client;
+        const informationsRecherchables = [
+            client?.nom,
+            client?.prenom,
+            `${client?.nom ?? ''} ${client?.prenom ?? ''}`,
+            dossier.vehicule?.immatriculation,
+            dossier.numero_ot,
+        ];
+
+        return informationsRecherchables.some((information) => normaliser(information).includes(terme));
+    });
 });
 
 const page = usePage();
@@ -71,7 +96,21 @@ const backText = computed(() => {
                 <div class="bg-white shadow-xl shadow-gray-200/50 rounded-2xl overflow-hidden border border-gray-100 p-6">
                     
                     <!-- Message si aucun dossier -->
-                    <div v-if="dossiers.length === 0" class="text-center py-16">
+                    <div v-if="props.dossiers.length > 0" class="mb-6">
+                        <label for="recherche-dossiers" class="sr-only">Rechercher un dossier</label>
+                        <div class="relative">
+                            <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                            <input
+                                id="recherche-dossiers"
+                                v-model="recherche"
+                                type="search"
+                                placeholder="Rechercher par nom, prénom, immatriculation ou numéro OT..."
+                                class="w-full rounded-xl border border-gray-200 bg-gray-50 py-3 pl-11 pr-4 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#E11D48] focus:ring-[#E11D48]"
+                            />
+                        </div>
+                    </div>
+
+                    <div v-if="props.dossiers.length === 0" class="text-center py-16">
                         <div class="w-12 h-12 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-400 mx-auto mb-3">
                             <i class="fa-solid fa-folder-closed text-xl"></i>
                         </div>
@@ -80,9 +119,9 @@ const backText = computed(() => {
                     </div>
 
                     <!-- Liste des dossiers -->
-                    <div v-else class="space-y-4">
+                    <div v-else-if="dossiersFiltres.length > 0" class="space-y-4">
                         <div 
-                            v-for="dossier in dossiers" 
+                            v-for="dossier in dossiersFiltres"
                             :key="dossier.id" 
                             class="p-5 bg-gray-50/80 rounded-xl border border-gray-200/80 hover:border-[#E11D48]/50 hover:bg-gray-50 transition-all flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
                         >
@@ -107,7 +146,7 @@ const backText = computed(() => {
                                     <i class="fa-solid fa-user text-[10px] text-gray-400"></i>
                                     <span>Client :</span>
                                     <span class="font-semibold text-gray-900">
-                                        {{ dossier.vehicule?.client?.name || dossier.vehicule?.client?.nom || 'N/A' }}
+                                        {{ [dossier.vehicule?.client?.nom, dossier.vehicule?.client?.prenom].filter(Boolean).join(' ') || dossier.vehicule?.client?.name || 'N/A' }}
                                     </span>
                                 </p>
                             </div>
@@ -121,6 +160,14 @@ const backText = computed(() => {
                                 <i class="fa-solid fa-arrow-right text-[10px]"></i>
                             </Link>
                         </div>
+                    </div>
+
+                    <div v-else class="text-center py-16">
+                        <div class="w-12 h-12 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center text-gray-400 mx-auto mb-3">
+                            <i class="fa-solid fa-magnifying-glass text-xl"></i>
+                        </div>
+                        <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wider">Aucun dossier trouvé</h3>
+                        <p class="text-xs text-gray-500 mt-1">Essayez avec un nom, un prénom, une immatriculation ou un numéro OT.</p>
                     </div>
 
                 </div>
