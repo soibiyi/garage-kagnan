@@ -825,7 +825,7 @@ public function refuseRequest(Client $client, ClientPortalRequest $portalRequest
 // Messages clients non lus, tous clients confondus (pour la cloche du layout)
 public function messagesNonLus()
 {
-    abort_unless(auth()->user()->role === 'charge_client', 403);
+    abort_unless(auth()->user()->role === 'charge_client' || (auth()->user() instanceof \App\Models\User && auth()->user()->estSuperAdmin()), 403);
 
     $groupes = ClientPortalMessage::query()
         ->where('sender_type', 'client')

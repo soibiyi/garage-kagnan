@@ -38,7 +38,12 @@ class HandleInertiaRequests extends Middleware
                     'email' => $request->user()->email,
                     'role' => $request->user()->role, // <-- C'est cette ligne qui manquait pour Vue.js
                     'siege' => $request->user()->siege, // SGK, ZGK, YGK (null pour l'admin)
+                    'is_superadmin' => $request->user() instanceof \App\Models\User && $request->user()->estSuperAdmin(),
                 ] : null,
+                // Super administrateur en train de naviguer « en tant que » cet utilisateur
+                'impersonation' => fn () => ($id = $request->session()->get('impersonator_id'))
+                    ? ['par' => \App\Models\User::find($id)?->name]
+                    : null,
             ],
             // Messages flash : au même niveau que "auth" (lus par FlashToast via page.props.flash)
             'flash' => [

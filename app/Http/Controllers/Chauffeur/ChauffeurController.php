@@ -19,6 +19,13 @@ class ChauffeurController extends Controller
     private function chauffeur(): User
     {
         $chauffeur = auth()->user();
+        if ($chauffeur instanceof User && $chauffeur->estSuperAdmin()) {
+            // L'espace missions dépend du chauffeur connecté : le superadmin passe par « Voir en tant que ».
+            throw new \Illuminate\Http\Exceptions\HttpResponseException(
+                redirect()->route('superadmin.supervision.index', ['role' => 'chauffeur'])
+                    ->with('error', "Pour voir l'espace d'un chauffeur ou dépanneur, ouvrez-le avec « Voir en tant que ».")
+            );
+        }
         abort_unless($chauffeur && in_array($chauffeur->role, ['chauffeur', 'depanneur', 'depaneur'], true), 403);
         abort_if(empty($chauffeur->siege), 403, 'Aucun siège n’est associé à ce compte.');
 

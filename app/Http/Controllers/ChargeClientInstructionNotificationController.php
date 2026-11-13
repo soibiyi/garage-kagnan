@@ -11,7 +11,7 @@ class ChargeClientInstructionNotificationController extends Controller
 {
     public function index(Request $request)
     {
-        abort_unless($request->user()->role === 'charge_client', 403);
+        abort_unless($request->user()->role === 'charge_client' || ($request->user() instanceof \App\Models\User && $request->user()->estSuperAdmin()), 403);
 
         $dateExpiration = now()->subHours(72);
 
@@ -76,7 +76,7 @@ class ChargeClientInstructionNotificationController extends Controller
 
     public function markRead(Request $request, string $notification)
     {
-        abort_unless($request->user()->role === 'charge_client', 403);
+        abort_unless($request->user()->role === 'charge_client' || ($request->user() instanceof \App\Models\User && $request->user()->estSuperAdmin()), 403);
 
         $record = $request->user()
             ->notifications()

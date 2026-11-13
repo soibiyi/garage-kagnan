@@ -15,14 +15,21 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             \App\Http\Middleware\HandleInertiaRequests::class,
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
+            // Journal d'activité + présence (supervision du super administrateur)
+            \App\Http\Middleware\TrackUserActivity::class,
         ]);
 
         // 2. Enregistrement de l'alias du middleware admin
         $middleware->alias([
             'admin' => AdminMiddleware::class,
             'role' => \App\Http\Middleware\RoleMiddleware::class,
+            'superadmin' => \App\Http\Middleware\SuperAdminMiddleware::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // Chaque erreur serveur est enregistrée et signalée en direct aux super administrateurs.
+        // (Les 404, 403, erreurs de validation, etc. ne passent pas ici : Laravel ne les « reporte » pas.)
+        $exceptions->report(function (\Throwable $e) {
+            \App\Support\ErrorReporter::capturerException($e);
+        });
     })->create();

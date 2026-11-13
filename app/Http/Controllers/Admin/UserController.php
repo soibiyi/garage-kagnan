@@ -50,9 +50,47 @@ class UserController extends Controller
     /** Un collaborateur n'est accessible que depuis le siège auquel il est rattaché (l'admin est commun). */
     private function verifierAccesCollaborateur(User $user): void
     {
+        // Le super administrateur n'existe pas pour un admin : 404, et non 403 qui révélerait le compte
+        if ($user->estSuperAdmin() && ! auth()->user()->estSuperAdmin()) {
+            abort(404);
+        }
+
         if ($user->role !== 'admin' && $user->siege !== $this->siegeActif()) {
             abort(404);
         }
+    }
+
+    private function estRoleAdmin(?string $role): bool
+    {
+        return in_array($role, ['admin', 'superadmin'], true);
+    }
+
+    /**
+     * Seul le super administrateur gère les comptes administrateurs (création, modification, suppression,
+     * attribution du rôle admin / superadmin). Un admin garde la main sur son propre compte, sans changer de rôle.
+     */
+    private function verifierDroitsComptesAdmin(?User $cible, ?string $roleDemande): void
+    {
+        $moi = auth()->user();
+        if ($moi->estSuperAdmin()) {
+            return;
+        }
+
+        $toucheUnAutreAdmin = $cible && $cible->role === 'admin' && $cible->id !== $moi->id;
+        $changeSonPropreRole = $cible && $cible->id === $moi->id && $roleDemande !== null && $roleDemande !== 'admin';
+
+        abort_if(
+            $toucheUnAutreAdmin || $changeSonPropreRole || ($this->estRoleAdmin($roleDemande) && $cible?->role !== 'admin'),
+            403,
+            'Seul le super administrateur peut gérer les comptes administrateurs.'
+        );
+    }
+
+    /** Empêche de retirer le dernier super administrateur. */
+    private function estDernierSuperAdmin(User $user): bool
+    {
+        return $user->estSuperAdmin()
+            && User::where('role', 'admin')->where('is_superadmin', true)->count() <= 1;
     }
 
     /** Paiements, éventuellement limités aux factures des dossiers d'un siège. */
@@ -73,9 +111,26 @@ class UserController extends Controller
     // Affiche la liste des utilisateurs via Inertia
     public function index()
     {
+        // Le super administrateur a ce tableau de bord intégré à son propre accueil
+        if (auth()->user()->estSuperAdmin()) {
+            session()->reflash(); // garde les messages « Collaborateur créé… » après la double redirection
+
+            return redirect()->to(route('superadmin.accueil') . '#espace-admin');
+        }
+
+        return Inertia::render('Admin/Users/Index', $this->donneesTableauDeBord());
+    }
+
+    /**
+     * Données du tableau de bord administrateur (CA mensuel, voitures, clients, employés du siège actif).
+     * Partagées avec l'accueil du super administrateur (SuperAdmin\AccueilController).
+     */
+    public function donneesTableauDeBord(): array
+    {
         $siege = $this->siegeActif();
 
         $users = User::where(fn ($q) => $q->where('siege', $siege)->orWhere('role', 'admin'))
+            ->visiblesPar(auth()->user())
             ->latest()
             ->get();
 
@@ -101,11 +156,11 @@ class UserController extends Controller
             'nombre_clients' => Client::when($siege, fn ($q) => $q->whereHas('vehicules.interventions', fn ($i) => $i->where('siege', $siege)))->count(),
         ];
 
-        return Inertia::render('Admin/Users/Index', [
+        return [
             'users' => $users,
             'stats' => $stats,
             'siegeFiltre' => $siege,
-        ]);
+        ];
     }
 
     // Affiche le formulaire de création
@@ -123,16 +178,21 @@ class UserController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:191|unique:users',
             'password' => 'required|string|min:6',
-            'role' => 'required|string|in:admin,receptionniste,mecanicien,administratif,charge_client,magasinier,depanneur,depaneur,chauffeur,secretaire',
+            'role' => 'required|string|in:superadmin,admin,receptionniste,mecanicien,administratif,charge_client,magasinier,depanneur,depaneur,chauffeur,secretaire',
+        ], [
+            'email.unique' => 'Cette adresse e-mail ne peut pas être utilisée.',
         ]);
 
-        User::create([
+        $this->verifierDroitsComptesAdmin(null, $request->role);
+
+        $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'role' => $request->role,
-            'siege' => $request->role === 'admin' ? null : $this->siegeActif(),
+            'role' => $this->estRoleAdmin($request->role) ? 'admin' : $request->role,
+            'siege' => $this->estRoleAdmin($request->role) ? null : $this->siegeActif(),
         ]);
+        $user->forceFill(['is_superadmin' => $request->role === 'superadmin'])->save();
 
         return redirect()->route('admin.users.index')->with('success', 'Utilisateur créé avec succès !');
     }
@@ -141,9 +201,10 @@ class UserController extends Controller
     public function edit(User $user)
     {
         $this->verifierAccesCollaborateur($user);
+        $this->verifierDroitsComptesAdmin($user, null);
 
         return Inertia::render('Admin/Users/Edit', [
-            'user' => $user,
+            'user' => [...$user->toArray(), 'role' => $user->role_affichage],
         ]);
     }
 
@@ -155,12 +216,20 @@ class UserController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => ['required', 'string', 'email', 'max:191', Rule::unique('users')->ignore($user->id)],
-            'role' => 'required|string|in:admin,receptionniste,mecanicien,administratif,charge_client,magasinier,depanneur,depaneur,chauffeur,secretaire',
+            'role' => 'required|string|in:superadmin,admin,receptionniste,mecanicien,administratif,charge_client,magasinier,depanneur,depaneur,chauffeur,secretaire',
             'password' => 'nullable|string|min:6',
-            'siege' => [Rule::requiredIf($request->role !== 'admin'), 'nullable', Rule::in(array_keys(config('sieges')))],
+            'siege' => [Rule::requiredIf(! $this->estRoleAdmin($request->role)), 'nullable', Rule::in(array_keys(config('sieges')))],
         ], [
             'siege.required' => 'Veuillez attribuer un siège à ce collaborateur.',
+            'email.unique' => 'Cette adresse e-mail ne peut pas être utilisée.',
         ]);
+
+        $roleActuel = $user->role_affichage;
+        $this->verifierDroitsComptesAdmin($user, $request->role === $roleActuel ? null : $request->role);
+
+        if ($request->role !== 'superadmin' && $this->estDernierSuperAdmin($user)) {
+            return back()->with('error', 'Il doit toujours rester au moins un super administrateur.');
+        }
 
         if (
             in_array($user->role, ['chauffeur', 'depanneur', 'depaneur'], true)
@@ -175,10 +244,11 @@ class UserController extends Controller
         $user->update([
             'name' => $request->name,
             'email' => $request->email,
-            'role' => $request->role,
-            'siege' => $request->role === 'admin' ? null : $request->siege,
+            'role' => $this->estRoleAdmin($request->role) ? 'admin' : $request->role,
+            'siege' => $this->estRoleAdmin($request->role) ? null : $request->siege,
             'password' => $request->filled('password') ? Hash::make($request->password) : $user->password,
         ]);
+        $user->forceFill(['is_superadmin' => $request->role === 'superadmin'])->save();
 
         return redirect()->route('admin.users.index')->with('success', 'Collaborateur mis à jour avec succès.');
     }
@@ -190,6 +260,12 @@ class UserController extends Controller
 
         if ($user->id === auth()->id()) {
             return back()->with('error', 'Vous ne pouvez pas supprimer votre propre compte administrateur.');
+        }
+
+        $this->verifierDroitsComptesAdmin($user, null);
+
+        if ($this->estDernierSuperAdmin($user)) {
+            return back()->with('error', 'Il doit toujours rester au moins un super administrateur.');
         }
 
         if (

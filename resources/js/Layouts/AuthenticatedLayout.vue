@@ -6,6 +6,7 @@ import NotificationsMessages from '@/Components/NotificationsMessages.vue';
 import ChargeClientInstructions from '@/Components/ChargeClientInstructions.vue';
 import AdminMissionNotifications from '@/Components/AdminMissionNotifications.vue';
 import SecretariatNotifications from '@/Components/SecretariatNotifications.vue';
+import SuperAdminAlertes from '@/Components/SuperAdminAlertes.vue';
 
 
 const page = usePage();
@@ -60,7 +61,23 @@ const MENUS = {
     ],
 };
 
-const menu = computed(() => MENUS[role.value] ?? []);
+// Super administrateur : menu admin + supervision + accès direct à chaque espace métier
+const estSuperAdmin = computed(() => !!page.props.auth.user?.is_superadmin);
+// Menu court et clair : ses outils propres, puis l'accès à l'espace administrateur.
+// Les espaces de chaque rôle sont sur son accueil (cartes « Agir en tant que »).
+const MENU_SUPERADMIN = [
+    { label: 'Accueil', route: 'superadmin.accueil', icon: 'fa-solid fa-crown', match: ['superadmin.accueil'] },
+    { label: 'Supervision', route: 'superadmin.supervision.index', icon: 'fa-solid fa-satellite-dish', match: ['superadmin.supervision.*'] },
+    { label: 'Erreurs', route: 'superadmin.erreurs.index', icon: 'fa-solid fa-bug', match: ['superadmin.erreurs.*'] },
+    { label: 'Petites fournitures', route: 'superadmin.petites-fournitures', icon: 'fa-solid fa-screwdriver-wrench', match: ['superadmin.petites-fournitures'] },
+    { label: 'Espace admin', route: 'superadmin.accueil', hash: '#espace-admin', icon: 'fa-solid fa-user-shield', match: ['admin.*'], separe: true },
+];
+
+const menu = computed(() => (estSuperAdmin.value ? MENU_SUPERADMIN : MENUS[role.value] ?? []));
+
+// « Voir en tant que » : le super administrateur navigue avec le compte d'un collaborateur
+const impersonation = computed(() => page.props.auth.impersonation);
+const revenirAMonCompte = () => router.post(route('superadmin.impersonate.stop'));
 
 const logout = () => {
     sessionStorage.removeItem('dashboard_loaded');
@@ -77,6 +94,28 @@ const logout = () => {
         <Head title="Garage Kagnan" />
 
         <div class="min-h-screen bg-gray-100 print:min-h-0 print:bg-white">
+            <!-- Bandeau « Voir en tant que » -->
+            <div
+                v-if="impersonation"
+                class="sticky top-0 z-[60] flex flex-wrap items-center justify-center gap-x-4 gap-y-2 bg-gradient-to-r from-[#0B0F19] via-[#1f2430] to-[#0B0F19] px-4 py-2.5 text-xs text-white shadow-lg print:hidden"
+                role="status"
+            >
+                <span class="inline-flex items-center gap-2">
+                    <i class="fa-solid fa-user-secret text-[#F43F5E]" aria-hidden="true"></i>
+                    <span>
+                        Vous naviguez en tant que <strong>{{ $page.props.auth.user.name }}</strong>
+                        ({{ role }}) · ouvert par {{ impersonation.par }}. Toutes les actions sont tracées.
+                    </span>
+                </span>
+                <button
+                    type="button"
+                    class="inline-flex items-center gap-1.5 rounded-full bg-[#E11D48] px-3 py-1.5 font-bold text-white transition hover:bg-[#BE123C]"
+                    @click="revenirAMonCompte"
+                >
+                    <i class="fa-solid fa-arrow-rotate-left text-[10px]" aria-hidden="true"></i>Revenir à mon compte
+                </button>
+            </div>
+
             <nav class="border-b border-gray-100 bg-white print:hidden">
                 <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <div class="flex h-20 items-center justify-between">
@@ -96,6 +135,7 @@ const logout = () => {
                             <ChargeClientInstructions v-if="role === 'charge_client'" />
                             <AdminMissionNotifications v-if="role === 'admin'" />
                             <SecretariatNotifications v-if="role === 'admin' || role === 'secretaire'" />
+                            <SuperAdminAlertes v-if="estSuperAdmin" />
 
                             <Link
                                 :href="route('profile.edit')"
@@ -124,8 +164,9 @@ const logout = () => {
                             <Link
                                 v-for="item in menu"
                                 :key="item.label"
-                                :href="route(item.route)"
+                                :href="route(item.route) + (item.hash || '')"
                                 class="inline-flex items-center gap-2 border-b-2 px-3 py-3 text-xs font-bold transition"
+                                :style="item.separe ? 'margin-left: auto' : ''"
                                 :class="item.match.some((p) => route().current(p))
                                     ? 'border-[#E11D48] text-[#0B0F19]'
                                     : 'border-transparent text-[#8A8D8F] hover:border-[#8A8D8F]/40 hover:text-[#0B0F19]'"

@@ -19,6 +19,11 @@ class SecretaireController extends Controller
     {
         $user = $request->user();
 
+        // Le superadmin n'a pas de tâches propres : il voit le secrétariat côté administration.
+        if ($user->role !== 'secretaire') {
+            return redirect()->route('admin.secretariat.index');
+        }
+
         $actives = SecretaireTache::query()
             ->where('secretaire_id', $user->id)
             ->where('statut', '!=', 'terminee')

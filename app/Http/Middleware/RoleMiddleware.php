@@ -13,7 +13,8 @@ class RoleMiddleware
 {
     public function handle(Request $request, Closure $next, string ...$roles): Response
     {
-        if ($request->user() && in_array($request->user()->role, $roles, true)) {
+        // Le super administrateur passe partout.
+        if ($request->user() && (in_array($request->user()->role, $roles, true) || ($request->user() instanceof \App\Models\User && $request->user()->estSuperAdmin()))) {
             return $next($request);
         }
 

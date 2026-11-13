@@ -19,7 +19,9 @@ class DashboardController extends Controller
         $role = $request->user()->role;
 
         if ($role === 'admin') {
-            return redirect()->route('admin.users.index');
+            return $request->user()->estSuperAdmin()
+                ? redirect()->route('superadmin.accueil')
+                : redirect()->route('admin.users.index');
         }
         if ($role === 'magasinier') {
             return redirect()->route('magasinier.pieces.index');

@@ -20,6 +20,9 @@ use App\Http\Controllers\Chauffeur\ChauffeurController;
 use App\Http\Controllers\Admin\SecretariatController;
 use App\Http\Controllers\SecretaireController;
 use App\Http\Controllers\SecretariatChatController;
+use App\Http\Controllers\SuperAdmin\SupervisionController;
+use App\Http\Controllers\SuperAdmin\ImpersonationController;
+use App\Http\Controllers\SuperAdmin\ErreurController;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -94,6 +97,29 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::post('/secretariat/taches', [SecretariatController::class, 'store'])->name('secretariat.taches.store');
     Route::put('/secretariat/taches/{tache}', [SecretariatController::class, 'update'])->name('secretariat.taches.update');
     Route::delete('/secretariat/taches/{tache}', [SecretariatController::class, 'destroy'])->name('secretariat.taches.destroy');
+});
+
+// Super administrateur : supervision en direct, journal des erreurs, « voir en tant que »
+Route::middleware(['auth', 'verified', 'superadmin'])->prefix('superadmin')->name('superadmin.')->group(function () {
+    Route::get('/', [\App\Http\Controllers\SuperAdmin\AccueilController::class, 'index'])->name('accueil');
+    Route::get('/supervision', [SupervisionController::class, 'index'])->name('supervision.index');
+    Route::get('/supervision/etat', [SupervisionController::class, 'etat'])->name('supervision.etat');
+    Route::get('/supervision/flux', [SupervisionController::class, 'flux'])->name('supervision.flux');
+    Route::post('/supervision/voir-en-tant-que/{user}', [SupervisionController::class, 'impersonate'])->name('impersonate');
+    Route::get('/erreurs', [ErreurController::class, 'index'])->name('erreurs.index');
+    Route::get('/erreurs/{erreur}', [ErreurController::class, 'show'])->name('erreurs.show');
+    Route::patch('/erreurs/{erreur}/resoudre', [ErreurController::class, 'resoudre'])->name('erreurs.resoudre');
+    Route::patch('/erreurs/{erreur}/rouvrir', [ErreurController::class, 'rouvrir'])->name('erreurs.rouvrir');
+    Route::get('/alertes', [ErreurController::class, 'alertes'])->name('alertes');
+    Route::get('/petites-fournitures', [\App\Http\Controllers\SuperAdmin\PetitesFournituresController::class, 'index'])->name('petites-fournitures');
+    Route::get('/supervision/direct', [SupervisionController::class, 'direct'])->name('supervision.direct');
+    Route::patch('/alertes/{notification}/lue', [ErreurController::class, 'marquerLue'])->name('alertes.lue');
+});
+
+// Accessibles à tout utilisateur connecté
+Route::middleware('auth')->group(function () {
+    Route::post('/superadmin/retour', [ImpersonationController::class, 'stop'])->name('superadmin.impersonate.stop');
+    Route::post('/erreurs-client', [ErreurController::class, 'client'])->middleware('throttle:20,1')->name('erreurs.client');
 });
 
 // Espace de la secrétaire : checklist des tâches reçues

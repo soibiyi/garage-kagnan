@@ -1,5 +1,6 @@
 <script setup>
-import { Head, useForm, Link } from '@inertiajs/vue3';
+import { computed } from 'vue';
+import { Head, useForm, Link, usePage } from '@inertiajs/vue3';
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome';
 import { 
     faUserPen, 
@@ -24,6 +25,10 @@ const form = useForm({
     role: props.user.role,
     siege: props.user.siege || '',
 });
+
+// Seul le super administrateur crée / modifie des comptes administrateurs
+const estSuperAdmin = computed(() => !!usePage().props.auth?.user?.is_superadmin);
+const estRoleAdmin = computed(() => ['admin', 'superadmin'].includes(form.role));
 
 const submit = () => {
     form.put(route('admin.users.update', props.user.id), {
@@ -128,14 +133,15 @@ const submit = () => {
                 <option value="magasinier">Magasinier (Gestion des sorties et des sièges)</option>
                 <option value="depanneur">Dépanneur (Dépannage uniquement)</option>
                 <option value="chauffeur">Chauffeur (Convoyage uniquement)</option>
-                <option value="admin">Administrateur (Accès total)</option>
+                <option v-if="estSuperAdmin || form.role === 'admin'" value="admin">Administrateur (Accès total)</option>
+                <option v-if="estSuperAdmin" value="superadmin">Super administrateur (Tout voir, supervision, erreurs)</option>
               </select>
             </div>
             <p v-if="form.errors.role" class="mt-1 text-xs text-red-600 font-medium">{{ form.errors.role }}</p>
           </div>
 
           <!-- Siège d'affectation (pas pour l'administrateur) -->
-          <div v-if="form.role !== 'admin'">
+          <div v-if="!estRoleAdmin">
             <label class="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-700">
               Siège d'affectation <span class="text-red-500">*</span>
             </label>

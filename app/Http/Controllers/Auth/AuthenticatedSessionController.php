@@ -22,7 +22,7 @@ class AuthenticatedSessionController extends Controller
         if (auth()->check()) {
             $user = auth()->user();
             if ($user->role === 'admin') {
-                return redirect()->route('admin.users.index');
+                return redirect()->route($user->estSuperAdmin() ? 'superadmin.accueil' : 'admin.users.index');
             }
             return redirect()->route('dashboard');
         }
@@ -47,7 +47,7 @@ class AuthenticatedSessionController extends Controller
 
         // Redirection dynamique selon le rôle
         if ($user->role === 'admin') {
-            return redirect()->intended(route('admin.users.index', absolute: false));
+            return redirect()->intended(route($user->estSuperAdmin() ? 'superadmin.accueil' : 'admin.users.index', absolute: false));
         }
 
         // Pour les autres rôles (réceptionniste, mécanicien, etc.)
