@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Models\Client;
 use App\Models\ClientPortalMessage;
 use App\Models\ClientPortalRequest;
+use App\Models\Consigne;
 use App\Models\Devis;
+use App\Models\InteractionClient;
 use App\Models\Vehicule;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -17,6 +19,24 @@ use Inertia\Inertia;
 
 class EspaceClientController extends Controller
 {
+    private function autoriserClientDuCharge(Client $client): void
+    {
+        $user = auth()->user();
+        abort_unless(in_array($user->role, ['admin', 'charge_client'], true), 403);
+
+        if ($user->role === 'admin') {
+            return;
+        }
+
+        abort_unless(
+            InteractionClient::query()
+                ->where('client_id', $client->id)
+                ->where('user_id', $user->id)
+                ->exists(),
+            404
+        );
+    }
+
     // Page publique de présentation et de connexion.
     public function index()
     {
@@ -36,21 +56,41 @@ class EspaceClientController extends Controller
     /* ------------------------------------------------------------------ */
 
     // Messages : conversation avec le client
-public function chat(Client $client)
+public function chat(Request $request, Client $client)
 {
+    $this->autoriserClientDuCharge($client);
+
     ClientPortalMessage::query()
         ->where('client_id', $client->id)
         ->where('sender_type', 'client')
         ->whereNull('read_at')
         ->update(['read_at' => now()]);
 
+    $instructionId = $request->query('instruction');
+    $instruction = null;
+    if ($instructionId !== null) {
+        $request->validate(['instruction' => ['required', 'integer']]);
+        $instruction = Consigne::query()
+            ->whereKey($instructionId)
+            ->where('client_id', $client->id)
+            ->with('user:id,name')
+            ->firstOrFail();
+    }
+
     return Inertia::render('ChargeClient/Clients/ClientChat', [   // garde ton chemin Inertia
         'client' => $client->only(['id', 'nom', 'prenom', 'telephone']),
+        'adminInstruction' => $instruction ? [
+            'consigne' => $instruction->consigne,
+            'auteur' => $instruction->user->name ?? 'Administrateur',
+            'created_at' => $instruction->created_at,
+        ] : null,
     ]);
 }
     // Rendez-vous : demandes de rendez-vous à accepter
     public function rendezVous(Client $client)
     {
+        $this->autoriserClientDuCharge($client);
+
         $client->load(['portalRequests' => fn ($query) => $query
             ->where('type', 'rendez_vous')
             ->with('vehicule:id,marque,modele,immatriculation')
@@ -767,6 +807,8 @@ public function chat(Client $client)
     // Refuser une demande de rendez-vous
 public function refuseRequest(Client $client, ClientPortalRequest $portalRequest)
 {
+    $this->autoriserClientDuCharge($client);
+
     abort_unless($portalRequest->client_id === $client->id, 404);
     abort_unless(
         $portalRequest->type === 'rendez_vous' && $portalRequest->statut === 'en_attente',
@@ -785,9 +827,14 @@ public function refuseRequest(Client $client, ClientPortalRequest $portalRequest
 // Messages clients non lus, tous clients confondus (pour la cloche du layout)
 public function messagesNonLus()
 {
+    abort_unless(auth()->user()->role === 'charge_client', 403);
+
     $groupes = ClientPortalMessage::query()
         ->where('sender_type', 'client')
         ->whereNull('read_at')
+        ->whereIn('client_id', InteractionClient::query()
+            ->where('user_id', auth()->id())
+            ->select('client_id'))
         ->select('client_id', DB::raw('COUNT(*) as nb'), DB::raw('MAX(id) as dernier_id'))
         ->groupBy('client_id')
         ->get();

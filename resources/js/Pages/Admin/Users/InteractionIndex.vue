@@ -225,6 +225,7 @@ const clientOuvertCle = ref(null);
 const historiqueComplet = ref(false);
 const boutonFermer = ref(null);
 const afficherFormConsigne = ref(false);
+const afficherConsignes = ref(false);
 
 const clientModal = computed(
     () => chargeActif.value?.clients.find((g) => g.cle === clientOuvertCle.value) || null,
@@ -244,6 +245,7 @@ const consigneForm = useForm({
 const ouvrirModal = async (cle) => {
     historiqueComplet.value = false;
     afficherFormConsigne.value = false;
+    afficherConsignes.value = false;
     clientOuvertCle.value = cle;
     await nextTick();
     boutonFermer.value?.focus();
@@ -253,6 +255,7 @@ function fermerModal() {
     clientOuvertCle.value = null;
     historiqueComplet.value = false;
     afficherFormConsigne.value = false;
+    afficherConsignes.value = false;
     consigneForm.reset();
 }
 
@@ -265,6 +268,7 @@ const soumettreConsigne = () => {
         onSuccess: () => {
             consigneForm.reset('consigne');
             afficherFormConsigne.value = false;
+            afficherConsignes.value = true;
         },
     });
 };
@@ -582,14 +586,25 @@ const aucuneDonnee = computed(() => !(props.chargesClients && props.chargesClien
                                     <i class="fa-solid fa-bullhorn text-sm"></i>
                                     <span>Consignes de la direction</span>
                                 </div>
-                                <button
-                                    type="button"
-                                    @click="afficherFormConsigne = !afficherFormConsigne"
-                                    class="inline-flex items-center gap-1.5 rounded-lg bg-[#E11D48] px-2.5 py-1 text-[11px] font-bold text-white transition hover:bg-rose-700 active:scale-95"
-                                >
-                                    <i class="fa-solid" :class="afficherFormConsigne ? 'fa-minus' : 'fa-plus'"></i>
-                                    <span>{{ afficherFormConsigne ? 'Masquer' : 'Laisser une consigne' }}</span>
-                                </button>
+                                <div class="flex flex-wrap items-center justify-end gap-2">
+                                    <button
+                                        type="button"
+                                        @click="afficherConsignes = !afficherConsignes"
+                                        class="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-bold text-rose-700 transition hover:bg-rose-100"
+                                        :aria-expanded="afficherConsignes"
+                                    >
+                                        <i class="fa-solid" :class="afficherConsignes ? 'fa-chevron-up' : 'fa-list'"></i>
+                                        <span>{{ afficherConsignes ? 'Masquer' : 'Voir les consignes' }} ({{ clientModal.consignes ? clientModal.consignes.length : 0 }})</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        @click="afficherFormConsigne = !afficherFormConsigne"
+                                        class="inline-flex items-center gap-1.5 rounded-lg bg-[#E11D48] px-2.5 py-1 text-[11px] font-bold text-white transition hover:bg-rose-700 active:scale-95"
+                                    >
+                                        <i class="fa-solid" :class="afficherFormConsigne ? 'fa-minus' : 'fa-plus'"></i>
+                                        <span>{{ afficherFormConsigne ? 'Masquer' : 'Laisser une consigne' }}</span>
+                                    </button>
+                                </div>
                             </div>
 
                             <!-- Formulaire de saisie d'une consigne -->
@@ -622,7 +637,7 @@ const aucuneDonnee = computed(() => !(props.chargesClients && props.chargesClien
                             </Transition>
 
                             <!-- Affichage des consignes actuelles -->
-                            <div v-if="clientModal.consignes && clientModal.consignes.length" class="mt-3 space-y-2">
+                            <div v-if="afficherConsignes" class="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
                                 <div
                                     v-for="item in clientModal.consignes"
                                     :key="item.id"
@@ -639,10 +654,10 @@ const aucuneDonnee = computed(() => !(props.chargesClients && props.chargesClien
                                         {{ item.consigne }}
                                     </p>
                                 </div>
+                                <p v-if="!clientModal.consignes || !clientModal.consignes.length" class="text-[11px] font-medium italic text-gray-500">
+                                    Aucune consigne particulière enregistrée pour ce client.
+                                </p>
                             </div>
-                            <p v-else-if="!afficherFormConsigne" class="mt-2 text-[11px] font-medium italic text-gray-500">
-                                Aucune consigne particulière enregistrée pour ce client.
-                            </p>
                         </div>
 
                         <!-- Bandeau de période -->

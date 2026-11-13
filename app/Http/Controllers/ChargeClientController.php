@@ -19,6 +19,19 @@ class ChargeClientController extends Controller
         return auth()->user()->role === 'admin';
     }
 
+    private function estChargeClient(): bool
+    {
+        return auth()->user()->role === 'charge_client';
+    }
+
+    private function clientAttribueAuChargeClient(Client $client): bool
+    {
+        return InteractionClient::query()
+            ->where('client_id', $client->id)
+            ->where('user_id', auth()->id())
+            ->exists();
+    }
+
     /** Contrainte « dossiers de mon siège » pour les relations chargées. */
     private function dossiersDuSiege(): \Closure
     {
@@ -29,7 +42,15 @@ class ChargeClientController extends Controller
     private function vehiculesDuSiege(): \Closure
     {
         return fn ($q) => $q->when(
-            !$this->estAdmin(),
+            $this->estChargeClient(),
+            fn ($v) => $v->whereIn(
+                'client_id',
+                InteractionClient::query()
+                    ->select('client_id')
+                    ->where('user_id', auth()->id())
+            )
+        )->when(
+            !$this->estAdmin() && !$this->estChargeClient(),
             fn ($v) => $v->where(function ($vehicules) {
                 $vehicules->whereHas('interventions', fn ($interventions) => $interventions->duSiege());
 
@@ -41,10 +62,30 @@ class ChargeClientController extends Controller
         );
     }
 
+    private function interactionsDuChargeClient(): \Closure
+    {
+        return fn ($q) => $q->when(
+            $this->estChargeClient(),
+            fn ($interactions) => $interactions->where('user_id', auth()->id())
+        );
+    }
+
     /** Refuse (404) l'accès à un véhicule hors siège et sans dossier dans le siège. */
     private function autoriserVehicule(Vehicule $vehicule): void
     {
         if ($this->estAdmin()) {
+            return;
+        }
+
+        if ($this->estChargeClient()) {
+            abort_unless(
+                InteractionClient::query()
+                    ->where('client_id', $vehicule->client_id)
+                    ->where('user_id', auth()->id())
+                    ->exists(),
+                404
+            );
+
             return;
         }
 
@@ -60,6 +101,12 @@ class ChargeClientController extends Controller
         abort_unless(in_array(auth()->user()->role, ['admin', 'charge_client'], true), 403);
 
         if ($this->estAdmin()) {
+            return;
+        }
+
+        if ($this->estChargeClient()) {
+            abort_unless($this->clientAttribueAuChargeClient($client), 404);
+
             return;
         }
 
@@ -81,7 +128,16 @@ class ChargeClientController extends Controller
                 'vehicules' => $this->vehiculesDuSiege(),
                 'vehicules.interventions' => $this->dossiersDuSiege(),
             ])
-            ->when(!$this->estAdmin(), fn ($q) => $q->where(function ($clients) {
+            ->when(
+                $this->estChargeClient(),
+                fn ($q) => $q->whereIn(
+                    'id',
+                    InteractionClient::query()
+                        ->select('client_id')
+                        ->where('user_id', auth()->id())
+                )
+            )
+            ->when(!$this->estAdmin() && !$this->estChargeClient(), fn ($q) => $q->where(function ($clients) {
                 $clients->whereHas('vehicules.interventions', fn ($i) => $i->duSiege())
                     ->orWhere(function ($sameSiege) {
                         $siege = auth()->user()->siege;
@@ -122,7 +178,7 @@ class ChargeClientController extends Controller
             'vehicules.interventions.devis.lignes',
             'vehicules.interventions.facture.paiements',
             'portalRequests' => fn ($query) => $query->when(
-                !$this->estAdmin(),
+            !$this->estAdmin(),
                 fn ($requests) => $requests
                     ->whereNotNull('siege')
                     ->where('siege', auth()->user()->siege)
@@ -294,17 +350,7 @@ class ChargeClientController extends Controller
 
     public function resetPortalPassword(Client $client)
     {
-        abort_unless(in_array(auth()->user()->role, ['admin', 'charge_client'], true), 403);
-
-        if (!$this->estAdmin()) {
-            $hasDossierAtSiege = $client->vehicules()->whereHas(
-                'interventions',
-                fn ($query) => $query->where('siege', auth()->user()->siege)
-            )->exists();
-            $belongsToSiege = !empty(auth()->user()->siege) && $client->siege === auth()->user()->siege;
-
-            abort_unless($hasDossierAtSiege || $belongsToSiege, 404);
-        }
+        $this->autoriserClientPortail($client);
 
         $client->replaceTemporaryPortalPassword();
 
@@ -323,7 +369,7 @@ class ChargeClientController extends Controller
             'interventions.facture.paiements',
             'interventions.mecanicien',
             'interventions.receptionniste',
-            'interactions.user:id,name',
+            'interactions' => fn ($query) => $this->interactionsDuChargeClient()($query)->with('user:id,name'),
         ]);
 
         return Inertia::render('ChargeClient/VehiculeShow', [
@@ -369,7 +415,7 @@ class ChargeClientController extends Controller
         // Chargement de client.consignes.user pour afficher les consignes admin sur la vue des relances
         $vehicule->load([
             'client.consignes.user',
-            'interactions.user:id,name',
+            'interactions' => fn ($query) => $this->interactionsDuChargeClient()($query)->with('user:id,name'),
         ]);
 
         return Inertia::render('ChargeClient/VehiculeRelances', [
@@ -397,6 +443,14 @@ class ChargeClientController extends Controller
     // 4. Mettre à jour le statut d'une intervention
     public function updateStatut(Request $request, Intervention $intervention)
     {
+        if ($this->estChargeClient()) {
+            $clientId = $intervention->vehicule()->value('client_id');
+            abort_unless($clientId && InteractionClient::query()
+                ->where('client_id', $clientId)
+                ->where('user_id', auth()->id())
+                ->exists(), 404);
+        }
+
         abort_unless($intervention->estVisiblePar(auth()->user()), 404);
 
         $data = $request->validate([

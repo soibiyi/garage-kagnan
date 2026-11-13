@@ -7,6 +7,7 @@ import { computed, nextTick, ref } from 'vue';
 const props = defineProps({
     vehicule: Object,
 });
+const afficherConsignes = ref(false);
 
 /* ------------------------------------------------------------------ */
 /* Utilitaires                                                         */
@@ -166,11 +167,22 @@ const enregistrerInteraction = () => {
                     class="rounded-2xl border border-rose-200 bg-rose-50/70 p-5 shadow-sm"
                     aria-label="Consignes de la direction"
                 >
-                    <div class="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-[#E11D48]">
-                        <i class="fa-solid fa-bullhorn text-sm"></i>
-                        <span>Consignes de la direction / Admin</span>
+                    <div class="flex flex-wrap items-center justify-between gap-3">
+                        <div class="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-[#E11D48]">
+                            <i class="fa-solid fa-bullhorn text-sm"></i>
+                            <span>Consignes de la direction / Admin</span>
+                        </div>
+                        <button
+                            type="button"
+                            class="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs font-bold text-rose-700 transition hover:bg-rose-100"
+                            :aria-expanded="afficherConsignes"
+                            @click="afficherConsignes = !afficherConsignes"
+                        >
+                            <i class="fa-solid" :class="afficherConsignes ? 'fa-chevron-up' : 'fa-list'"></i>
+                            <span>{{ afficherConsignes ? 'Masquer' : 'Voir les consignes' }} ({{ vehicule.client.consignes.length }})</span>
+                        </button>
                     </div>
-                    <div class="mt-3 space-y-3">
+                    <div v-if="afficherConsignes" class="mt-3 max-h-80 space-y-3 overflow-y-auto pr-1">
                         <div
                             v-for="item in vehicule.client.consignes"
                             :key="item.id"

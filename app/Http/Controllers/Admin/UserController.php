@@ -9,6 +9,7 @@ use App\Models\Client;
 use App\Models\InteractionClient;
 use App\Models\Consigne;
 use App\Models\ClientPortalRequest;
+use App\Notifications\AdminInstructionReceived;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
@@ -265,11 +266,29 @@ class UserController extends Controller
             'consigne' => 'required|string|max:2000',
         ]);
 
-        Consigne::create([
+        $consigne = Consigne::create([
             'client_id' => $client->id,
             'user_id' => auth()->id(),
             'consigne' => $request->consigne,
         ]);
+
+        $destinataires = User::query()
+            ->where('role', 'charge_client')
+            ->where('siege', $this->siegeActif())
+            ->whereIn('id', InteractionClient::query()
+                ->where('client_id', $client->id)
+                ->select('user_id'))
+            ->get();
+
+        $nomClient = trim(($client->prenom ?? '') . ' ' . ($client->nom ?? ''));
+        foreach ($destinataires as $destinataire) {
+            $destinataire->notify(new AdminInstructionReceived(
+                $consigne->id,
+                $client->id,
+                $nomClient ?: 'Client',
+                $consigne->consigne,
+            ));
+        }
 
         return back()->with('success', 'Consigne enregistrée avec succès.');
     }

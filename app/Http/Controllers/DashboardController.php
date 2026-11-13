@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Intervention;
+use App\Models\InteractionClient;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -35,7 +37,10 @@ class DashboardController extends Controller
         $statut = in_array($request->input('statut'), $statuts, true) ? $request->input('statut') : null;
         $search = trim((string) $request->input('search', ''));
 
-        $interventionsAtelier = Intervention::duSiege()
+        $interventionsQuery = Intervention::duSiege();
+        $this->restreindreAuxClientsDuCharge($interventionsQuery, $request->user());
+
+        $interventionsAtelier = $interventionsQuery
             ->with(['vehicule.client', 'mecanicien'])
             // Devis direct = circuit 'devis_direct' ; tout le reste = circuit normal
             ->when(
@@ -70,7 +75,7 @@ class DashboardController extends Controller
             'interventionsAtelier' => $interventionsAtelier,
             'filters'   => $request->only('search', 'statut', 'type'),
             'statuts'   => $statuts,
-            'compteurs' => $this->compteurs($statuts),
+            'compteurs' => $this->compteurs($statuts, $request->user()),
         ]);
     }
 
@@ -78,12 +83,15 @@ class DashboardController extends Controller
      * Compteurs par type et par statut (indépendants de la recherche).
      * Format : ['normal' => ['tous' => 12, 'reception' => 3, ...], 'direct' => [...]]
      */
-    private function compteurs(array $statuts): array
+    private function compteurs(array $statuts, User $user): array
     {
         $vide = array_fill_keys([...$statuts, 'tous'], 0);
         $compteurs = ['normal' => $vide, 'direct' => $vide];
 
-        $lignes = Intervention::duSiege()
+        $query = Intervention::duSiege();
+        $this->restreindreAuxClientsDuCharge($query, $user);
+
+        $lignes = $query
             ->whereIn('statut', $statuts)
             ->selectRaw("(circuit = 'devis_direct') as est_direct, statut, COUNT(*) as n")
             ->groupBy('est_direct', 'statut')
@@ -96,5 +104,17 @@ class DashboardController extends Controller
         }
 
         return $compteurs;
+    }
+
+    private function restreindreAuxClientsDuCharge($query, User $user): void
+    {
+        if ($user->role !== 'charge_client') {
+            return;
+        }
+
+        $query->whereHas('vehicule', fn ($vehicules) => $vehicules->whereIn(
+            'client_id',
+            InteractionClient::query()->where('user_id', $user->id)->select('client_id')
+        ));
     }
 }

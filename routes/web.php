@@ -136,6 +136,10 @@ Route::post('clients/{client}/portal-requests/{portalRequest}/refuse',
 Route::get('notifications/messages',
     [EspaceClientController::class, 'messagesNonLus'])
     ->name('notifications.messages');    
+Route::get('notifications/instructions', [\App\Http\Controllers\ChargeClientInstructionNotificationController::class, 'index'])
+->name('notifications.instructions');
+Route::patch('notifications/instructions/{notification}/read', [\App\Http\Controllers\ChargeClientInstructionNotificationController::class, 'markRead'])
+->name('notifications.instructions.read');
 });
 
 Route::middleware(['auth'])->prefix('administration')->name('administration.')->group(function () {

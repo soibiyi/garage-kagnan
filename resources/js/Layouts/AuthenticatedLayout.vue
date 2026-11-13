@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { Head, Link, usePage, router } from '@inertiajs/vue3'; // 1. Ajoute Head ici
 import FlashToast from '@/Components/FlashToast.vue';
 import NotificationsMessages from '@/Components/NotificationsMessages.vue';
+import ChargeClientInstructions from '@/Components/ChargeClientInstructions.vue';
 import AdminMissionNotifications from '@/Components/AdminMissionNotifications.vue';
 
 
@@ -85,6 +86,7 @@ const logout = () => {
                         <!-- DROITE : notifications (chargé client) + nom de l'utilisateur (lien profil) + Se déconnecter -->
                         <div class="flex items-center gap-2 sm:gap-3">
                             <NotificationsMessages v-if="role === 'charge_client'" />
+                            <ChargeClientInstructions v-if="role === 'charge_client'" />
                             <AdminMissionNotifications v-if="role === 'admin'" />
 
                             <Link
