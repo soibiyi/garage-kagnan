@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class MvtStock extends Model
 {
     use HasFactory;
+    use \App\Models\Concerns\Audite;
 
     protected $table = 'mvt_stocks';
 

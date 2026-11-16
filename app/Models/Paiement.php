@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class Paiement extends Model
 {
+    use \App\Models\Concerns\Audite;
+
     protected $fillable = [
     'facture_id',
     'enregistre_par',

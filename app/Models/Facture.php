@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class Facture extends Model
 {
+    use \App\Models\Concerns\Audite;
+
     public function intervention()
     {
         return $this->belongsTo(Intervention::class);

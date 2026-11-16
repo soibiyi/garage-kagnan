@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class Stock extends Model
 {
+    use \App\Models\Concerns\Audite;
+
     use HasFactory;
 
     protected $table = 'stocks';

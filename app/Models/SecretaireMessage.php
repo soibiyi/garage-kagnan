@@ -12,6 +12,10 @@ class SecretaireMessage extends Model
         'sender_id',
         'tache_id',
         'contenu',
+        'piece_jointe_path',
+        'piece_jointe_nom',
+        'piece_jointe_mime',
+        'piece_jointe_taille',
         'lu_at',
     ];
 

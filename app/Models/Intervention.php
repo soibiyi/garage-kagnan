@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class Intervention extends Model
 {
+    use \App\Models\Concerns\Audite;
+
     use HasFactory;
 
     protected $table = 'interventions';

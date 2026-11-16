@@ -51,12 +51,26 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_superadmin' => 'boolean',
             'last_seen_at' => 'datetime',
+            'suspendu_at' => 'datetime',
         ];
     }
 
     public function chauffeurMissions()
     {
         return $this->hasMany(ClientPortalRequest::class, 'chauffeur_id');
+    }
+
+    protected static function booted(): void
+    {
+        // « superadmin » n'est pas un rôle stocké : c'est un admin avec is_superadmin = true.
+        // Corrige automatiquement un compte créé avec role = 'superadmin' (tinker, seeder, import…).
+        static::saving(function (User $user) {
+            if ($user->role === 'superadmin') {
+                $user->role = 'admin';
+                $user->is_superadmin = true;
+                $user->siege = null;
+            }
+        });
     }
 
     /** Super administrateur : tous les droits admin + supervision (activité, erreurs, « voir en tant que »). */
@@ -78,6 +92,16 @@ class User extends Authenticatable
     public function scopeVisiblesPar($query, ?User $lecteur)
     {
         return $lecteur?->estSuperAdmin() ? $query : $query->where('is_superadmin', false);
+    }
+
+    public function suspenduPar()
+    {
+        return $this->belongsTo(User::class, 'suspendu_par');
+    }
+
+    public function estSuspendu(): bool
+    {
+        return $this->suspendu_at !== null;
     }
 
     public function estEnLigne(): bool

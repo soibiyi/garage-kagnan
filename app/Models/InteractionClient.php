@@ -33,4 +33,9 @@ class InteractionClient extends Model
     {
         return $this->belongsTo(Vehicule::class);
     }
+
+    public function photos()
+    {
+        return $this->hasMany(InteractionClientPhoto::class)->orderBy('id');
+    }
 }

@@ -6,6 +6,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class LigneDevis extends Model
 {
+    use \App\Models\Concerns\Audite;
+
     protected $table = 'lignes_devis';
 
     protected $fillable = [

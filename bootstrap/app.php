@@ -15,6 +15,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             \App\Http\Middleware\HandleInertiaRequests::class,
             \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
+            // Compte suspendu / mode maintenance (pilotés par le super administrateur)
+            \App\Http\Middleware\VerifierAccesApplication::class,
             // Journal d'activité + présence (supervision du super administrateur)
             \App\Http\Middleware\TrackUserActivity::class,
         ]);
