@@ -31,13 +31,17 @@ class DossierController extends Controller
      * le chargé de suivi client retourne sur son propre dashboard,
      * les autres rôles reviennent à la liste d'origine.
      */
-    private function redirectApresAction(string $message, string $routeParDefaut = 'administration.facturation.index')
+    private function redirectApresAction(
+        string $message,
+        string $routeParDefaut = 'administration.facturation.index',
+        array $routeParameters = []
+    )
     {
         $route = auth()->user()->role === 'charge_client'
             ? 'dashboard'
             : $routeParDefaut;
 
-        return redirect()->route($route)->with('success', $message);
+        return redirect()->route($route, $routeParameters)->with('success', $message);
     }
 
     public function index()
@@ -70,7 +74,7 @@ class DossierController extends Controller
     {
         $this->autoriser($dossier);
 
-        $dossier->load(['vehicule.client', 'devis.lignes']);
+        $dossier->load(['vehicule.client', 'devis.lignes', 'devisComplements.lignes']);
 
         return Inertia::render('Administration/FacturationShow', [
             'dossier' => $dossier
@@ -133,6 +137,34 @@ class DossierController extends Controller
 
     public function storeDevis(Request $request, Intervention $dossier)
     {
+        return $this->enregistrerDevis($request, $dossier);
+    }
+
+    public function createDevisComplementaire(Intervention $dossier)
+    {
+        $this->autoriser($dossier);
+        abort_unless($dossier->devis()->exists(), 404);
+        abort_if(in_array($dossier->statut, ['annule', 'livre'], true), 403);
+
+        $dossier->load(['vehicule.client', 'mecanicien', 'receptionniste']);
+
+        return Inertia::render('Administration/DossierShow', [
+            'dossier' => $dossier,
+            'complementaire' => true,
+        ]);
+    }
+
+    public function storeDevisComplementaire(Request $request, Intervention $dossier)
+    {
+        $this->autoriser($dossier);
+        abort_unless($dossier->devis()->exists(), 404);
+        abort_if(in_array($dossier->statut, ['annule', 'livre'], true), 403);
+
+        return $this->enregistrerDevis($request, $dossier, true);
+    }
+
+    private function enregistrerDevis(Request $request, Intervention $dossier, bool $complementaire = false)
+    {
         $this->autoriser($dossier);
 
         $request->validate([
@@ -149,23 +181,29 @@ class DossierController extends Controller
             'petite_fourniture_montant' => 'nullable|integer|min:0',
         ]);
 
-        DB::transaction(function () use ($request, $dossier) {
+        DB::transaction(function () use ($request, $dossier, $complementaire) {
             // Création de l'entête du devis
             $devis = Devis::create([
                 'intervention_id' => $dossier->id,
                 'createur_id' => auth()->id(),
                 'statut' => 'en_attente',
+                'is_complementaire' => $complementaire,
             ]);
 
             // Enregistrement des lignes du devis
             $this->creerLignesDevis($devis, $request->lignes);
             $this->appliquerPetiteFourniture($devis, $request);
 
-            // Mise à jour du statut du dossier
-            $dossier->update(['statut' => 'attente_accord']);
+            if (!$complementaire) {
+                $dossier->update(['statut' => 'attente_accord']);
+            }
         });
 
-        return $this->redirectApresAction('Devis enregistré avec succès.', 'administration.dossiers.index');
+        return $this->redirectApresAction(
+            $complementaire ? 'Devis complémentaire enregistré avec succès.' : 'Devis enregistré avec succès.',
+            $complementaire ? 'administration.facturation.show' : 'administration.dossiers.index',
+            $complementaire ? ['dossier' => $dossier->id] : []
+        );
     }
 
     /** Le dossier a-t-il déjà reçu au moins un versement (même un premier versement partiel) ? */

@@ -235,6 +235,8 @@ Route::middleware(['auth'])->prefix('administration')->name('administration.')->
     Route::get('/dossiers', [DossierController::class, 'index'])->name('dossiers.index');
     Route::get('/dossiers/{dossier}', [DossierController::class, 'show'])->name('dossiers.show');
     Route::post('/dossiers/{dossier}/devis', [DossierController::class, 'storeDevis'])->name('devis.store');
+    Route::get('/dossiers/{dossier}/devis-complementaire', [DossierController::class, 'createDevisComplementaire'])->name('devis.complementaire.create');
+    Route::post('/dossiers/{dossier}/devis-complementaire', [DossierController::class, 'storeDevisComplementaire'])->name('devis.complementaire.store');
     Route::get('/dossiers/{dossier}/devis/modifier', [DossierController::class, 'editDevis'])->name('devis.edit');
     Route::put('/dossiers/{dossier}/devis', [DossierController::class, 'updateDevis'])->name('devis.update');
 

@@ -17,10 +17,14 @@ const statutDevis = {
   refuse: 'Refusé',
 }
 
-function statutAffiche(intervention) {
+function statutAffiche(intervention, devis = intervention?.devis) {
+  if (!['accepte', 'valide'].includes(devis?.statut)) {
+    return statutDevis[devis?.statut] || devis?.statut || 'En attente'
+  }
+
   const facture = intervention?.facture
   if (!facture) {
-    return statutDevis[intervention?.devis?.statut] || intervention?.devis?.statut || 'En attente'
+    return statutDevis[devis?.statut] || devis?.statut || 'En attente'
   }
 
   const total = Number(facture.montant_total || 0)
@@ -64,40 +68,45 @@ function mapClient(client) {
     }))
   )
   interventions.sort((a, b) => new Date(b.date_reception || 0) - new Date(a.date_reception || 0))
-  const devis = interventions.flatMap(intervention => {
-    if (!intervention.devis) return []
-    const lignes = intervention.devis.lignes.map(line => ({
-      ...line,
-      quantite: Number(line.quantite),
-      pu_net: Number(line.pu_net),
-      remise: Number(line.remise),
-      montant_ht: Number(line.montant_ht),
-      montant_ttc: Number(line.montant_ttc),
-    }))
+  const devis = interventions.flatMap(intervention =>
+    [intervention.devis, ...(intervention.devis_complementaires || [])]
+      .filter(Boolean)
+      .map(devisIntervention => {
+        const lignes = devisIntervention.lignes.map(line => ({
+          ...line,
+          quantite: Number(line.quantite),
+          pu_net: Number(line.pu_net),
+          remise: Number(line.remise),
+          montant_ht: Number(line.montant_ht),
+          montant_ttc: Number(line.montant_ttc),
+        }))
 
-    return [{
-      id: intervention.devis.id,
-      ref: `DV-${String(intervention.devis.id).padStart(6, '0')}`,
-      date: intervention.devis.created_at,
-      objet: `${intervention.vehicule.modele || ''}`.trim() || 'Intervention atelier',
-      statut: statutAffiche(intervention),
-      facture: intervention.facture ? {
-        ...intervention.facture,
-        montant_total: Number(intervention.facture.montant_total || 0),
-        montant_paye: Number(intervention.facture.montant_paye || 0),
-        paiements: intervention.facture.paiements || [],
-      } : null,
-      lignes,
-      petite_fourniture_active: intervention.devis.petite_fourniture_active,
-      petite_fourniture_montant: intervention.devis.petite_fourniture_montant === null
-        ? null
-        : Number(intervention.devis.petite_fourniture_montant),
-      numero_ot: intervention.numero_ot,
-      selectionPossible: intervention.devis.statut === 'en_attente'
-        && intervention.statut === 'attente_accord'
-        && !intervention.facture,
-    }]
-  })
+        return {
+          id: devisIntervention.id,
+          ref: `DV-${String(devisIntervention.id).padStart(6, '0')}`,
+          isComplementaire: Boolean(devisIntervention.is_complementaire),
+          date: devisIntervention.created_at,
+          objet: `${intervention.vehicule.modele || ''}`.trim() || 'Intervention atelier',
+          statut: statutAffiche(intervention, devisIntervention),
+          facture: intervention.facture ? {
+            ...intervention.facture,
+            montant_total: Number(intervention.facture.montant_total || 0),
+            montant_paye: Number(intervention.facture.montant_paye || 0),
+            paiements: intervention.facture.paiements || [],
+          } : null,
+          lignes,
+          petite_fourniture_active: devisIntervention.petite_fourniture_active,
+          petite_fourniture_montant: devisIntervention.petite_fourniture_montant === null
+            ? null
+            : Number(devisIntervention.petite_fourniture_montant),
+          numero_ot: intervention.numero_ot,
+          selectionPossible: devisIntervention.statut === 'en_attente'
+            && (intervention.statut === 'attente_accord'
+              || (intervention.statut === 'accepte'
+                && (devisIntervention.is_complementaire || !intervention.facture?.paiements?.length))),
+        }
+      })
+  )
 
   const activeIntervention = interventions.find(({ statut }) => !estInterventionTerminee(statut) && statut !== 'annule')
   const lastIntervention = interventions[0]

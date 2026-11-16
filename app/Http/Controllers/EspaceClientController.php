@@ -7,8 +7,10 @@ use App\Models\ClientPortalMessage;
 use App\Models\ClientPortalRequest;
 use App\Models\Consigne;
 use App\Models\Devis;
+use App\Models\Facture;
 use App\Models\InteractionClient;
 use App\Models\Vehicule;
+use App\Support\PetiteFourniture;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -202,7 +204,7 @@ public function chat(Request $request, Client $client)
         $client->load([
             'vehicules.reparationsExternes',
             'vehicules.interventions' => fn ($query) => $query
-                ->with(['devis.lignes', 'facture.paiements'])
+                ->with(['devis.lignes', 'devisComplements.lignes', 'facture.paiements'])
                 ->latest('date_reception'),
             'portalRequests.vehicule',
             'portalRequests.chauffeur:id,name',
@@ -312,30 +314,9 @@ public function chat(Request $request, Client $client)
                                 'url' => Storage::disk('public')->url($path),
                             ])->values(),
                         ],
-                        'devis' => $intervention->devis ? [
-                            'id' => $intervention->devis->id,
-                            'statut' => $intervention->devis->statut,
-                            'montant_diagnostic' => $intervention->devis->montant_diagnostic,
-                            'montant_total_ht' => $intervention->devis->montant_total_ht,
-                            'montant_total_ttc' => $intervention->devis->montant_total_ttc,
-                            'petite_fourniture_active' => (bool) $intervention->devis->petite_fourniture_active,
-                            'petite_fourniture_montant' => $intervention->devis->petite_fourniture_montant,
-                            'created_at' => $intervention->devis->created_at,
-                            'lignes' => $intervention->devis->lignes->map(fn ($ligne) => [
-                                'id' => $ligne->id,
-                                'designation' => $ligne->designation,
-                                'reference_piece' => $ligne->reference_piece,
-                                'quantite' => $ligne->quantite,
-                                'pu_net' => $ligne->pu_net,
-                                'remise' => $ligne->remise,
-                                'montant_ht' => $ligne->montant_ht,
-                                'montant_ttc' => $ligne->montant_ttc,
-                                'ne_pas_appliquer_tva' => (bool) $ligne->ne_pas_appliquer_tva,
-                                'famille' => $ligne->famille,
-                                'sous_famille' => $ligne->sous_famille,
-                                'is_accepted' => (bool) $ligne->is_accepted,
-                            ]),
-                        ] : null,
+                        'devis' => $intervention->devis ? $this->serialiserDevisClient($intervention->devis) : null,
+                        'devis_complementaires' => $intervention->devisComplements
+                            ->map(fn (Devis $devis) => $this->serialiserDevisClient($devis)),
                         'facture' => $intervention->facture ? [
                             'numero_facture' => $intervention->facture->numero_facture,
                             'montant_total' => $intervention->facture->montant_total,
@@ -352,6 +333,35 @@ public function chat(Request $request, Client $client)
                 ]),
             ],
         ]);
+    }
+
+    private function serialiserDevisClient(Devis $devis): array
+    {
+        return [
+            'id' => $devis->id,
+            'statut' => $devis->statut,
+            'is_complementaire' => $devis->is_complementaire,
+            'montant_diagnostic' => $devis->montant_diagnostic,
+            'montant_total_ht' => $devis->montant_total_ht,
+            'montant_total_ttc' => $devis->montant_total_ttc,
+            'petite_fourniture_active' => (bool) $devis->petite_fourniture_active,
+            'petite_fourniture_montant' => $devis->petite_fourniture_montant,
+            'created_at' => $devis->created_at,
+            'lignes' => $devis->lignes->map(fn ($ligne) => [
+                'id' => $ligne->id,
+                'designation' => $ligne->designation,
+                'reference_piece' => $ligne->reference_piece,
+                'quantite' => $ligne->quantite,
+                'pu_net' => $ligne->pu_net,
+                'remise' => $ligne->remise,
+                'montant_ht' => $ligne->montant_ht,
+                'montant_ttc' => $ligne->montant_ttc,
+                'ne_pas_appliquer_tva' => (bool) $ligne->ne_pas_appliquer_tva,
+                'famille' => $ligne->famille,
+                'sous_famille' => $ligne->sous_famille,
+                'is_accepted' => (bool) $ligne->is_accepted,
+            ]),
+        ];
     }
 
     public function updateQuoteSelection(Request $request, Devis $devis)
@@ -388,8 +398,9 @@ public function chat(Request $request, Client $client)
 
             $hasPayments = $intervention->facture()->whereHas('paiements')->exists();
             $devisNonValide = $devis->statut === 'en_attente'
-                && $intervention->statut === 'attente_accord'
-                && !$hasPayments;
+                && ($devis->is_complementaire
+                    ? in_array($intervention->statut, ['attente_accord', 'accepte'], true)
+                    : in_array($intervention->statut, ['attente_accord', 'accepte'], true) && !$hasPayments);
 
             abort_unless(
                 $devisNonValide,
@@ -413,6 +424,26 @@ public function chat(Request $request, Client $client)
 
             $devis->update(['statut' => 'accepte']);
             $intervention->update(['statut' => 'accepte']);
+
+            $facture = Facture::with('paiements')->where('intervention_id', $intervention->id)->first();
+            if ($facture) {
+                $total = Devis::with('lignes')
+                    ->where('intervention_id', $intervention->id)
+                    ->get()
+                    ->sum(function (Devis $devis) {
+                        $brut = (float) $devis->lignes->where('is_accepted', true)->sum('montant_ttc');
+
+                        return PetiteFourniture::totalFinal($devis, $brut);
+                    });
+                $paye = (int) round((float) $facture->paiements->sum('montant'));
+                $facture->forceFill([
+                    'montant_total' => $total,
+                    'montant_paye' => $paye,
+                    'statut' => $total > 0 && $paye >= $total
+                        ? 'payee'
+                        : ($paye > 0 ? 'partiellement_payee' : 'impayee'),
+                ])->save();
+            }
 
             return response()->json(['message' => 'Votre choix a été enregistré.']);
         });

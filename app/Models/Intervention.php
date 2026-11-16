@@ -81,7 +81,14 @@ class Intervention extends Model
 
     public function devis()
     {
-        return $this->hasOne(Devis::class, 'intervention_id');
+        return $this->hasOne(Devis::class, 'intervention_id')->where('is_complementaire', false);
+    }
+
+    public function devisComplements()
+    {
+        return $this->hasMany(Devis::class, 'intervention_id')
+            ->where('is_complementaire', true)
+            ->orderBy('id');
     }
 
     /**

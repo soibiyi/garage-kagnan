@@ -1,6 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, useForm, router, usePage } from '@inertiajs/vue3';
+import { Head, Link, useForm, router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import axios from 'axios';
 import { FAMILLES, FAMILLE_PAR_DEFAUT } from '@/constants/familles.js';
@@ -323,6 +323,14 @@ const retour = () => {
                     </h2>
                 </div>
                 <div class="flex items-center space-x-3">
+                    <Link
+                        v-if="!modeEdition && dossier.devis"
+                        :href="route('administration.devis.complementaire.create', dossier.id)"
+                        class="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold uppercase tracking-wider text-white shadow-sm transition hover:bg-amber-600"
+                    >
+                        <i class="fa-solid fa-plus text-[11px]"></i>
+                        <span>Devis complémentaire</span>
+                    </Link>
                     <button 
                         @click="imprimer" 
                         class="inline-flex items-center gap-1.5 px-4 py-2 bg-gray-800 hover:bg-gray-900 text-white font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-xs"
@@ -354,7 +362,14 @@ const retour = () => {
                 </div>
 
                 <div v-else>
-                    
+                    <div v-if="dossier.devis_complements?.length" class="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 print:hidden">
+                        <h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-amber-900">Devis complémentaires</h3>
+                        <div v-for="devisComplement in dossier.devis_complements" :key="devisComplement.id" class="flex flex-wrap items-center justify-between gap-2 border-t border-amber-200 py-2 text-xs">
+                            <span class="font-semibold text-amber-950">Devis #{{ devisComplement.id }} · {{ new Date(devisComplement.created_at).toLocaleDateString('fr-FR') }}</span>
+                            <span class="capitalize text-amber-800">{{ devisComplement.statut?.replace('_', ' ') }}</span>
+                        </div>
+                    </div>
+
                     <!-- MODE 1 : DEVIS EN ATTENTE (Saisie du choix client) -->
                     <form v-if="dossier.devis.statut === 'en_attente' || modeEdition" @submit.prevent="submitValidation">
                         <div class="invoice-sheet bg-white shadow-2xl shadow-gray-200/50 sm:rounded-2xl p-8 border border-gray-100 print:shadow-none print:border-none print:p-2 text-gray-800">

@@ -15,24 +15,21 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class FactureController extends Controller
 {
-    /** TTC brut (sans petite fourniture) des lignes acceptées du devis. */
-    private function brutAccepte(Intervention $dossier): float
+    private function devisDuDossier(Intervention $dossier)
     {
-        if (!$dossier->devis) {
-            return 0;
-        }
+        $dossier->loadMissing(['devis.lignes', 'devisComplements.lignes']);
 
-        return (float) $dossier->devis->lignes->where('is_accepted', true)->sum('montant_ttc');
+        return collect([$dossier->devis])->filter()->concat($dossier->devisComplements);
     }
 
     /** Total TTC (avec petite fourniture auto 3 % ou saisie, arrondi au FCFA) des lignes acceptées. */
     private function totalAccepte(Intervention $dossier): int
     {
-        if (!$dossier->devis) {
-            return 0;
-        }
+        return $this->devisDuDossier($dossier)->sum(function ($devis) {
+            $brut = (float) $devis->lignes->where('is_accepted', true)->sum('montant_ttc');
 
-        return PetiteFourniture::totalFinal($dossier->devis, $this->brutAccepte($dossier));
+            return PetiteFourniture::totalFinal($devis, $brut);
+        });
     }
 
     /** Numéro de facture, même format que celui affiché sur la vue. */
@@ -54,9 +51,11 @@ class FactureController extends Controller
         return [
             'numero'       => $this->numeroFacture($dossier),
             'total_ttc'    => $total,
-            'petite_fourniture' => $dossier->devis
-                ? PetiteFourniture::montant($dossier->devis, $this->brutAccepte($dossier))
-                : 0,
+            'petite_fourniture' => $this->devisDuDossier($dossier)->sum(function ($devis) {
+                $brut = (float) $devis->lignes->where('is_accepted', true)->sum('montant_ttc');
+
+                return PetiteFourniture::montant($devis, $brut);
+            }),
             'montant_paye' => $paye,
             'reste'        => max($total - $paye, 0),
             'pourcentage'  => $total > 0 ? min(100, (int) round($paye * 100 / $total)) : 0,
@@ -81,7 +80,7 @@ class FactureController extends Controller
     {
         $search = $request->input('search');
 
-        $dossiers = Intervention::duSiege()->with(['vehicule.client', 'devis.lignes', 'mecanicien'])
+        $dossiers = Intervention::duSiege()->with(['vehicule.client', 'devis.lignes', 'devisComplements.lignes', 'mecanicien'])
             ->where('statut', 'accepte')
             ->when($search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
@@ -206,7 +205,7 @@ class FactureController extends Controller
      */
     public function show($id)
     {
-        $dossier = Intervention::duSiege()->with(['vehicule.client', 'devis.lignes'])->findOrFail($id);
+        $dossier = Intervention::duSiege()->with(['vehicule.client', 'devis.lignes', 'devisComplements.lignes'])->findOrFail($id);
 
         $facture = Facture::where('intervention_id', $dossier->id)->first();
 
@@ -249,7 +248,7 @@ class FactureController extends Controller
 
         DB::transaction(function () use ($request, $id, &$erreur) {
             $dossier = Intervention::duSiege()->lockForUpdate()->findOrFail($id);
-            $dossier->load(['devis.lignes']);
+            $dossier->load(['devis.lignes', 'devisComplements.lignes']);
 
             $total = $this->totalAccepte($dossier);
 

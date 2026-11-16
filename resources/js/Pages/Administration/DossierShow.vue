@@ -8,6 +8,7 @@ const props = defineProps({
     dossier: Object,
     // Fourni uniquement en mode modification (devis en attente de validation)
     devis: { type: Object, default: null },
+    complementaire: { type: Boolean, default: false },
 });
 
 const modeModification = computed(() => !!props.devis);
@@ -233,6 +234,13 @@ const submitDevis = () => {
         return;
     }
 
+    if (props.complementaire) {
+        form.post(route('administration.devis.complementaire.store', props.dossier.id), {
+            preserveScroll: true,
+        });
+        return;
+    }
+
     form.post(route('administration.devis.store', props.dossier.id), {
         preserveScroll: true,
     });
@@ -248,7 +256,7 @@ const submitDevis = () => {
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <div class="flex items-center gap-3 text-xs text-slate-500">
-                        <Link :href="modeModification ? route('administration.facturation.index') : route('administration.dossiers.index')" class="hover:text-slate-900 transition flex items-center gap-1.5">
+                        <Link :href="modeModification ? route('administration.facturation.index') : (complementaire ? route('administration.facturation.show', dossier.id) : route('administration.dossiers.index'))" class="hover:text-slate-900 transition flex items-center gap-1.5">
                             <i class="fa-solid fa-arrow-left"></i>
                             <span>Retour aux dossiers</span>
                         </Link>
@@ -259,7 +267,7 @@ const submitDevis = () => {
                     </div>
                     <h2 class="text-xl font-bold tracking-tight text-slate-900 mt-2 flex items-center gap-2">
                         <i class="fa-solid fa-file-invoice-dollar text-[#E11D48]"></i>
-                        <span>{{ modeModification ? 'Modification du Devis' : 'Établissement du Devis & Chiffrage' }}</span>
+                        <span>{{ modeModification ? 'Modification du Devis' : (complementaire ? 'Établissement du Devis complémentaire' : 'Établissement du Devis & Chiffrage') }}</span>
                     </h2>
                 </div>
             </div>
@@ -299,6 +307,10 @@ const submitDevis = () => {
                             </p>
                         </div>
                     </div>
+                </div>
+
+                <div v-if="complementaire" class="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                    Ce devis sera ajouté séparément à l’intervention {{ dossier.numero_ot || `#${dossier.id}` }}. Le devis initial ne sera pas modifié.
                 </div>
 
                 <!-- TABLEAU DE SAISIE DU DEVIS -->
@@ -541,7 +553,7 @@ const submitDevis = () => {
                                 class="mt-4 px-6 py-3 bg-[#E11D48] hover:bg-rose-700 text-white text-xs font-bold uppercase tracking-wider rounded-lg shadow-md transition-all disabled:opacity-50 flex items-center gap-2"
                             >
                                 <i class="fa-solid fa-check"></i>
-                                <span>{{ modeModification ? 'Enregistrer les modifications' : 'Enregistrer et émettre le devis' }}</span>
+                                <span>{{ modeModification ? 'Enregistrer les modifications' : (complementaire ? 'Enregistrer le devis complémentaire' : 'Enregistrer et émettre le devis') }}</span>
                             </button>
                         </div>
                     </div>

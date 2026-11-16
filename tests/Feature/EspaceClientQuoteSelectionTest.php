@@ -51,6 +51,50 @@ class EspaceClientQuoteSelectionTest extends TestCase
             ->assertJsonPath('client.vehicules.0.interventions.0.devis.lignes.0.is_accepted', true);
     }
 
+    public function test_client_can_validate_a_complementary_quote_after_the_initial_quote_was_accepted(): void
+    {
+        $client = $this->registerClient('0700000110');
+        $initial = $this->createQuoteFor($client);
+        $intervention = Intervention::findOrFail($initial->intervention_id);
+        $intervention->update(['statut' => 'accepte']);
+
+        $complement = Devis::create([
+            'intervention_id' => $intervention->id,
+            'statut' => 'en_attente',
+            'is_complementaire' => true,
+        ]);
+        $line = LigneDevis::create([
+            'devis_id' => $complement->id,
+            'designation' => 'Réparation complémentaire',
+            'quantite' => 1,
+            'pu_net' => 20000,
+            'remise' => 0,
+            'montant_ht' => 20000,
+            'montant_ttc' => 23600,
+            'is_accepted' => false,
+        ]);
+
+        $this->patchJson("/espace-client/api/devis/{$complement->id}/choix", [
+            'lignes_acceptees' => [$line->id],
+        ])->assertOk();
+
+        $this->assertDatabaseHas('devis', [
+            'id' => $initial->id,
+            'statut' => 'en_attente',
+            'is_complementaire' => false,
+        ]);
+        $this->assertDatabaseHas('devis', [
+            'id' => $complement->id,
+            'statut' => 'accepte',
+            'is_complementaire' => true,
+        ]);
+
+        $this->getJson('/espace-client/api/me')
+            ->assertOk()
+            ->assertJsonPath('client.vehicules.0.interventions.0.devis_complementaires.0.id', $complement->id)
+            ->assertJsonPath('client.vehicules.0.interventions.0.devis_complementaires.0.is_complementaire', true);
+    }
+
     public function test_client_cannot_submit_the_same_quote_twice_after_first_validation(): void
     {
         $client = $this->registerClient('0700000102');

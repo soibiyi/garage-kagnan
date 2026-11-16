@@ -209,6 +209,7 @@ const f = n => `${Number(n || 0).toLocaleString('fr-FR')} F`
           <span class="dv-main">
             <span class="dv-title">
               <strong>{{ devis.ref || `Devis #${devis.id}` }}</strong>
+              <span v-if="devis.isComplementaire" class="dv-flag">Complémentaire</span>
               <span v-if="devis.selectionPossible" class="dv-flag">À valider</span>
             </span>
             <span class="dv-obj">{{ devis.objet || 'Prestations et réparations' }}</span>
@@ -245,6 +246,7 @@ const f = n => `${Number(n || 0).toLocaleString('fr-FR')} F`
           <div class="dv-header-main">
             <p class="hint">Devis</p>
             <h2 id="dv-modal-title">{{ devisOuvert.ref || `Devis #${devisOuvert.id}` }}</h2>
+            <p v-if="devisOuvert.isComplementaire" class="hint">Devis complémentaire à l’intervention</p>
             <p class="meta">
               <span><i class="fa-solid fa-screwdriver-wrench"></i>{{ devisOuvert.objet || 'Prestations et réparations' }}</span>
               <span><i class="fa-solid fa-hashtag"></i>{{ devisOuvert.numero_ot || '—' }}</span>

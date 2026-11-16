@@ -23,7 +23,10 @@ const numeroFacture = computed(() => {
 
 // Seules les lignes acceptées par le client sont facturées
 const lignesFacturees = computed(() =>
-    (props.dossier?.devis?.lignes || []).filter(l => l.is_accepted)
+    [
+        ...(props.dossier?.devis?.lignes || []),
+        ...(props.dossier?.devis_complements || []).flatMap(devis => devis.lignes || []),
+    ].filter(l => l.is_accepted)
 );
 
 // Organiser et grouper les lignes facturées par famille avec calcul du sous-total HT par famille

@@ -9,6 +9,11 @@ class Devis extends Model
     use \App\Models\Concerns\Audite;
 
     protected $guarded = [];
+
+    protected $casts = [
+        'is_complementaire' => 'boolean',
+    ];
+
     public function intervention()
 {
     return $this->belongsTo(Intervention::class);
