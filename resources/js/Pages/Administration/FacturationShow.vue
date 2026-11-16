@@ -15,6 +15,7 @@ const tauxLigne = (ligne) => {
 
 const props = defineProps({
     dossier: Object,
+    devisId: { type: Number, default: null },
     // Modification d'un devis déjà accepté (aucun paiement) : lignes modifiables + cases à cocher
     modeEdition: { type: Boolean, default: false },
 });
@@ -58,6 +59,7 @@ const lignesDevis = computed(() =>
 
 // Formulaire pour la sélection des lignes acceptées
 const form = useForm({
+    devis_id: props.devisId ?? props.dossier?.devis?.id,
     lignes_acceptees: props.dossier?.devis?.lignes
         ? props.dossier.devis.lignes.filter(l => l.is_accepted).map(l => l.id)
         : []
@@ -319,7 +321,7 @@ const retour = () => {
                 <div class="flex items-center gap-2">
                     <h2 class="text-xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
                         <i class="fa-solid fa-file-invoice text-[#E11D48]"></i>
-                        <span>{{ modeEdition ? 'Modification du Devis' : 'Validation Devis / Facturation' }} - OT : {{ dossier.numero_ot || dossier.id }}</span>
+                        <span>{{ modeEdition ? 'Modification du Devis' : (dossier.devis?.is_complementaire ? 'Validation du devis complémentaire' : 'Validation Devis / Facturation') }} - OT : {{ dossier.numero_ot || dossier.id }}</span>
                     </h2>
                 </div>
                 <div class="flex items-center space-x-3">
@@ -362,11 +364,34 @@ const retour = () => {
                 </div>
 
                 <div v-else>
+                    <div class="mb-4 flex flex-wrap items-center gap-2 print:hidden">
+                        <span class="rounded-md bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700">
+                            Devis #{{ dossier.devis.id }}
+                        </span>
+                        <span v-if="dossier.devis.is_complementaire" class="rounded-md bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-800">
+                            Complémentaire · OT {{ dossier.numero_ot || dossier.id }}
+                        </span>
+                        <Link
+                            v-if="dossier.devis.is_complementaire && dossier.devis_initial_id"
+                            :href="`${route('administration.facturation.show', dossier.id)}?devis_id=${dossier.devis_initial_id}`"
+                            class="text-xs font-semibold text-[#E11D48] underline"
+                        >
+                            Voir le devis initial
+                        </Link>
+                    </div>
                     <div v-if="dossier.devis_complements?.length" class="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 print:hidden">
                         <h3 class="mb-2 text-xs font-bold uppercase tracking-wide text-amber-900">Devis complémentaires</h3>
                         <div v-for="devisComplement in dossier.devis_complements" :key="devisComplement.id" class="flex flex-wrap items-center justify-between gap-2 border-t border-amber-200 py-2 text-xs">
                             <span class="font-semibold text-amber-950">Devis #{{ devisComplement.id }} · {{ new Date(devisComplement.created_at).toLocaleDateString('fr-FR') }}</span>
-                            <span class="capitalize text-amber-800">{{ devisComplement.statut?.replace('_', ' ') }}</span>
+                            <span class="flex items-center gap-3">
+                                <span class="capitalize text-amber-800">{{ devisComplement.statut?.replace('_', ' ') }}</span>
+                                <Link
+                                    :href="`${route('administration.facturation.show', dossier.id)}?devis_id=${devisComplement.id}`"
+                                    class="font-semibold text-[#E11D48] underline"
+                                >
+                                    Consulter
+                                </Link>
+                            </span>
                         </div>
                     </div>
 

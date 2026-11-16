@@ -115,6 +115,91 @@ class StoreDevisTest extends TestCase
                 ->where('dossiers.data.0.resume_paiement.petite_fourniture', 1062));
     }
 
+    public function test_pending_complement_is_listed_and_validated_as_its_own_quote(): void
+    {
+        $staff = User::factory()->create(['role' => 'admin']);
+        $client = Client::create([
+            'nom' => 'Client',
+            'prenom' => 'Test',
+            'telephone' => '0700000000',
+        ]);
+        $vehicle = Vehicule::create([
+            'client_id' => $client->id,
+            'immatriculation' => 'DEVIS-004',
+            'marque' => 'Toyota',
+            'modele' => 'Hilux',
+        ]);
+        $intervention = Intervention::create([
+            'vehicule_id' => $vehicle->id,
+            'kilometrage' => 10000,
+            'siege' => 'SGK',
+            'statut' => 'attente_accord',
+        ]);
+        $initial = Devis::create([
+            'intervention_id' => $intervention->id,
+            'statut' => 'en_attente',
+            'is_complementaire' => false,
+        ]);
+        $complement = Devis::create([
+            'intervention_id' => $intervention->id,
+            'statut' => 'en_attente',
+            'is_complementaire' => true,
+        ]);
+        $line = LigneDevis::create([
+            'devis_id' => $complement->id,
+            'designation' => 'Travaux complémentaires',
+            'quantite' => 1,
+            'pu_net' => 10000,
+            'montant_ht' => 10000,
+            'montant_ttc' => 11800,
+        ]);
+
+        $this->actingAs($staff)
+            ->get(route('administration.facturation.index'))
+            ->assertInertia(fn ($page) => $page
+                ->has('dossiers', 2)
+                ->where('dossiers.0.id', $intervention->id)
+                ->where('dossiers.0.devis.id', $initial->id)
+                ->where('dossiers.0.devis.is_complementaire', false)
+                ->where('dossiers.1.id', $intervention->id)
+                ->where('dossiers.1.devis.id', $complement->id)
+                ->where('dossiers.1.devis.is_complementaire', true));
+
+        $this->actingAs($staff)
+            ->get(route('administration.facturation.show', [
+                'dossier' => $intervention->id,
+                'devis_id' => $complement->id,
+            ]))
+            ->assertInertia(fn ($page) => $page
+                ->where('devisId', $complement->id)
+                ->where('dossier.devis.id', $complement->id)
+                ->where('dossier.devis_initial_id', $initial->id));
+
+        $this->actingAs($staff)
+            ->post(route('administration.facturation.valider-devis', $intervention->id), [
+                'devis_id' => $complement->id,
+                'lignes_acceptees' => [$line->id],
+            ])
+            ->assertRedirect(route('administration.facturation.index'));
+
+        $this->assertDatabaseHas('devis', [
+            'id' => $initial->id,
+            'statut' => 'en_attente',
+        ]);
+        $this->assertDatabaseHas('devis', [
+            'id' => $complement->id,
+            'statut' => 'accepte',
+        ]);
+        $this->assertDatabaseHas('lignes_devis', [
+            'id' => $line->id,
+            'is_accepted' => true,
+        ]);
+        $this->assertDatabaseHas('interventions', [
+            'id' => $intervention->id,
+            'statut' => 'attente_accord',
+        ]);
+    }
+
     public function test_devis_lines_save_optional_family_fields(): void
     {
         $staff = User::factory()->create(['role' => 'admin']);

@@ -30,6 +30,9 @@ const dossiersFiltres = computed(() => {
             d.vehicule?.client?.prenom,
             d.vehicule?.client?.name,
             d.statut,
+            d.devis?.id,
+            'en attente de validation',
+            d.devis?.is_complementaire ? 'complementaire' : 'initial',
         ].join(' ')).includes(q)
     );
 });
@@ -93,7 +96,7 @@ const backText = computed(() => {
                             <span>Devis en attente de validation </span>
                         </h3>
                         <span v-if="dossiers.length > 0" class="text-[11px] font-semibold text-gray-400">
-                            {{ dossiersFiltres.length }} / {{ dossiers.length }} dossier(s)
+                            {{ dossiersFiltres.length }} / {{ dossiers.length }} devis
                         </span>
                     </div>
 
@@ -138,14 +141,19 @@ const backText = computed(() => {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-200/60">
-                                <tr v-for="dossier in dossiersFiltres" :key="dossier.id" class="hover:bg-gray-50/80 transition-colors">
+                                <tr v-for="dossier in dossiersFiltres" :key="`${dossier.id}-${dossier.devis_id}`" class="hover:bg-gray-50/80 transition-colors">
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="font-bold text-gray-900 flex items-center gap-2 uppercase">
                                             <i class="fa-solid fa-car text-gray-400 text-[11px]"></i>
                                             <span>{{ dossier.vehicule?.marque }} {{ dossier.vehicule?.modele }}</span>
                                         </div>
                                         <span class="font-mono text-[11px] text-[#E11D48] mt-0.5 block">
-                                            Immat: {{ dossier.vehicule?.immatriculation }}
+                                            OT {{ dossier.numero_ot || dossier.id }} · Immat: {{ dossier.vehicule?.immatriculation }}
+                                        </span>
+                                        <span class="mt-1 inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-1 text-[10px] font-semibold text-slate-700">
+                                            Devis #{{ dossier.devis?.id }}
+                                            <span v-if="dossier.devis?.is_complementaire" class="text-amber-700">· Complémentaire</span>
+                                            <span v-else>· Initial</span>
                                         </span>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-gray-600 font-medium">
@@ -153,12 +161,13 @@ const backText = computed(() => {
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <span class="px-2.5 py-1 inline-flex text-[11px] font-semibold rounded-md bg-amber-50 text-amber-700 border border-amber-200">
-                                            {{ dossier.statut }}
+                                            En attente de validation
                                         </span>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right">
                                         <div class="inline-flex items-center gap-2">
                                             <Link
+                                                v-if="!dossier.devis?.is_complementaire"
                                                 :href="route('administration.devis.edit', dossier.id)"
                                                 class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-[11px]"
                                             >
@@ -166,7 +175,7 @@ const backText = computed(() => {
                                                 <span>Modifier</span>
                                             </Link>
                                             <Link
-                                                :href="route('administration.facturation.show', dossier.id)"
+                                                :href="`${route('administration.facturation.show', dossier.id)}?devis_id=${dossier.devis_id}`"
                                                 class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#E11D48] hover:bg-rose-700 text-white font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-[11px]"
                                             >
                                                 <span>Traiter</span>
@@ -180,7 +189,7 @@ const backText = computed(() => {
                                 <tr v-if="dossiersFiltres.length === 0">
                                     <td colspan="4" class="px-6 py-10 text-center text-gray-400">
                                         <i class="fa-solid fa-magnifying-glass text-xl mb-2 block"></i>
-                                        <span class="text-xs">Aucun résultat pour « {{ search }} ».</span>
+                                        <span class="text-xs">{{ search ? `Aucun résultat pour « ${search} ».` : 'Aucun devis en attente de validation.' }}</span>
                                     </td>
                                 </tr>
                             </tbody>

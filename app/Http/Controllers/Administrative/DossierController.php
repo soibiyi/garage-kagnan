@@ -12,6 +12,7 @@ use App\Models\Client;
 use App\Models\Vehicule;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\DB;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -58,11 +59,25 @@ class DossierController extends Controller
 
     public function facturationIndex()
     {
-        // On ne garde que les dossiers qui sont en attente d'accord client
-        $dossiers = Intervention::duSiege()->with(['vehicule.client', 'devis', 'mecanicien'])
-            ->where('statut', 'attente_accord') 
+        $interventions = Intervention::duSiege()
+            ->with(['vehicule.client', 'devis', 'devisComplements', 'mecanicien'])
+            ->whereIn('statut', ['attente_accord', 'accepte'])
             ->latest()
             ->get();
+
+        $dossiers = $interventions->flatMap(function (Intervention $intervention) {
+            return collect([$intervention->devis])
+                ->filter()
+                ->concat($intervention->devisComplements)
+                ->filter(fn (Devis $devis) => $devis->statut === 'en_attente')
+                ->map(function (Devis $devis) use ($intervention) {
+                    $dossier = clone $intervention;
+                    $dossier->setRelation('devis', $devis);
+                    $dossier->setAttribute('devis_id', $devis->id);
+
+                    return $dossier;
+                });
+        })->values();
 
         return Inertia::render('Administration/FacturationIndex', [
             'dossiers' => $dossiers
@@ -70,14 +85,30 @@ class DossierController extends Controller
     }
 
     // Affichage du détail de facturation d'un dossier spécifique
-    public function facturationShow(Intervention $dossier)
+    public function facturationShow(Request $request, Intervention $dossier)
     {
         $this->autoriser($dossier);
 
         $dossier->load(['vehicule.client', 'devis.lignes', 'devisComplements.lignes']);
+        $devis = $request->filled('devis_id')
+            ? $dossier->devisComplements->firstWhere('id', (int) $request->input('devis_id'))
+                ?? ($dossier->devis?->id === (int) $request->input('devis_id') ? $dossier->devis : null)
+            : $dossier->devis;
+        abort_unless($devis, 404);
+        $dossier->setRelation('devis', $devis);
+        $dossier->setAttribute(
+            'devis_initial_id',
+            $devis->is_complementaire
+                ? Devis::query()
+                    ->where('intervention_id', $dossier->id)
+                    ->where('is_complementaire', false)
+                    ->value('id')
+                : null
+        );
 
         return Inertia::render('Administration/FacturationShow', [
-            'dossier' => $dossier
+            'dossier' => $dossier,
+            'devisId' => $devis->id,
         ]);
     }
 
@@ -85,43 +116,55 @@ class DossierController extends Controller
     {
         $this->autoriser($dossier);
 
-        $etaitAccepte = $dossier->statut === 'accepte';
+        $request->validate([
+            'devis_id' => ['nullable', 'integer'],
+        ]);
+        $devis = $request->filled('devis_id')
+            ? Devis::query()
+                ->where('intervention_id', $dossier->id)
+                ->whereKey($request->input('devis_id'))
+                ->firstOrFail()
+            : $dossier->devis;
+        abort_unless($devis, 404);
+        $devisComplementaire = $devis->is_complementaire;
+        $etaitAccepte = $devis->statut === 'accepte';
 
         // Devis déjà accepté : on ne change plus le choix du client dès qu'un paiement existe
-        if ($etaitAccepte && $this->aDejaUnPaiement($dossier)) {
+        if ($etaitAccepte && !$devisComplementaire && $this->aDejaUnPaiement($dossier)) {
             return back()->with('error', 'Un paiement a déjà été enregistré : le choix du client ne peut plus être modifié.');
         }
 
         $request->validate([
             'lignes_acceptees' => 'array',
-            'lignes_acceptees.*' => 'exists:lignes_devis,id',
+            'lignes_acceptees.*' => [
+                'integer',
+                Rule::exists('lignes_devis', 'id')->where('devis_id', $devis->id),
+            ],
         ]);
 
-        DB::transaction(function () use ($request, $dossier) {
-            $devis = $dossier->devis;
+        DB::transaction(function () use ($request, $dossier, $devis, $devisComplementaire) {
+            $idsAcceptes = $request->input('lignes_acceptees', []);
 
-            if ($devis) {
-                $idsAcceptes = $request->input('lignes_acceptees', []);
-
-                foreach ($devis->lignes as $ligne) {
-                    $ligne->update([
-                        'is_accepted' => in_array($ligne->id, $idsAcceptes)
-                    ]);
-                }
-
-                // Le devis passe en statut accepté
-                $devis->update(['statut' => 'accepte']);
+            foreach ($devis->lignes as $ligne) {
+                $ligne->update([
+                    'is_accepted' => in_array($ligne->id, $idsAcceptes)
+                ]);
             }
 
-            // LE DOSSIER QUITTE LA PAGE FACTURATIONINDEX : 
-            // On change son statut pour l'aiguiller vers la vue des devis validés
-            $dossier->update(['statut' => 'accepte']);
+            $devis->update(['statut' => 'accepte']);
+
+            if (!$devisComplementaire) {
+                $dossier->update(['statut' => 'accepte']);
+            }
         });
 
         // Redirection : dashboard du chargé de suivi client, sinon liste d'attente
         return $etaitAccepte
             ? $this->redirectApresAction('Choix du client mis à jour avec succès.', 'administration.devis.acceptes')
-            : $this->redirectApresAction('Choix du client enregistré avec succès. Le dossier a basculé dans les devis validés.');
+            : $this->redirectApresAction(
+                'Choix du client enregistré avec succès.',
+                $devisComplementaire ? 'administration.facturation.index' : 'administration.devis.acceptes'
+            );
     }
 
     public function show(Intervention $dossier)
