@@ -4,6 +4,7 @@ import axios from 'axios'
 import { Head, Link, router } from '@inertiajs/vue3'
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue'
 import MissionMap from '@/Components/MissionMap.vue'
+import { formatDistance, formatDuree, heureArrivee, iconeManoeuvre, lienGoogleMaps, lienWaze } from '@/utils/itineraire'
 
 const props = defineProps({
   activeMission: { type: Object, default: null },
@@ -74,6 +75,26 @@ const missionEndPosition = mission => {
     ? { lat: Number(mission.garage_lat), lng: Number(mission.garage_lng) }
     : garagePosition
 }
+// Une mission = 2 étapes : chauffeur → véhicule, puis véhicule → garage
+const enEtapeGarage = mission => ['vehicule_recupere', 'en_route_garage'].includes(mission?.statut)
+const mapEtape = computed(() => mapMission.value ? (enEtapeGarage(mapMission.value) ? 2 : 1) : null)
+const mapEtapeSuivante = computed(() => {
+  const mission = mapMission.value
+  if (!mission || enEtapeGarage(mission)) return null
+  const start = pickupPosition(mission)
+  const end = missionEndPosition(mission)
+  return start && end ? { start, end } : null
+})
+const missionTotal = ref(null)
+function updateMissionTotal(data) {
+  missionTotal.value = data
+}
+const totalMissionLabel = computed(() => {
+  const total = missionTotal.value?.total
+  if (!currentPosition.value) return 'Activez le GPS pour estimer le trajet'
+  if (!total || (!Number.isFinite(total.distanceMeters) && !Number.isFinite(total.durationMillis))) return 'Calcul de l’itinéraire…'
+  return [formatDuree(total.durationMillis), formatDistance(total.distanceMeters)].filter(Boolean).join(' · ')
+})
 const pickupAddress = mission => mission?.details?.lieu || mission?.details?.lieu_depart || 'Position GPS indiquée par le client'
 const offerDistanceLabel = computed(() => !currentPosition.value
   ? 'Activez le GPS pour estimer la distance'
@@ -257,10 +278,28 @@ function updateRouteOptions(options) {
   if (selectedRouteIndex.value >= options.length) selectedRouteIndex.value = 0
 }
 
-function updateRouteMetrics({ distanceMeters, durationMillis }) {
+function updateRouteMetrics({ distanceMeters, durationMillis, steps }) {
   routeDistanceMeters.value = Number.isFinite(distanceMeters) ? distanceMeters : null
   routeDurationMillis.value = Number.isFinite(durationMillis) ? durationMillis : null
+  routeSteps.value = Array.isArray(steps) ? steps : []
 }
+
+// Itinéraire détaillé : l'itinéraire est recalculé depuis la position du chauffeur,
+// la première manœuvre utile est donc la prochaine à effectuer.
+const routeSteps = ref([])
+const etapesOuvertes = ref(false)
+const prochaineEtape = computed(() =>
+  routeSteps.value.find((etape, index) => etape.manoeuvre !== 'depart' || index === routeSteps.value.length - 1) || null)
+const etapesSuivantes = computed(() => {
+  const index = routeSteps.value.indexOf(prochaineEtape.value)
+  return index < 0 ? [] : routeSteps.value.slice(index + 1)
+})
+const styleIcone = etape => {
+  const { rotation } = iconeManoeuvre(etape.manoeuvre)
+  return rotation ? { transform: `rotate(${rotation}deg)` } : null
+}
+const lienNavigationGoogle = computed(() => lienGoogleMaps(mapDestination.value, currentPosition.value))
+const lienNavigationWaze = computed(() => lienWaze(mapDestination.value))
 
 function selectRoute(index) {
   selectedRouteIndex.value = index
@@ -316,6 +355,10 @@ onBeforeUnmount(() => {
           :route-color="mapRouteColor"
           :selected-route-index="selectedRouteIndex"
           :show-traffic="true"
+          :etape="mapEtape"
+          :etapes-total="mapMission ? 2 : null"
+          :etape-suivante="mapEtapeSuivante"
+          @mission-updated="updateMissionTotal"
           @route-updated="updateRouteMetrics"
           @routes-updated="updateRouteOptions"
           @route-selected="selectRoute"
@@ -355,7 +398,13 @@ onBeforeUnmount(() => {
             <p><span class="font-bold text-gray-500">Tarif estimé</span><br>{{ prix(activeMission) }}</p>
           </div>
           <div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
-            <span>{{ routeDistanceMeters === null ? 'Itinéraire GPS actif' : `${(routeDistanceMeters / 1000).toFixed(1)} km${routeDurationMillis ? ` · ${Math.max(1, Math.round(routeDurationMillis / 60000))} min` : ''} sur l’étape` }}</span>
+            <span>
+              <template v-if="routeDistanceMeters === null">Itinéraire GPS actif</template>
+              <template v-else>
+                Étape {{ mapEtape }}/2 : {{ formatDuree(routeDurationMillis) }} · {{ formatDistance(routeDistanceMeters) }}
+                <template v-if="mapEtapeSuivante"> — Mission totale : <strong class="text-gray-700">{{ totalMissionLabel }}</strong></template>
+              </template>
+            </span>
             <span>{{ gpsUpdatedLabel }}</span>
           </div>
           <div v-if="routeOptions.length > 1" class="mt-3 flex gap-2 overflow-x-auto pb-1" aria-label="Itinéraires alternatifs">
@@ -370,6 +419,69 @@ onBeforeUnmount(() => {
               <span class="block font-bold">{{ option.label }}</span>
               <span>{{ option.distanceMeters ? `${(option.distanceMeters / 1000).toFixed(1)} km` : 'Distance —' }}<template v-if="option.durationMillis"> · {{ Math.max(1, Math.round(option.durationMillis / 60000)) }} min</template></span>
             </button>
+          </div>
+
+          <!-- Itinéraire : prochaine manœuvre + liste détaillée -->
+          <div v-if="mapDestination && ['accepte', 'en_cours', 'en_route_recuperation', 'en_route_garage'].includes(activeMission.statut)" class="driver-route mt-3">
+            <div v-if="prochaineEtape" class="driver-next-step">
+              <span class="driver-step-icon is-next">
+                <i :class="iconeManoeuvre(prochaineEtape.manoeuvre).classe" :style="styleIcone(prochaineEtape)" aria-hidden="true"></i>
+              </span>
+              <div class="min-w-0 flex-1">
+                <p v-if="prochaineEtape.distanceMeters" class="text-lg font-black leading-tight">{{ formatDistance(prochaineEtape.distanceMeters) }}</p>
+                <p class="text-sm font-semibold leading-snug text-gray-700">{{ prochaineEtape.instruction }}</p>
+              </div>
+            </div>
+
+            <div class="mt-2 grid grid-cols-2 gap-2">
+              <a
+                v-if="lienNavigationGoogle"
+                :href="lienNavigationGoogle"
+                target="_blank"
+                rel="noopener"
+                class="driver-nav-btn"
+              >
+                <i class="fa-solid fa-diamond-turn-right" aria-hidden="true"></i> Google Maps
+              </a>
+              <a
+                v-if="lienNavigationWaze"
+                :href="lienNavigationWaze"
+                target="_blank"
+                rel="noopener"
+                class="driver-nav-btn"
+              >
+                <i class="fa-brands fa-waze" aria-hidden="true"></i> Waze
+              </a>
+            </div>
+
+            <template v-if="etapesSuivantes.length">
+              <button
+                type="button"
+                class="mt-2 flex w-full items-center justify-between rounded-xl px-1 py-2 text-xs font-bold text-gray-600 hover:text-[#0B0F19]"
+                :aria-expanded="etapesOuvertes"
+                aria-controls="driver-steps"
+                @click="etapesOuvertes = !etapesOuvertes"
+              >
+                <span>
+                  <i class="fa-solid fa-route mr-1" aria-hidden="true"></i>
+                  Itinéraire détaillé · {{ etapesSuivantes.length }} étape{{ etapesSuivantes.length > 1 ? 's' : '' }}
+                  <template v-if="routeDurationMillis"> · arrivée ~{{ heureArrivee(routeDurationMillis) }}</template>
+                </span>
+                <i class="fa-solid fa-chevron-down transition-transform" :class="{ 'rotate-180': etapesOuvertes }" aria-hidden="true"></i>
+              </button>
+              <ol v-show="etapesOuvertes" id="driver-steps" class="driver-steps">
+                <li v-for="(etape, index) in etapesSuivantes" :key="index">
+                  <span class="driver-step-icon">
+                    <i :class="iconeManoeuvre(etape.manoeuvre).classe" :style="styleIcone(etape)" aria-hidden="true"></i>
+                  </span>
+                  <span class="min-w-0 flex-1 text-sm leading-snug">{{ etape.instruction }}</span>
+                  <span v-if="etape.distanceMeters" class="shrink-0 text-xs font-bold text-gray-500">
+                    {{ formatDistance(etape.distanceMeters) }}
+                    <template v-if="etape.durationMillis >= 60000"><br><span class="font-medium">{{ formatDuree(etape.durationMillis) }}</span></template>
+                  </span>
+                </li>
+              </ol>
+            </template>
           </div>
 
           <button v-if="activeMission.statut === 'accepte'" type="button" class="driver-primary mt-4" :disabled="startingMission" @click="demarrerMission">
@@ -399,7 +511,8 @@ onBeforeUnmount(() => {
             <span class="countdown" :class="{ urgent: offerSeconds <= 5 }">{{ offerSeconds }}s</span>
           </div>
           <dl class="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-            <div><dt class="font-bold text-gray-500">Distance jusqu’au véhicule</dt><dd>{{ offerDistanceLabel }}</dd></div>
+            <div><dt class="font-bold text-gray-500">Étape 1/2 · jusqu’au véhicule</dt><dd>{{ offerDistanceLabel }}<template v-if="routeDurationMillis && currentPosition"> · {{ formatDuree(routeDurationMillis) }}</template></dd></div>
+            <div><dt class="font-bold text-gray-500">Mission totale (jusqu’au garage)</dt><dd class="font-bold">{{ totalMissionLabel }}</dd></div>
             <div><dt class="font-bold text-gray-500">Récupération</dt><dd>{{ pickupAddress(featuredMission) }}</dd></div>
             <div><dt class="font-bold text-gray-500">Destination finale</dt><dd>Garage Kagnan · 1327 BP01 Abidjan, Azito · 8W76+87</dd></div>
             <div><dt class="font-bold text-gray-500">Tarif estimé</dt><dd>{{ prix(featuredMission) }}</dd></div>
@@ -494,6 +607,17 @@ onBeforeUnmount(() => {
 .driver-map-shell{position:relative;height:min(70vh,720px);min-height:500px;overflow:hidden;border:1px solid #d8dee8;border-radius:18px;background:#dce7ef}
 .driver-map-shell :deep(.driver-map){height:100%}
 .driver-map-shell :deep(.mission-map){height:100%;min-height:100%;border-radius:0}
+.driver-route{border-top:1px solid #eef1f5;padding-top:12px}
+.driver-next-step{display:flex;align-items:center;gap:12px;border-radius:14px;background:#0b0f19;padding:10px 12px;color:#fff}
+.driver-next-step .text-gray-700{color:rgba(255,255,255,.85)}
+.driver-step-icon{display:flex;height:34px;width:34px;flex-shrink:0;align-items:center;justify-content:center;border-radius:10px;background:#f1f5f9;color:#0b0f19;font-size:14px}
+.driver-step-icon.is-next{height:44px;width:44px;background:#2563eb;color:#fff;font-size:20px}
+.driver-step-icon i{transition:transform .2s}
+.driver-nav-btn{display:flex;min-height:42px;align-items:center;justify-content:center;gap:8px;border:1px solid #d8dee8;border-radius:12px;background:#fff;font-size:13px;font-weight:800;color:#0b0f19;transition:background .15s,border-color .15s}
+.driver-nav-btn:hover{border-color:#2563eb;background:#eff6ff}
+.driver-steps{display:grid;gap:2px;max-height:260px;overflow-y:auto;margin-top:4px}
+.driver-steps li{display:flex;align-items:center;gap:10px;border-radius:10px;padding:7px 4px}
+.driver-steps li:nth-child(odd){background:#f8fafc}
 .driver-map-empty{height:100%;background:linear-gradient(145deg,#d9e8ed 0%,#eef3ed 52%,#dce4e8 100%)}
 .driver-sheet{position:absolute;right:10px;bottom:10px;left:10px;z-index:5;max-height:58%;overflow-y:auto;border:1px solid rgba(15,23,42,.1);border-radius:18px;background:rgba(255,255,255,.97);padding:16px;box-shadow:0 12px 40px rgba(15,23,42,.2);backdrop-filter:blur(12px)}
 .driver-primary{display:flex;width:100%;min-height:52px;align-items:center;justify-content:center;border:0;border-radius:13px;background:#16834b;padding:12px 16px;color:#fff;font-size:15px;font-weight:800;transition:background .15s,opacity .15s}

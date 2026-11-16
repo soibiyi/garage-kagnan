@@ -1,6 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link, useForm } from '@inertiajs/vue3';
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
 import axios from 'axios';
 import { FAMILLES, FAMILLE_PAR_DEFAUT } from '@/constants/familles.js';
@@ -199,13 +199,16 @@ const calculerMontantHt = (ligne) => {
     return isNaN(total) ? 0 : total;
 };
 
-// Calcul du Total TTC par ligne (TVA 18% si applicable)
+// Taux de TVA réglé par le super administrateur (Système → Paramètres), 18 % par défaut
+const TAUX_TVA = (usePage().props.parametres?.tva ?? 18) / 100;
+
+// Calcul du Total TTC par ligne (TVA si applicable)
 const calculerTotalTtc = (ligne) => {
     const ht = calculerMontantHt(ligne);
     if (ligne.ne_pas_appliquer_tva) {
         return ht;
     }
-    return ht * 1.18;
+    return ht * (1 + TAUX_TVA);
 };
 
 // Totaux globaux

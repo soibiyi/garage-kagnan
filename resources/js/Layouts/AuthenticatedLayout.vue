@@ -7,6 +7,7 @@ import ChargeClientInstructions from '@/Components/ChargeClientInstructions.vue'
 import AdminMissionNotifications from '@/Components/AdminMissionNotifications.vue';
 import SecretariatNotifications from '@/Components/SecretariatNotifications.vue';
 import SuperAdminAlertes from '@/Components/SuperAdminAlertes.vue';
+import AnnoncesBandeau from '@/Components/AnnoncesBandeau.vue';
 
 
 const page = usePage();
@@ -69,8 +70,14 @@ const MENU_SUPERADMIN = [
     { label: 'Accueil', route: 'superadmin.accueil', icon: 'fa-solid fa-crown', match: ['superadmin.accueil'] },
     { label: 'Supervision', route: 'superadmin.supervision.index', icon: 'fa-solid fa-satellite-dish', match: ['superadmin.supervision.*'] },
     { label: 'Erreurs', route: 'superadmin.erreurs.index', icon: 'fa-solid fa-bug', match: ['superadmin.erreurs.*'] },
+    { label: 'Sièges', route: 'superadmin.sieges', icon: 'fa-solid fa-building', match: ['superadmin.sieges*'] },
+    { label: 'Équipes', route: 'superadmin.equipes', icon: 'fa-solid fa-people-group', match: ['superadmin.equipes*'] },
+    { label: 'Contrôle', route: 'superadmin.controle', icon: 'fa-solid fa-shield-halved', match: ['superadmin.controle*'] },
+    { label: 'Sécurité', route: 'superadmin.securite', icon: 'fa-solid fa-user-lock', match: ['superadmin.securite*'] },
+    { label: 'Rapports', route: 'superadmin.rapports.index', icon: 'fa-solid fa-file-lines', match: ['superadmin.rapports.*'] },
+    { label: 'Système', route: 'superadmin.systeme', icon: 'fa-solid fa-gears', match: ['superadmin.systeme*'] },
     { label: 'Petites fournitures', route: 'superadmin.petites-fournitures', icon: 'fa-solid fa-screwdriver-wrench', match: ['superadmin.petites-fournitures'] },
-    { label: 'Espace admin', route: 'superadmin.accueil', hash: '#espace-admin', icon: 'fa-solid fa-user-shield', match: ['admin.*'], separe: true },
+    { label: 'Espace admin', route: 'superadmin.espace-admin', icon: 'fa-solid fa-user-shield', match: ['admin.*', 'superadmin.espace-admin'], separe: true },
 ];
 
 const menu = computed(() => (estSuperAdmin.value ? MENU_SUPERADMIN : MENUS[role.value] ?? []));
@@ -114,6 +121,16 @@ const logout = () => {
                 >
                     <i class="fa-solid fa-arrow-rotate-left text-[10px]" aria-hidden="true"></i>Revenir à mon compte
                 </button>
+            </div>
+
+            <!-- Mode maintenance actif : rappel permanent pour le super administrateur -->
+            <div
+                v-if="estSuperAdmin && $page.props.parametres?.maintenance"
+                class="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 bg-amber-400 px-4 py-2 text-xs font-bold text-amber-950 print:hidden"
+                role="status"
+            >
+                <span><i class="fa-solid fa-person-digging mr-1.5" aria-hidden="true"></i>Mode maintenance actif : les collaborateurs ne peuvent pas utiliser l'application.</span>
+                <Link :href="route('superadmin.systeme')" class="underline underline-offset-2">Désactiver</Link>
             </div>
 
             <nav class="border-b border-gray-100 bg-white print:hidden">
@@ -178,6 +195,7 @@ const logout = () => {
                     </div>
                 </div>
             </nav>
+            <AnnoncesBandeau />
             <FlashToast />
 
             <!-- Page Heading -->

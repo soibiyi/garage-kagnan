@@ -3,6 +3,17 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, useForm } from '@inertiajs/vue3';
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
 import SiegeSwitcher from '@/Components/SiegeSwitcher.vue';
+import PhotoLightbox from '@/Components/PhotoLightbox.vue';
+
+// Visionneuse : photos de l'interaction cliquée
+const visionneuse = ref({ photos: [], index: null, legende: '' });
+const ouvrirPhoto = (interaction, index) => {
+    visionneuse.value = {
+        photos: interaction.photos,
+        index,
+        legende: [interaction.objet || 'Sans objet', interaction.user?.name].filter(Boolean).join(' · '),
+    };
+};
 
 const props = defineProps({
     chargesClients: Array,
@@ -721,6 +732,20 @@ const aucuneDonnee = computed(() => !(props.chargesClients && props.chargesClien
                                         <p class="whitespace-pre-line text-xs text-gray-700">{{ interaction.accord_convenu }}</p>
                                     </div>
 
+                                    <div v-if="interaction.photos?.length" class="mt-2 flex flex-wrap gap-1.5">
+                                        <button
+                                            v-for="(photo, i) in interaction.photos"
+                                            :key="photo.id"
+                                            type="button"
+                                            class="block h-14 w-14 cursor-zoom-in overflow-hidden rounded-lg ring-1 ring-gray-200 transition hover:ring-[#E11D48] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E11D48]"
+                                            :title="photo.nom || `Photo ${i + 1}`"
+                                            :aria-label="`Agrandir la photo ${i + 1}`"
+                                            @click.stop="ouvrirPhoto(interaction, i)"
+                                        >
+                                            <img :src="photo.url" :alt="photo.nom || `Photo ${i + 1}`" loading="lazy" class="h-full w-full object-cover" />
+                                        </button>
+                                    </div>
+
                                     <p
                                         v-if="interaction.date_relance_prevue && lireDate(interaction.date_relance_prevue)"
                                         class="mt-2 flex items-center gap-1.5 text-[11px] font-semibold text-gray-500"
@@ -752,6 +777,11 @@ const aucuneDonnee = computed(() => !(props.chargesClients && props.chargesClien
                 </div>
             </Transition>
         </Teleport>
+        <PhotoLightbox
+            v-model:index="visionneuse.index"
+            :photos="visionneuse.photos"
+            :legende="visionneuse.legende"
+        />
     </AuthenticatedLayout>
 </template>
 

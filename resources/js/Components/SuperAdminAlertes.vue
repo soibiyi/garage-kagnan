@@ -1,5 +1,6 @@
 <script setup>
-// Cloche du super administrateur : nouvelles erreurs de l'application (en direct) + personnes en ligne.
+// Cloche du super administrateur : nouvelles erreurs de l'application (en direct), actions sensibles,
+// alertes de sécurité, rapports périodiques + personnes en ligne.
 // Une notification du navigateur est aussi affichée, pour être prévenu même dans un autre onglet.
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import axios from 'axios';
@@ -13,16 +14,36 @@ const toast = ref(null);
 let timer;
 let connues = null;
 
+// Apparence et destination de chaque type d'alerte
+function apparence(n) {
+    switch (n.data.categorie) {
+        case 'controle':
+            return { titre: 'Action sensible', icone: 'fa-shield-halved', couleur: 'text-amber-600', cible: () => route('superadmin.controle') };
+        case 'securite':
+            return { titre: 'Sécurité', icone: 'fa-user-lock', couleur: 'text-violet-600', cible: () => route('superadmin.securite', n.data.user_id ? { user: n.data.user_id } : {}) };
+        case 'rapport':
+            return { titre: 'Rapport', icone: 'fa-file-lines', couleur: 'text-emerald-600', cible: () => route('superadmin.rapports.show', n.data.rapport_id) };
+        default:
+            return {
+                titre: `Erreur · ${n.data.type}`,
+                icone: n.data.source === 'client' ? 'fa-display' : 'fa-server',
+                couleur: 'text-red-600',
+                cible: () => route('superadmin.erreurs.index', { erreur: n.data.erreur_id }),
+            };
+    }
+}
+
 function prevenirNavigateur(n) {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
     try {
-        const notif = new Notification('Erreur dans Garage Kagnan', {
-            body: `${n.data.type} : ${n.data.message}`,
-            tag: `erreur-${n.data.erreur_id}`,
+        const a = apparence(n);
+        const notif = new Notification(`${a.titre} — Garage Kagnan`, {
+            body: n.data.message,
+            tag: `alerte-${n.id}`,
         });
         notif.onclick = () => {
             window.focus();
-            router.visit(route('superadmin.erreurs.index'));
+            router.visit(a.cible());
         };
     } catch {
         // Certains navigateurs refusent les notifications hors service worker
@@ -57,7 +78,7 @@ function basculer() {
 async function ouvrir(n) {
     try { await axios.patch(route('superadmin.alertes.lue', n.id)); } catch { /* rien */ }
     open.value = false;
-    router.visit(route('superadmin.erreurs.index', { erreur: n.data.erreur_id }));
+    router.visit(apparence(n).cible());
 }
 
 onMounted(() => {
@@ -78,7 +99,7 @@ onBeforeUnmount(() => window.clearInterval(timer));
             :aria-expanded="open"
             @click="basculer"
         >
-            <i class="fa-solid fa-bug text-sm" :class="{ 'fa-shake': notifications.length }" aria-hidden="true"></i>
+            <i class="fa-solid fa-bell text-sm" :class="{ 'fa-shake': notifications.length }" aria-hidden="true"></i>
             <span v-if="notifications.length" class="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
                 {{ notifications.length > 99 ? '99+' : notifications.length }}
             </span>
@@ -100,25 +121,28 @@ onBeforeUnmount(() => window.clearInterval(timer));
                     class="flex w-full gap-3 border-b px-4 py-3 text-left hover:bg-red-50/60"
                     @click="ouvrir(n)"
                 >
-                    <i class="fa-solid mt-0.5 text-red-600" :class="n.data.source === 'client' ? 'fa-display' : 'fa-server'" aria-hidden="true"></i>
+                    <i class="fa-solid mt-0.5" :class="[apparence(n).icone, apparence(n).couleur]" aria-hidden="true"></i>
                     <span class="min-w-0">
-                        <span class="block text-xs font-black text-red-700">{{ n.data.type }}</span>
+                        <span class="block text-xs font-black" :class="apparence(n).couleur">{{ apparence(n).titre }}</span>
                         <span class="mt-0.5 block break-words text-sm text-[#0B0F19]">{{ n.data.message }}</span>
                         <span class="mt-1 block text-[11px] text-gray-400">{{ new Date(n.created_at).toLocaleString('fr-FR') }}</span>
                     </span>
                 </button>
                 <p v-if="!notifications.length" class="px-4 py-6 text-center text-sm text-gray-500">
-                    Aucune nouvelle erreur.
+                    Aucune nouvelle alerte.
                     <span v-if="erreursOuvertes" class="block text-xs">{{ erreursOuvertes }} erreur(s) encore ouverte(s).</span>
                 </p>
             </div>
 
-            <div class="grid grid-cols-2 gap-px bg-gray-100">
+            <div class="grid grid-cols-3 gap-px bg-gray-100">
                 <Link :href="route('superadmin.erreurs.index')" class="bg-white px-4 py-3 text-center text-xs font-bold text-[#0B0F19] hover:bg-gray-50" @click="open = false">
                     <i class="fa-solid fa-bug mr-1.5 text-red-600" aria-hidden="true"></i>Erreurs ({{ erreursOuvertes }})
                 </Link>
                 <Link :href="route('superadmin.supervision.index')" class="bg-white px-4 py-3 text-center text-xs font-bold text-[#0B0F19] hover:bg-gray-50" @click="open = false">
                     <i class="fa-solid fa-satellite-dish mr-1.5 text-[#E11D48]" aria-hidden="true"></i>Supervision
+                </Link>
+                <Link :href="route('superadmin.controle')" class="bg-white px-4 py-3 text-center text-xs font-bold text-[#0B0F19] hover:bg-gray-50" @click="open = false">
+                    <i class="fa-solid fa-shield-halved mr-1.5 text-amber-600" aria-hidden="true"></i>Contrôle
                 </Link>
             </div>
         </div>
@@ -130,11 +154,11 @@ onBeforeUnmount(() => window.clearInterval(timer));
                 class="fixed bottom-4 right-4 z-[70] flex max-w-[calc(100vw-2rem)] items-start gap-3 rounded-2xl border border-red-200 bg-white p-4 text-left shadow-2xl sm:w-96"
                 @click="ouvrir(toast); toast = null"
             >
-                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-red-600 text-white">
-                    <i class="fa-solid fa-bug text-sm" aria-hidden="true"></i>
+                <span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#0B0F19] text-white">
+                    <i class="fa-solid text-sm" :class="apparence(toast).icone" aria-hidden="true"></i>
                 </span>
                 <span class="min-w-0">
-                    <span class="block text-xs font-black uppercase tracking-wide text-red-700">Nouvelle erreur · {{ toast.data.type }}</span>
+                    <span class="block text-xs font-black uppercase tracking-wide" :class="apparence(toast).couleur">{{ apparence(toast).titre }}</span>
                     <span class="mt-0.5 block break-words text-sm font-medium text-[#0B0F19]">{{ toast.data.message }}</span>
                 </span>
             </button>

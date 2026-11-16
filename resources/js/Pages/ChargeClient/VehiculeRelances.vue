@@ -1,6 +1,7 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import VehiculeEntete from '@/Components/VehiculeEntete.vue';
+import PhotoLightbox from '@/Components/PhotoLightbox.vue';
 import { Head, useForm } from '@inertiajs/vue3';
 import { computed, nextTick, ref } from 'vue';
 
@@ -111,7 +112,65 @@ const formInteraction = useForm({
     notes: '',
     accord_convenu: '',
     date_relance_prevue: '',
+    photos: [],
 });
+
+/* Photos jointes à l'interaction (6 max, 5 Mo chacune) */
+const PHOTOS_MAX = 6;
+const TAILLE_PHOTO_MAX = 5 * 1024 * 1024;
+const inputPhotos = ref(null);
+const apercusPhotos = ref([]);
+const erreurPhotos = ref('');
+
+const ajouterPhotos = (e) => {
+    erreurPhotos.value = '';
+    const fichiers = [...(e.target.files || [])];
+    for (const f of fichiers) {
+        if (formInteraction.photos.length >= PHOTOS_MAX) {
+            erreurPhotos.value = `${PHOTOS_MAX} photos maximum par interaction.`;
+            break;
+        }
+        if (!/^image\/(jpeg|png|webp)$/.test(f.type)) {
+            erreurPhotos.value = 'Seules les photos sont acceptées (JPG, PNG, WEBP).';
+            continue;
+        }
+        if (f.size > TAILLE_PHOTO_MAX) {
+            erreurPhotos.value = `« ${f.name} » dépasse 5 Mo.`;
+            continue;
+        }
+        formInteraction.photos.push(f);
+        apercusPhotos.value.push(URL.createObjectURL(f));
+    }
+    if (inputPhotos.value) inputPhotos.value.value = '';
+};
+
+const retirerPhoto = (index) => {
+    URL.revokeObjectURL(apercusPhotos.value[index]);
+    apercusPhotos.value.splice(index, 1);
+    formInteraction.photos.splice(index, 1);
+};
+
+const viderPhotos = () => {
+    apercusPhotos.value.forEach((u) => URL.revokeObjectURL(u));
+    apercusPhotos.value = [];
+    formInteraction.photos = [];
+    erreurPhotos.value = '';
+};
+
+// Première erreur serveur concernant les photos (photos, photos.0, photos.1…)
+// Visionneuse : photos de l'interaction cliquée
+const visionneuse = ref({ photos: [], index: null, legende: '' });
+const ouvrirPhoto = (interaction, index) => {
+    visionneuse.value = {
+        photos: interaction.photos,
+        index,
+        legende: `${interaction.objet || 'Sans objet'} · ${quand(new Date(interaction.created_at))}`,
+    };
+};
+
+const erreurPhotosServeur = computed(() =>
+    Object.entries(formInteraction.errors).find(([cle]) => cle === 'photos' || cle.startsWith('photos.'))?.[1] || ''
+);
 
 const panneauOuvert = ref(false);
 const detailsOuverts = ref(false);
@@ -135,6 +194,7 @@ const enregistrerInteraction = () => {
     formInteraction.post(route('charge_client.vehicules.interactions.store', props.vehicule.id), {
         preserveScroll: true,
         onSuccess: () => {
+            viderPhotos();
             formInteraction.reset();
             panneauOuvert.value = false;
             detailsOuverts.value = false;
@@ -398,6 +458,55 @@ const enregistrerInteraction = () => {
                                     </div>
                                 </div>
 
+                                <!-- Photos jointes -->
+                                <div>
+                                    <p class="mb-2 text-xs font-semibold text-[#8A8D8F]">
+                                        Photos <span class="font-medium text-gray-400">(facultatif, {{ PHOTOS_MAX }} max, 5 Mo chacune)</span>
+                                    </p>
+                                    <div class="flex flex-wrap gap-2.5">
+                                        <div
+                                            v-for="(url, index) in apercusPhotos"
+                                            :key="url"
+                                            class="group relative h-20 w-20 overflow-hidden rounded-xl ring-1 ring-gray-200"
+                                        >
+                                            <img :src="url" alt="" class="h-full w-full object-cover" />
+                                            <button
+                                                type="button"
+                                                class="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#0B0F19]/80 text-[10px] text-white transition hover:bg-[#E11D48]"
+                                                :aria-label="`Retirer la photo ${index + 1}`"
+                                                :disabled="formInteraction.processing"
+                                                @click="retirerPhoto(index)"
+                                            >
+                                                <i class="fa-solid fa-xmark"></i>
+                                            </button>
+                                        </div>
+                                        <button
+                                            v-if="formInteraction.photos.length < PHOTOS_MAX"
+                                            type="button"
+                                            class="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-gray-300 bg-white text-[#8A8D8F] transition duration-200 hover:border-[#E11D48] hover:text-[#E11D48] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E11D48]/40"
+                                            :disabled="formInteraction.processing"
+                                            @click="inputPhotos?.click()"
+                                        >
+                                            <i class="fa-solid fa-camera text-base"></i>
+                                            <span class="text-[10px] font-bold">Ajouter</span>
+                                        </button>
+                                        <input
+                                            ref="inputPhotos"
+                                            type="file"
+                                            accept="image/jpeg,image/png,image/webp"
+                                            multiple
+                                            class="hidden"
+                                            @change="ajouterPhotos"
+                                        />
+                                    </div>
+                                    <p v-if="formInteraction.progress" class="mt-1.5 text-xs font-semibold text-[#8A8D8F]">
+                                        Envoi des photos… {{ formInteraction.progress.percentage }} %
+                                    </p>
+                                    <p v-if="erreurPhotos || erreurPhotosServeur" role="alert" class="mt-1.5 text-xs font-semibold text-[#E11D48]">
+                                        {{ erreurPhotos || erreurPhotosServeur }}
+                                    </p>
+                                </div>
+
                                 <div class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                                     <button
                                         type="button"
@@ -451,6 +560,20 @@ const enregistrerInteraction = () => {
                                 <p class="mt-0.5 whitespace-pre-line text-sm text-gray-700">{{ interaction.accord_convenu }}</p>
                             </div>
 
+                            <div v-if="interaction.photos?.length" class="mt-3 flex flex-wrap gap-2">
+                                <button
+                                    v-for="(photo, i) in interaction.photos"
+                                    :key="photo.id"
+                                    type="button"
+                                    class="block h-20 w-20 cursor-zoom-in overflow-hidden rounded-xl ring-1 ring-gray-200 transition hover:ring-[#E11D48] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E11D48]"
+                                    :title="photo.nom || `Photo ${i + 1}`"
+                                    :aria-label="`Agrandir la photo ${i + 1}`"
+                                    @click="ouvrirPhoto(interaction, i)"
+                                >
+                                    <img :src="photo.url" :alt="photo.nom || `Photo ${i + 1}`" loading="lazy" class="h-full w-full object-cover" />
+                                </button>
+                            </div>
+
                             <p
                                 v-if="interaction.date_relance_prevue && lireDate(interaction.date_relance_prevue)"
                                 class="mt-3 flex items-center gap-1.5 text-xs font-semibold"
@@ -488,5 +611,10 @@ const enregistrerInteraction = () => {
 
             </div>
         </div>
+        <PhotoLightbox
+            v-model:index="visionneuse.index"
+            :photos="visionneuse.photos"
+            :legende="visionneuse.legende"
+        />
     </AuthenticatedLayout>
 </template>

@@ -1,9 +1,17 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, useForm, router } from '@inertiajs/vue3';
+import { Head, useForm, router, usePage } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 import axios from 'axios';
 import { FAMILLES, FAMILLE_PAR_DEFAUT } from '@/constants/familles.js';
+
+// Taux de TVA réglé par le super administrateur (Système → Paramètres), 18 % par défaut
+const TAUX_TVA = (usePage().props.parametres?.tva ?? 18) / 100;
+// Taux réellement appliqué à une ligne déjà enregistrée (le taux a pu changer depuis)
+const tauxLigne = (ligne) => {
+    const ht = Number(ligne.montant_ht);
+    return ht > 0 ? Math.round((Number(ligne.montant_ttc) / ht - 1) * 1000) / 10 : Math.round(TAUX_TVA * 1000) / 10;
+};
 
 const props = defineProps({
     dossier: Object,
@@ -214,7 +222,7 @@ const ajouterLigne = () => {
 
     const detection = detecterFamilleEtSousFamille(n.designation);
     const ht = quantite * puNet * (1 - remise / 100);
-    const ttc = n.ne_pas_appliquer_tva ? ht : ht * 1.18;
+    const ttc = n.ne_pas_appliquer_tva ? ht : ht * (1 + TAUX_TVA);
     const id = --idTemporaire; // identifiant temporaire (négatif) tant que la ligne n'est pas enregistrée
 
     lignesLocales.value.push({
@@ -447,7 +455,7 @@ const retour = () => {
                                                 <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.remise || 0) }} %</td>
                                                 <td class="border-r border-gray-900 p-1 text-center">
                                                     <span v-if="ligne.ne_pas_appliquer_tva" class="text-amber-600 font-semibold bg-amber-50 px-1 py-0.5 rounded border border-amber-200 text-[10px]">Exonéré</span>
-                                                    <span v-else class="text-gray-600">18%</span>
+                                                    <span v-else class="text-gray-600">{{ tauxLigne(ligne) }}%</span>
                                                 </td>
                                                 <td class="p-1 text-right font-bold text-gray-900">{{ Number(ligne.montant_ht).toLocaleString() }} F</td>
                                                 <td v-if="modeEdition" class="border-l border-gray-900 p-1 print:hidden">
@@ -713,7 +721,7 @@ const retour = () => {
                                             <td class="border-r border-gray-900 p-1 text-right">{{ Number(ligne.remise || 0) }} %</td>
                                             <td class="border-r border-gray-900 p-1 text-center">
                                                 <span v-if="ligne.ne_pas_appliquer_tva" class="text-amber-600 font-semibold bg-amber-50 px-1 py-0.5 rounded border border-amber-200 text-[10px]">Exonéré</span>
-                                                <span v-else class="text-gray-600">18%</span>
+                                                <span v-else class="text-gray-600">{{ tauxLigne(ligne) }}%</span>
                                             </td>
                                             <td class="border-r border-gray-900 p-1 text-right font-bold text-gray-900">{{ Number(ligne.montant_ht).toLocaleString() }} F</td>
                                             <td class="p-1 text-center">
