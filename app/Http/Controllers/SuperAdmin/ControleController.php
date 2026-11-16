@@ -93,7 +93,7 @@ class ControleController extends Controller
             'ip' => $a->ip,
             'contexte' => $a->contexte ?: null,
             'annulable' => ! $a->annule_le && isset(Audit::CLASSES[$a->auditable_type]),
-            'operation' => $a->lot ? max(1, (int) ($tailles[$a->lot] ?? 1)) : 1,
+            'operation' => $a->annule_le ? 1 : ($a->lot ? max(1, (int) ($tailles[$a->lot] ?? 1)) : max(1, Annulation::operation($a)->count())),
             'annulation' => $a->annule_le ? ['date' => $a->annule_le, 'par' => $a->annulePar?->name] : null,
             'changements' => array_values(array_map(fn ($c) => [
                 'champ' => $c,

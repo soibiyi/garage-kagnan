@@ -35,7 +35,15 @@ class Annulation
     public static function operation(AuditLog $log): Collection
     {
         if (! $log->lot) {
-            return collect($log->annule_le ? [] : [$log]);
+            // Traces antérieures à la notion d'opération : même auteur, même seconde = même requête
+            return AuditLog::query()
+                ->whereNull('lot')
+                ->whereNull('annule_le')
+                ->where('created_at', $log->created_at)
+                ->where('user_id', $log->user_id)
+                ->where('impersonator_id', $log->impersonator_id)
+                ->orderByDesc('id')
+                ->get();
         }
 
         return AuditLog::query()->where('lot', $log->lot)->whereNull('annule_le')->orderByDesc('id')->get();
@@ -47,13 +55,14 @@ class Annulation
     public static function conflits(Collection $traces): array
     {
         $conflits = [];
+        $memeOperation = $traces->pluck('id')->all();
         foreach ($traces as $t) {
             $plusRecente = AuditLog::query()
                 ->where('auditable_type', $t->auditable_type)
                 ->where('auditable_id', $t->auditable_id)
                 ->where('id', '>', $t->id)
                 ->whereNull('annule_le')
-                ->when($t->lot, fn ($q) => $q->where(fn ($w) => $w->whereNull('lot')->orWhere('lot', '!=', $t->lot)))
+                ->whereNotIn('id', $memeOperation)
                 ->with('user:id,name')
                 ->latest('id')
                 ->first();
