@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\AuditLog;
+use App\Models\Client;
 use App\Models\Devis;
 use App\Models\Facture;
 use App\Models\Intervention;
@@ -36,6 +37,8 @@ class Audit
         'Stock' => 'Pièce (stock)',
         'StockSiege' => 'Stock du siège',
         'MvtStock' => 'Mouvement de stock',
+        'Client' => 'Client',
+        'Vehicule' => 'Véhicule',
     ];
 
     /** Classe Eloquent de chaque type suivi (pour retrouver / restaurer l'élément). */
@@ -48,6 +51,8 @@ class Audit
         'Stock' => Stock::class,
         'StockSiege' => StockSiege::class,
         'MvtStock' => MvtStock::class,
+        'Client' => Client::class,
+        'Vehicule' => Vehicule::class,
     ];
 
     /** Champs jamais historisés (bruit ou secrets). */
@@ -55,6 +60,10 @@ class Audit
 
     public static function enregistrer(Model $modele, string $evenement): void
     {
+        if (method_exists($modele, 'evenementsAudites') && ! in_array($evenement, $modele->evenementsAudites(), true)) {
+            return;
+        }
+
         try {
             [$avant, $apres] = self::diff($modele, $evenement);
 
@@ -202,6 +211,12 @@ class Audit
         if ($m instanceof Intervention && $evenement === 'supprime') {
             return 'Dossier supprimé';
         }
+        if ($m instanceof Client && $evenement === 'supprime') {
+            return 'Client supprimé (avec ses véhicules et dossiers)';
+        }
+        if ($m instanceof Vehicule && $evenement === 'supprime') {
+            return 'Véhicule supprimé';
+        }
 
         return null;
     }
@@ -218,6 +233,8 @@ class Audit
             $m instanceof Stock => trim(($m->designation_piece ?? '') . ' ' . ($m->reference ? "({$m->reference})" : '')),
             $m instanceof LigneDevis => mb_strimwidth((string) $m->designation, 0, 60, '…'),
             $m instanceof StockSiege, $m instanceof MvtStock => $m->siege,
+            $m instanceof Client => trim(($m->prenom ?? '') . ' ' . ($m->nom ?? '')),
+            $m instanceof Vehicule => trim(($m->marque ?? '') . ' ' . ($m->modele ?? '') . ' ' . ($m->immatriculation ? "({$m->immatriculation})" : '')),
             default => null,
         };
 
@@ -245,6 +262,13 @@ class Audit
     public static function contexte(Model $m): array
     {
         try {
+            if ($m instanceof Client || $m instanceof Vehicule) {
+                $vehicule = $m instanceof Vehicule ? $m : null;
+                $client = $m instanceof Client ? $m : Client::find($m->getAttribute('client_id'));
+
+                return self::fiche($client, $vehicule);
+            }
+
             $dossier = match (true) {
                 $m instanceof Intervention => $m,
                 $m instanceof Paiement => Intervention::find(Facture::whereKey($m->getAttribute('facture_id'))->value('intervention_id')),
@@ -264,20 +288,25 @@ class Audit
             $vehicule = $dossier->getAttribute('vehicule_id') ? Vehicule::with('client')->find($dossier->getAttribute('vehicule_id')) : null;
             $client = $vehicule?->client;
 
-            $contexte = array_filter([
-                'dossier_id' => $dossier->getKey(),
-                'numero_ot' => $dossier->getAttribute('numero_ot'),
-                'client' => $client ? trim(($client->prenom ?? '') . ' ' . ($client->nom ?? '')) : null,
-                'telephone' => $client?->telephone,
-                'vehicule' => $vehicule ? trim(($vehicule->marque ?? '') . ' ' . ($vehicule->modele ?? '')) : null,
-                'immatriculation' => $vehicule?->immatriculation,
-            ], fn ($v) => $v !== null && $v !== '');
+            $contexte = self::fiche($client, $vehicule, $dossier);
             $cache->set($cle, $contexte);
 
             return $contexte;
         } catch (Throwable) {
             return [];
         }
+    }
+
+    private static function fiche(?Client $client, ?Vehicule $vehicule, ?Intervention $dossier = null): array
+    {
+        return array_filter([
+            'dossier_id' => $dossier?->getKey(),
+            'numero_ot' => $dossier?->getAttribute('numero_ot'),
+            'client' => $client ? trim(($client->prenom ?? '') . ' ' . ($client->nom ?? '')) : null,
+            'telephone' => $client?->telephone,
+            'vehicule' => $vehicule ? trim(($vehicule->marque ?? '') . ' ' . ($vehicule->modele ?? '')) : null,
+            'immatriculation' => $vehicule?->immatriculation,
+        ], fn ($v) => $v !== null && $v !== '');
     }
 
     /** Contexte d'une ancienne trace (enregistrée avant l'ajout de la colonne), reconstitué depuis la base. */
@@ -312,7 +341,8 @@ class Audit
     {
         try {
             return match (true) {
-                $m instanceof Intervention, $m instanceof StockSiege, $m instanceof MvtStock => $m->siege,
+                $m instanceof Intervention, $m instanceof StockSiege, $m instanceof MvtStock, $m instanceof Client => $m->siege,
+                $m instanceof Vehicule => Client::whereKey($m->client_id)->value('siege'),
                 $m instanceof Facture, $m instanceof Devis => Intervention::whereKey($m->intervention_id)->value('siege'),
                 $m instanceof Paiement => Intervention::whereKey(Facture::whereKey($m->facture_id)->value('intervention_id'))->value('siege'),
                 $m instanceof LigneDevis => Intervention::whereKey(Devis::whereKey($m->devis_id)->value('intervention_id'))->value('siege'),

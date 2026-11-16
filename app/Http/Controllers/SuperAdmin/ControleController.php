@@ -71,10 +71,13 @@ class ControleController extends Controller
 
     private function presenter(AuditLog $a, array $tailles = []): array
     {
-        // Anciennes traces : client / véhicule reconstitués une fois, puis mémorisés
-        if ($a->contexte === null && in_array($a->auditable_type, ['Facture', 'Paiement', 'Devis', 'LigneDevis', 'Intervention'], true)) {
+        // Anciennes traces : client / véhicule reconstitués depuis la base, puis mémorisés. Tant qu'ils restent
+        // introuvables (ex. dossier supprimé puis restauré plus tard), on réessaie à l'affichage suivant.
+        if (empty($a->contexte) && in_array($a->auditable_type, ['Facture', 'Paiement', 'Devis', 'LigneDevis', 'Intervention', 'Client', 'Vehicule'], true)) {
             $contexte = Audit::contexteDuJournal($a);
-            $a->forceFill(['contexte' => $contexte ?: []])->saveQuietly();
+            if ($contexte || $a->contexte === null) {
+                $a->forceFill(['contexte' => $contexte ?: []])->saveQuietly();
+            }
         }
 
         $champs = array_unique(array_merge(array_keys($a->avant ?? []), array_keys($a->apres ?? [])));

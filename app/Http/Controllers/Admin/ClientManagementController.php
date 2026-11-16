@@ -4,7 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Client;
+use App\Models\Intervention;
+use App\Models\Vehicule;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 
 class ClientManagementController extends Controller
@@ -89,7 +92,15 @@ class ClientManagementController extends Controller
 
     public function destroy(Client $client)
     {
-        $client->delete();
+        // Élément par élément (dossiers, devis, factures, paiements, véhicules, client) : la base ne supprime
+        // plus rien en cascade sans trace, et le super admin peut tout restaurer d'un coup.
+        DB::transaction(function () use ($client) {
+            Vehicule::where('client_id', $client->id)->get()->each(function (Vehicule $vehicule) {
+                Intervention::where('vehicule_id', $vehicule->id)->get()->each->supprimerAvecDependances();
+                $vehicule->delete();
+            });
+            $client->delete();
+        });
 
         return redirect()->route('admin.clients.index')->with('success', 'Compte client supprimé.');
     }

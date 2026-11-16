@@ -3,10 +3,7 @@
 namespace App\Http\Controllers\Reception;
 
 use App\Http\Controllers\Controller;
-use App\Models\Devis;
-use App\Models\Facture;
 use App\Models\Intervention;
-use App\Models\Paiement;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -192,22 +189,8 @@ public function destroy($id)
 
     $numeroOt = $intervention->numero_ot;
 
-    DB::transaction(function () use ($intervention) {
-        // Facture et paiements de ce dossier
-        if ($facture = Facture::where('intervention_id', $intervention->id)->first()) {
-            // Un par un : chaque suppression est tracée (audit) et restaurable par le super admin
-            Paiement::where('facture_id', $facture->id)->get()->each->delete();
-            $facture->delete();
-        }
-
-        // Devis (principal et complémentaires) et lignes de ce dossier
-        Devis::where('intervention_id', $intervention->id)->get()->each(function (Devis $devis) {
-            $devis->lignes()->get()->each->delete();
-            $devis->delete();
-        });
-
-        $intervention->delete();
-    });
+    // Facture, paiements, devis et lignes : tout est tracé (audit) et restaurable par le super admin
+    DB::transaction(fn () => $intervention->supprimerAvecDependances());
 
     foreach ($photos as $chemin) {
         Storage::disk('public')->delete($chemin);

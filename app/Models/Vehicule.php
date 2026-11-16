@@ -8,6 +8,13 @@ use Illuminate\Database\Eloquent\Model;
 class Vehicule extends Model
 {
     use HasFactory;
+    use \App\Models\Concerns\Audite;
+
+    /** Seule la suppression est tracée (pour pouvoir la restaurer). */
+    public function evenementsAudites(): array
+    {
+        return ['supprime'];
+    }
 
     protected $table = 'vehicules';
 

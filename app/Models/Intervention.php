@@ -59,6 +59,27 @@ class Intervention extends Model
         return !empty($user->siege) && $this->siege === $user->siege;
     }
 
+    /**
+     * Supprime le dossier avec ses factures, paiements, devis (principal et complémentaires) et lignes,
+     * un élément à la fois et des enfants vers le parent. Chaque suppression est ainsi tracée dans le
+     * journal d'audit et le super administrateur peut tout restaurer d'un coup. Une suppression laissée
+     * à la cascade de la base ne laisserait aucune trace.
+     */
+    public function supprimerAvecDependances(): void
+    {
+        Facture::where('intervention_id', $this->id)->get()->each(function (Facture $facture) {
+            Paiement::where('facture_id', $facture->id)->get()->each->delete();
+            $facture->delete();
+        });
+
+        Devis::where('intervention_id', $this->id)->get()->each(function (Devis $devis) {
+            LigneDevis::where('devis_id', $devis->id)->get()->each->delete();
+            $devis->delete();
+        });
+
+        $this->delete();
+    }
+
     public function vehicule()
     {
         return $this->belongsTo(Vehicule::class);

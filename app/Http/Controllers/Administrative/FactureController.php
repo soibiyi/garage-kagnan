@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Administrative;
 
 use App\Http\Controllers\Controller;
-use App\Models\Devis;
 use App\Models\Facture;
 use App\Models\Intervention;
 use App\Models\Paiement;
@@ -322,21 +321,8 @@ class FactureController extends Controller
             return back()->withErrors(['error' => 'Seuls les devis directs peuvent être supprimés.']);
         }
 
-        DB::transaction(function () use ($dossier) {
-            if ($facture = Facture::where('intervention_id', $dossier->id)->first()) {
-                // Un par un : chaque suppression de paiement est tracée (audit)
-                Paiement::where('facture_id', $facture->id)->get()->each->delete();
-                $facture->delete();
-            }
-
-            // Devis principal et complémentaires, ligne par ligne : tout est tracé (audit) et restaurable
-            Devis::where('intervention_id', $dossier->id)->get()->each(function (Devis $devis) {
-                $devis->lignes()->get()->each->delete();
-                $devis->delete();
-            });
-
-            $dossier->delete();
-        });
+        // Tout est tracé (audit) et restaurable par le super admin
+        DB::transaction(fn () => $dossier->supprimerAvecDependances());
 
         return back()->with('success', 'Le devis direct a été supprimé avec succès.');
     }

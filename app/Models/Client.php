@@ -11,6 +11,13 @@ use Illuminate\Support\Str;
 class Client extends Authenticatable
 {
     use HasFactory;
+    use \App\Models\Concerns\Audite;
+
+    /** Seule la suppression est tracée (les connexions au portail modifient souvent la fiche). */
+    public function evenementsAudites(): array
+    {
+        return ['supprime'];
+    }
 
     protected $fillable = [
         'nom', 'prenom', 'telephone', 'nombre_voitures', 'email', 'adresse', 'type_client', 'siege'

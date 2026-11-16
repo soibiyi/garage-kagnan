@@ -87,6 +87,46 @@ class SuperAdminAnnulationTest extends TestCase
         $this->actingAs($this->superAdmin)->post(route('superadmin.controle.annuler', $devisSupprime))->assertSessionHas('error');
     }
 
+    public function test_deleted_client_with_all_his_history_is_restored_in_one_go(): void
+    {
+        $clientId = $this->dossier->vehicule->client_id;
+
+        $this->actingAs($this->admin)->delete(route('admin.clients.gestion.destroy', $clientId))->assertRedirect();
+
+        $this->assertDatabaseMissing('clients', ['id' => $clientId]);
+        $this->assertSame(0, Paiement::count());
+
+        $traceClient = AuditLog::where('auditable_type', 'Client')->where('evenement', 'supprime')->firstOrFail();
+        $this->assertSame('Awa Koné', $traceClient->contexte['client']);
+        $this->assertSame('Client supprimé (avec ses véhicules et dossiers)', $traceClient->alerte);
+        // client, véhicule, dossier, devis, 2 lignes, facture, paiement : une seule opération
+        $this->assertSame(8, AuditLog::where('lot', $traceClient->lot)->count());
+
+        $this->actingAs($this->superAdmin)->post(route('superadmin.controle.annuler', $traceClient))->assertSessionHas('success');
+
+        $this->assertDatabaseHas('clients', ['id' => $clientId, 'nom' => 'Koné', 'telephone' => '0701020304']);
+        $this->assertDatabaseHas('vehicules', ['client_id' => $clientId, 'immatriculation' => 'AB-123-CI']);
+        $this->assertDatabaseHas('interventions', ['id' => $this->dossier->id]);
+        $this->assertSame(2, LigneDevis::where('devis_id', $this->devis->id)->count());
+        $this->assertSame(20000.0, (float) Paiement::where('facture_id', $this->facture->id)->sum('montant'));
+    }
+
+    public function test_old_traces_without_lot_are_restored_together_and_context_is_retried(): void
+    {
+        // Traces d'avant la notion d'opération : même auteur, même seconde, sans lot ni contexte
+        $this->actingAs($this->admin)->delete(route('parc.destroy', $this->dossier->id));
+        AuditLog::query()->update(['lot' => null, 'contexte' => []]);
+        $trace = AuditLog::where('auditable_type', 'Facture')->where('evenement', 'supprime')->firstOrFail();
+
+        $this->actingAs($this->superAdmin)->post(route('superadmin.controle.annuler', $trace))->assertSessionHas('success');
+        $this->assertDatabaseHas('interventions', ['id' => $this->dossier->id]);
+        $this->assertDatabaseHas('factures', ['id' => $this->facture->id]);
+
+        // Le dossier existe de nouveau : le client est retrouvé à l'affichage
+        $this->actingAs($this->superAdmin)->get(route('superadmin.controle', ['onglet' => 'alertes']))->assertOk();
+        $this->assertSame('Awa Koné', $trace->fresh()->contexte['client'] ?? null);
+    }
+
     public function test_modification_is_reverted_and_conflicts_must_be_forced(): void
     {
         // Modification « suspecte » faite dans une requête

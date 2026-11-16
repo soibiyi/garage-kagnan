@@ -10,6 +10,9 @@ use App\Support\Audit;
  *
  * Attention : les opérations en masse (Model::where(...)->update/delete) ne déclenchent
  * pas d'événement Eloquent et ne sont donc pas tracées.
+ *
+ * Un modèle peut limiter les événements tracés avec une méthode evenementsAudites(): array
+ * (ex. ['supprime'] pour ne garder que les suppressions).
  */
 trait Audite
 {
