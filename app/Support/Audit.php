@@ -12,10 +12,12 @@ use App\Models\Paiement;
 use App\Models\Stock;
 use App\Models\StockSiege;
 use App\Models\User;
+use App\Models\Vehicule;
 use App\Notifications\ActionSensible;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Str;
 use Throwable;
 
 /**
@@ -36,6 +38,18 @@ class Audit
         'MvtStock' => 'Mouvement de stock',
     ];
 
+    /** Classe Eloquent de chaque type suivi (pour retrouver / restaurer l'élément). */
+    public const CLASSES = [
+        'Facture' => Facture::class,
+        'Paiement' => Paiement::class,
+        'Devis' => Devis::class,
+        'LigneDevis' => LigneDevis::class,
+        'Intervention' => Intervention::class,
+        'Stock' => Stock::class,
+        'StockSiege' => StockSiege::class,
+        'MvtStock' => MvtStock::class,
+    ];
+
     /** Champs jamais historisés (bruit ou secrets). */
     private const IGNORES = ['updated_at', 'created_at', 'remember_token', 'password', 'portal_password', 'portal_temp_password'];
 
@@ -53,13 +67,16 @@ class Audit
             $user = auth()->user();
             $impersonatorId = $request?->hasSession() ? $request->session()->get('impersonator_id') : null;
             $alerte = self::alerte($modele, $evenement, $avant, $apres);
+            $contexte = self::contexte($modele);
 
             $log = AuditLog::create([
+                'lot' => self::lot(),
                 'user_id' => $user instanceof User ? $user->id : null,
                 'impersonator_id' => $impersonatorId,
                 'auditable_type' => class_basename($modele),
                 'auditable_id' => $modele->getKey(),
                 'libelle' => mb_strimwidth(self::libelle($modele), 0, 250, '…'),
+                'contexte' => $contexte ?: null,
                 'evenement' => $evenement,
                 'avant' => $avant ?: null,
                 'apres' => $apres ?: null,
@@ -71,10 +88,12 @@ class Audit
             // Les actions du super administrateur lui-même (ou faites « en tant que ») ne lui sont pas signalées
             $parSuperAdmin = $impersonatorId || ($user instanceof User && $user->estSuperAdmin());
             if ($alerte && ! $parSuperAdmin) {
-                self::prevenir(new ActionSensible('controle', $alerte, [
+                $qui = self::resumeContexte($contexte);
+                self::prevenir(new ActionSensible('controle', $alerte . ($qui ? " — {$qui}" : ''), [
                     'audit_id' => $log->id,
                     'auteur' => $user instanceof User ? $user->name : 'Système',
                     'libelle' => $log->libelle,
+                    'contexte' => $contexte,
                 ]));
             }
         } catch (Throwable $e) {
@@ -100,11 +119,12 @@ class Audit
             return [[], $filtrer($modele->getAttributes())];
         }
         if ($evenement === 'supprime') {
-            return [$filtrer($modele->getOriginal()), []];
+            // Valeurs brutes de la base (date de création comprise) : elles permettent de restaurer l'élément à l'identique.
+            return [array_diff_key($modele->getRawOriginal(), array_flip(array_diff(self::IGNORES, ['created_at']))), []];
         }
 
         $apres = $filtrer($modele->getChanges());
-        $avant = array_intersect_key($modele->getOriginal(), $apres);
+        $avant = array_intersect_key($modele->getRawOriginal(), $apres);
 
         // Ignore les changements purement de format (ex. "100.00" → 100)
         foreach ($apres as $cle => $valeur) {
@@ -192,6 +212,8 @@ class Audit
 
         $detail = match (true) {
             $m instanceof Facture => $m->numero_facture,
+            $m instanceof Devis => '#' . $m->getKey() . ($m->is_complementaire ? ' (complémentaire)' : ''),
+            $m instanceof Paiement => '#' . $m->getKey() . ' · ' . number_format((float) $m->montant, 0, ',', ' ') . ' FCFA' . ($m->mode_paiement ? " ({$m->mode_paiement})" : ''),
             $m instanceof Intervention => $m->numero_ot,
             $m instanceof Stock => trim(($m->designation_piece ?? '') . ' ' . ($m->reference ? "({$m->reference})" : '')),
             $m instanceof LigneDevis => mb_strimwidth((string) $m->designation, 0, 60, '…'),
@@ -200,6 +222,90 @@ class Audit
         };
 
         return trim($type . ' ' . ($detail ?: '#' . $m->getKey()));
+    }
+
+    /** Identifiant commun à toutes les traces d'une même requête (null en ligne de commande). */
+    private static function lot(): ?string
+    {
+        if (app()->runningInConsole() && ! request()->route()) {
+            return null;
+        }
+        $attributs = request()->attributes;
+        if (! $attributs->has('audit_lot')) {
+            $attributs->set('audit_lot', (string) Str::uuid());
+        }
+
+        return $attributs->get('audit_lot');
+    }
+
+    /**
+     * Client, véhicule et dossier concernés par l'élément. Figés dans le journal pour rester lisibles
+     * même une fois le devis, la facture ou le dossier supprimé.
+     */
+    public static function contexte(Model $m): array
+    {
+        try {
+            $dossier = match (true) {
+                $m instanceof Intervention => $m,
+                $m instanceof Paiement => Intervention::find(Facture::whereKey($m->getAttribute('facture_id'))->value('intervention_id')),
+                $m instanceof LigneDevis => Intervention::find(Devis::whereKey($m->getAttribute('devis_id'))->value('intervention_id')),
+                default => ($id = $m->getAttribute('intervention_id')) ? Intervention::find($id) : null,
+            };
+            if (! $dossier || ! $dossier->getKey()) {
+                return [];
+            }
+            // Mémorisé le temps de la requête (une suppression de dossier trace une dizaine d'éléments du même client)
+            $cache = request()->attributes;
+            $cle = 'audit_contexte_' . $dossier->getKey();
+            if ($cache->has($cle)) {
+                return $cache->get($cle);
+            }
+
+            $vehicule = $dossier->getAttribute('vehicule_id') ? Vehicule::with('client')->find($dossier->getAttribute('vehicule_id')) : null;
+            $client = $vehicule?->client;
+
+            $contexte = array_filter([
+                'dossier_id' => $dossier->getKey(),
+                'numero_ot' => $dossier->getAttribute('numero_ot'),
+                'client' => $client ? trim(($client->prenom ?? '') . ' ' . ($client->nom ?? '')) : null,
+                'telephone' => $client?->telephone,
+                'vehicule' => $vehicule ? trim(($vehicule->marque ?? '') . ' ' . ($vehicule->modele ?? '')) : null,
+                'immatriculation' => $vehicule?->immatriculation,
+            ], fn ($v) => $v !== null && $v !== '');
+            $cache->set($cle, $contexte);
+
+            return $contexte;
+        } catch (Throwable) {
+            return [];
+        }
+    }
+
+    /** Contexte d'une ancienne trace (enregistrée avant l'ajout de la colonne), reconstitué depuis la base. */
+    public static function contexteDuJournal(AuditLog $a): array
+    {
+        $classe = self::CLASSES[$a->auditable_type] ?? null;
+        if (! $classe) {
+            return [];
+        }
+        $modele = $classe::find($a->auditable_id);
+        if (! $modele) {
+            $modele = new $classe();
+            $valeurs = array_filter(array_merge($a->apres ?? [], $a->avant ?? []), fn ($v) => ! is_array($v));
+            $modele->setRawAttributes($valeurs + [$modele->getKeyName() => $a->auditable_id]);
+        }
+
+        return self::contexte($modele);
+    }
+
+    /** « Client · Véhicule (immat.) · OT … » en une ligne. */
+    public static function resumeContexte(?array $c): string
+    {
+        if (! $c) {
+            return '';
+        }
+        $vehicule = trim(($c['vehicule'] ?? '') . (! empty($c['immatriculation']) ? " ({$c['immatriculation']})" : ''));
+
+        return implode(' · ', array_filter([$c['client'] ?? null, $vehicule ?: null, ! empty($c['numero_ot']) ? "OT {$c['numero_ot']}" : null]));
     }
 
     private static function siege(Model $m): ?string

@@ -7,11 +7,14 @@ use App\Models\AuditLog;
 use App\Models\Inventaire;
 use App\Models\StockSiege;
 use App\Models\User;
+use App\Support\Annulation;
 use App\Support\Audit;
+use App\Support\ConflitAnnulation;
 use App\Support\ExportExcel;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
+use RuntimeException;
 
 /**
  * Contrôle et anti-fraude :
@@ -47,21 +50,33 @@ class ControleController extends Controller
             ->when($request->query('siege'), fn ($q, $s) => $q->where('siege', $s))
             ->when($request->query('user'), fn ($q, $u) => $q->where('user_id', $u))
             ->when($request->query('evenement'), fn ($q, $e) => $q->where('evenement', $e))
-            ->when($request->query('q'), fn ($q, $s) => $q->where(fn ($w) => $w->where('libelle', 'like', "%{$s}%")->orWhere('alerte', 'like', "%{$s}%")));
+            ->when($request->query('q'), fn ($q, $s) => $q->where(fn ($w) => $w->where('libelle', 'like', "%{$s}%")->orWhere('alerte', 'like', "%{$s}%")->orWhere('contexte', 'like', "%{$s}%")));
     }
 
     private function journal(Request $request, bool $alertesSeulement)
     {
-        return $this->requeteJournal($request, $alertesSeulement)
-            ->with(['user:id,name,role', 'impersonator:id,name'])
+        $page = $this->requeteJournal($request, $alertesSeulement)
+            ->with(['user:id,name,role', 'impersonator:id,name', 'annulePar:id,name'])
             ->latest('id')
             ->paginate(30)
-            ->withQueryString()
-            ->through(fn (AuditLog $a) => $this->presenter($a));
+            ->withQueryString();
+
+        // Nombre d'actions encore annulables dans chaque opération affichée
+        $lots = collect($page->items())->pluck('lot')->filter()->unique()->values();
+        $tailles = $lots->isEmpty() ? [] : AuditLog::query()->whereIn('lot', $lots)->whereNull('annule_le')
+            ->selectRaw('lot, COUNT(*) AS n')->groupBy('lot')->pluck('n', 'lot')->all();
+
+        return $page->through(fn (AuditLog $a) => $this->presenter($a, $tailles));
     }
 
-    private function presenter(AuditLog $a): array
+    private function presenter(AuditLog $a, array $tailles = []): array
     {
+        // Anciennes traces : client / véhicule reconstitués une fois, puis mémorisés
+        if ($a->contexte === null && in_array($a->auditable_type, ['Facture', 'Paiement', 'Devis', 'LigneDevis', 'Intervention'], true)) {
+            $contexte = Audit::contexteDuJournal($a);
+            $a->forceFill(['contexte' => $contexte ?: []])->saveQuietly();
+        }
+
         $champs = array_unique(array_merge(array_keys($a->avant ?? []), array_keys($a->apres ?? [])));
 
         return [
@@ -76,6 +91,10 @@ class ControleController extends Controller
             'siege' => $a->siege,
             'alerte' => $a->alerte,
             'ip' => $a->ip,
+            'contexte' => $a->contexte ?: null,
+            'annulable' => ! $a->annule_le && isset(Audit::CLASSES[$a->auditable_type]),
+            'operation' => $a->lot ? max(1, (int) ($tailles[$a->lot] ?? 1)) : 1,
+            'annulation' => $a->annule_le ? ['date' => $a->annule_le, 'par' => $a->annulePar?->name] : null,
             'changements' => array_values(array_map(fn ($c) => [
                 'champ' => $c,
                 'avant' => $a->avant[$c] ?? null,
@@ -96,9 +115,13 @@ class ControleController extends Controller
                 'par' => $a->impersonator?->name,
                 'type' => Audit::MODELES[$a->auditable_type] ?? $a->auditable_type,
                 'libelle' => $a->libelle,
+                'client' => $a->contexte['client'] ?? null,
+                'vehicule' => trim(($a->contexte['vehicule'] ?? '') . ' ' . ($a->contexte['immatriculation'] ?? '')) ?: null,
+                'ot' => $a->contexte['numero_ot'] ?? null,
                 'evenement' => $a->evenement,
                 'siege' => $a->siege,
                 'alerte' => $a->alerte,
+                'annulee' => $a->annule_le?->format('d/m/Y H:i'),
                 'details' => collect(array_unique(array_merge(array_keys($a->avant ?? []), array_keys($a->apres ?? []))))
                     ->map(fn ($c) => "{$c} : " . json_encode($a->avant[$c] ?? null, JSON_UNESCAPED_UNICODE) . ' → ' . json_encode($a->apres[$c] ?? null, JSON_UNESCAPED_UNICODE))
                     ->implode(' | '),
@@ -107,9 +130,27 @@ class ControleController extends Controller
         return ExportExcel::telecharger($alertes ? 'actions-sensibles' : 'historique-modifications', 'Export du ' . now()->format('d/m/Y H:i'), [[
             'titre' => $alertes ? 'Actions sensibles' : 'Historique des modifications',
             'colonnes' => ['date' => 'Date', 'auteur' => 'Auteur', 'par' => 'Via super admin', 'type' => 'Type', 'libelle' => 'Élément',
-                'evenement' => 'Événement', 'siege' => 'Siège', 'alerte' => 'Alerte', 'details' => 'Avant → après'],
+                'client' => 'Client', 'vehicule' => 'Véhicule', 'ot' => 'N° OT', 'evenement' => 'Événement', 'siege' => 'Siège', 'alerte' => 'Alerte', 'annulee' => 'Annulée le', 'details' => 'Avant → après'],
             'lignes' => $lignes,
         ]]);
+    }
+
+    /** Annule une action (et toute l'opération dont elle fait partie). */
+    public function annuler(Request $request, AuditLog $audit)
+    {
+        $forcer = $request->boolean('forcer');
+
+        try {
+            $n = Annulation::annuler($audit, $request->user(), $forcer);
+        } catch (ConflitAnnulation $e) {
+            return back()->withErrors(['conflit' => implode("\n", $e->conflits)]);
+        } catch (RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', $n > 1
+            ? "Opération annulée : {$n} actions défaites."
+            : 'Action annulée.');
     }
 
     // ─── Inventaire ──────────────────────────────────────────────────

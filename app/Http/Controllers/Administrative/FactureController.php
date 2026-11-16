@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Administrative;
 
 use App\Http\Controllers\Controller;
+use App\Models\Devis;
 use App\Models\Facture;
 use App\Models\Intervention;
 use App\Models\Paiement;
@@ -328,10 +329,11 @@ class FactureController extends Controller
                 $facture->delete();
             }
 
-            if ($dossier->devis) {
-                $dossier->devis->lignes()->delete();
-                $dossier->devis->delete();
-            }
+            // Devis principal et complémentaires, ligne par ligne : tout est tracé (audit) et restaurable
+            Devis::where('intervention_id', $dossier->id)->get()->each(function (Devis $devis) {
+                $devis->lignes()->get()->each->delete();
+                $devis->delete();
+            });
 
             $dossier->delete();
         });

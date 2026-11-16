@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Reception;
 
 use App\Http\Controllers\Controller;
+use App\Models\Devis;
 use App\Models\Facture;
 use App\Models\Intervention;
 use App\Models\Paiement;
@@ -194,15 +195,16 @@ public function destroy($id)
     DB::transaction(function () use ($intervention) {
         // Facture et paiements de ce dossier
         if ($facture = Facture::where('intervention_id', $intervention->id)->first()) {
-            Paiement::where('facture_id', $facture->id)->delete();
+            // Un par un : chaque suppression est tracée (audit) et restaurable par le super admin
+            Paiement::where('facture_id', $facture->id)->get()->each->delete();
             $facture->delete();
         }
 
-        // Devis et lignes de ce dossier
-        if ($intervention->devis) {
-            $intervention->devis->lignes()->delete();
-            $intervention->devis->delete();
-        }
+        // Devis (principal et complémentaires) et lignes de ce dossier
+        Devis::where('intervention_id', $intervention->id)->get()->each(function (Devis $devis) {
+            $devis->lignes()->get()->each->delete();
+            $devis->delete();
+        });
 
         $intervention->delete();
     });

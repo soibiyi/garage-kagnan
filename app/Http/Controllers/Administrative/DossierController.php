@@ -346,7 +346,8 @@ class DossierController extends Controller
             $devis = $dossier->devis;
 
             // Aucun paiement (ou devis non encore validé) : on peut remplacer les lignes
-            $devis->lignes()->delete();
+            // Une par une : chaque ligne supprimée est tracée (audit) et peut être restaurée par le super admin
+            $devis->lignes()->get()->each->delete();
             $this->creerLignesDevis($devis, $lignes);
             $this->appliquerPetiteFourniture($devis, $request);
             $devis->touch();

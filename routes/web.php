@@ -127,6 +127,7 @@ Route::middleware(['auth', 'verified', 'superadmin'])->prefix('superadmin')->nam
     // Contrôle et anti-fraude : actions sensibles, historique avant / après, inventaire
     Route::get('/controle', [\App\Http\Controllers\SuperAdmin\ControleController::class, 'index'])->name('controle');
     Route::get('/controle/export', [\App\Http\Controllers\SuperAdmin\ControleController::class, 'export'])->name('controle.export');
+    Route::post('/controle/{audit}/annuler', [\App\Http\Controllers\SuperAdmin\ControleController::class, 'annuler'])->name('controle.annuler');
     Route::post('/controle/inventaire', [\App\Http\Controllers\SuperAdmin\ControleController::class, 'compter'])->name('controle.inventaire');
 
     // Sécurité des comptes

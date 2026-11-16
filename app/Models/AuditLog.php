@@ -11,8 +11,8 @@ class AuditLog extends Model
     public const UPDATED_AT = null;
 
     protected $fillable = [
-        'user_id', 'impersonator_id', 'auditable_type', 'auditable_id', 'libelle',
-        'evenement', 'avant', 'apres', 'siege', 'alerte', 'ip',
+        'lot', 'user_id', 'impersonator_id', 'auditable_type', 'auditable_id', 'libelle', 'contexte',
+        'evenement', 'avant', 'apres', 'siege', 'alerte', 'ip', 'annule_le', 'annule_par',
     ];
 
     protected function casts(): array
@@ -20,8 +20,15 @@ class AuditLog extends Model
         return [
             'avant' => 'array',
             'apres' => 'array',
+            'contexte' => 'json:unicode', // accents lisibles en base : la recherche « Koné » fonctionne
             'created_at' => 'datetime',
+            'annule_le' => 'datetime',
         ];
+    }
+
+    public function annulePar(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'annule_par');
     }
 
     public function user(): BelongsTo

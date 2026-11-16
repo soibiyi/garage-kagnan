@@ -68,6 +68,34 @@ const valeur = (v) => {
     return s.length > 120 ? `${s.slice(0, 120)}…` : s;
 };
 
+// ─── Annulation d'une action ───
+const ANNULATION = {
+    cree: "l'élément créé sera supprimé",
+    modifie: 'les anciennes valeurs seront remises',
+    supprime: "l'élément supprimé sera restauré à l'identique",
+};
+const enCours = ref(null);
+const vehiculeTexte = (c) => [c?.vehicule, c?.immatriculation ? `(${c.immatriculation})` : null].filter(Boolean).join(' ');
+function annuler(a, forcer = false) {
+    if (!forcer) {
+        const portee = a.operation > 1
+            ? `Toute l'opération sera défaite (${a.operation} actions faites en même temps, ex. dossier + devis + lignes + facture + paiements).`
+            : `Effet : ${ANNULATION[a.evenement] || 'action défaite'}.`;
+        const qui = a.contexte ? `\nClient : ${a.contexte.client || '—'} · ${vehiculeTexte(a.contexte) || '—'}` : '';
+        if (!window.confirm(`Annuler « ${a.libelle} » (${a.auteur}, ${dateHeure(a.date)}) ?${qui}\n\n${portee}`)) return;
+    }
+    enCours.value = a.id;
+    router.post(route('superadmin.controle.annuler', a.id), { forcer }, {
+        preserveScroll: true,
+        onError: (errors) => {
+            if (errors.conflit && window.confirm(`Attention, ces éléments ont été modifiés depuis :\n\n${errors.conflit}\n\nAnnuler quand même ? Ces modifications plus récentes seront écrasées.`)) {
+                annuler(a, true);
+            }
+        },
+        onFinish: () => { if (enCours.value === a.id) enCours.value = null; },
+    });
+}
+
 // ─── Inventaire ───
 const recherche = ref(props.filtres.q || '');
 let delaiInv;
@@ -155,7 +183,7 @@ function enregistrerComptages() {
                         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                             <div class="lg:col-span-2">
                                 <label class="sg-label" for="f-q">Recherche</label>
-                                <input id="f-q" v-model="filtres.q" type="search" class="sg-field" placeholder="N° de facture, pièce, motif…" />
+                                <input id="f-q" v-model="filtres.q" type="search" class="sg-field" placeholder="Client, immatriculation, n° de facture, pièce…" />
                             </div>
                             <div>
                                 <label class="sg-label" for="f-type">Élément</label>
@@ -212,6 +240,14 @@ function enregistrerComptages() {
                                         </span>
                                         <span>{{ a.libelle }}</span>
                                         <span v-if="a.siege" class="sg-chip bg-white text-gray-600">{{ a.siege }}</span>
+                                        <span v-if="a.annulation" class="sg-chip bg-gray-200 text-gray-700">
+                                            <i class="fa-solid fa-rotate-left text-[9px]" aria-hidden="true"></i>Annulée
+                                        </span>
+                                    </p>
+                                    <p v-if="a.contexte" class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-gray-700">
+                                        <span v-if="a.contexte.client"><i class="fa-solid fa-user-tie mr-1 text-gray-400" aria-hidden="true"></i><span class="font-bold">{{ a.contexte.client }}</span><template v-if="a.contexte.telephone"> · {{ a.contexte.telephone }}</template></span>
+                                        <span v-if="vehiculeTexte(a.contexte)"><i class="fa-solid fa-car mr-1 text-gray-400" aria-hidden="true"></i>{{ vehiculeTexte(a.contexte) }}</span>
+                                        <span v-if="a.contexte.numero_ot"><i class="fa-solid fa-folder-open mr-1 text-gray-400" aria-hidden="true"></i>OT {{ a.contexte.numero_ot }}</span>
                                     </p>
                                     <p class="mt-1 text-xs text-gray-500">
                                         <i class="fa-solid fa-user mr-1" aria-hidden="true"></i>{{ a.auteur }}<template v-if="a.role"> ({{ a.role }})</template>
@@ -225,6 +261,25 @@ function enregistrerComptages() {
                                 </span>
                             </button>
                             <div v-if="ouverts.has(a.id)" class="border-t border-[#0B0F19]/5 px-4 pb-4 pl-6 pt-3">
+                                <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+                                    <p v-if="a.annulation" class="text-xs font-bold text-gray-600">
+                                        <i class="fa-solid fa-rotate-left mr-1" aria-hidden="true"></i>Annulée le {{ dateHeure(a.annulation.date) }}<template v-if="a.annulation.par"> par {{ a.annulation.par }}</template>
+                                    </p>
+                                    <p v-else-if="a.operation > 1" class="text-xs text-gray-500">
+                                        Fait partie d'une opération de {{ a.operation }} actions : elles seront annulées ensemble.
+                                    </p>
+                                    <span v-else></span>
+                                    <button
+                                        v-if="a.annulable"
+                                        type="button"
+                                        class="sg-btn sg-btn-sm sg-btn-red"
+                                        :disabled="enCours === a.id"
+                                        @click="annuler(a)"
+                                    >
+                                        <i class="fa-solid" :class="enCours === a.id ? 'fa-spinner fa-spin' : 'fa-rotate-left'" aria-hidden="true"></i>
+                                        {{ a.operation > 1 ? `Annuler l'opération (${a.operation})` : 'Annuler cette action' }}
+                                    </button>
+                                </div>
                                 <div class="overflow-x-auto">
                                     <table class="w-full min-w-[480px] text-sm">
                                         <thead>
