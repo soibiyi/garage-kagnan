@@ -33,7 +33,8 @@ const prefixeRoute = computed(() =>
     user.value?.role === 'magasinier' ? 'magasinier' : 'administration'
 );
 
-const peutAnnuler = computed(() => ['admin', 'magasinier'].includes(user.value?.role));
+// Annuler une sortie efface une ligne de l'historique : réservé aux administrateurs
+const peutAnnuler = computed(() => user.value?.role === 'admin');
 
 const ongletActif = ref(props.filters.type || 'entree');
 

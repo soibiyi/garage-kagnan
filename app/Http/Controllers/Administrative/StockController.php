@@ -121,9 +121,8 @@ class StockController extends Controller
      */
     public function annulerSortie(MvtStock $mouvement)
     {
-        if (!in_array(auth()->user()->role, ['admin', 'magasinier'])) {
-            abort(403);
-        }
+        // Supprime une ligne de l'historique : réservé aux administrateurs
+        abort_unless(auth()->user()->role === 'admin', 403, "Seul un administrateur peut annuler une sortie de stock.");
 
         if ($mouvement->type !== 'sortie') {
             return redirect()->back()->withErrors(['annulation' => 'Seules les sorties peuvent être annulées.']);
@@ -357,6 +356,8 @@ class StockController extends Controller
 
     public function destroy(Stock $stock)
     {
+        abort_unless(auth()->user()->role === 'admin', 403, 'Seul un administrateur peut supprimer une pièce du stock.');
+
         $stock->delete();
         return redirect()->back()->with('success', 'Pièce supprimée du stock.');
     }

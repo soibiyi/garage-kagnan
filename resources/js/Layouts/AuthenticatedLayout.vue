@@ -24,6 +24,7 @@ const MENUS = {
         { label: 'Interactions', route: 'admin.users.interactionindex', icon: 'fa-solid fa-comments', match: ['admin.users.interactionindex'] },
         { label: 'Véhicules', route: 'admin.vehicules.status', icon: 'fa-solid fa-car', match: ['admin.vehicules.*'] },
         { label: "Chiffre d'affaires", route: 'admin.chiffre-affaires', icon: 'fa-solid fa-chart-line', match: ['admin.chiffre-affaires'] },
+        { label: 'Suppressions', route: 'admin.demandes-suppression.index', icon: 'fa-solid fa-trash-can', match: ['admin.demandes-suppression.*'], pastille: 'demandesSuppression' },
     ],
     receptionniste: [
         ACCUEIL,
@@ -77,6 +78,7 @@ const MENU_SUPERADMIN = [
     { label: 'Rapports', route: 'superadmin.rapports.index', icon: 'fa-solid fa-file-lines', match: ['superadmin.rapports.*'] },
     { label: 'Système', route: 'superadmin.systeme', icon: 'fa-solid fa-gears', match: ['superadmin.systeme*'] },
     { label: 'Petites fournitures', route: 'superadmin.petites-fournitures', icon: 'fa-solid fa-screwdriver-wrench', match: ['superadmin.petites-fournitures'] },
+    { label: 'Suppressions', route: 'admin.demandes-suppression.index', icon: 'fa-solid fa-trash-can', match: ['admin.demandes-suppression.*'], pastille: 'demandesSuppression' },
     { label: 'Espace admin', route: 'superadmin.espace-admin', icon: 'fa-solid fa-user-shield', match: ['admin.*', 'superadmin.espace-admin'], separe: true },
 ];
 
@@ -190,6 +192,11 @@ const logout = () => {
                             >
                                 <i :class="item.icon" class="text-[11px]"></i>
                                 <span>{{ item.label }}</span>
+                                <span
+                                    v-if="item.pastille && $page.props[item.pastille]"
+                                    class="grid h-5 min-w-5 place-items-center rounded-full bg-[#E11D48] px-1 text-[10px] font-bold text-white"
+                                    :aria-label="`${$page.props[item.pastille]} en attente`"
+                                >{{ $page.props[item.pastille] }}</span>
                             </Link>
                         </div>
                     </div>

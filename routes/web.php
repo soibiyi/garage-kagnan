@@ -78,6 +78,11 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/clients/gestion/{client}', [\App\Http\Controllers\Admin\ClientManagementController::class, 'show'])->name('clients.gestion.show');
     Route::patch('/clients/gestion/{client}/status', [\App\Http\Controllers\Admin\ClientManagementController::class, 'toggleStatus'])->name('clients.gestion.status');
     Route::delete('/clients/gestion/{client}', [\App\Http\Controllers\Admin\ClientManagementController::class, 'destroy'])->name('clients.gestion.destroy');
+
+    // Demandes de suppression des collaborateurs (dossiers, devis directs) à valider
+    Route::get('/demandes-suppression', [\App\Http\Controllers\Admin\DemandeSuppressionController::class, 'index'])->name('demandes-suppression.index');
+    Route::post('/demandes-suppression/{demande}/approuver', [\App\Http\Controllers\Admin\DemandeSuppressionController::class, 'approuver'])->name('demandes-suppression.approuver');
+    Route::post('/demandes-suppression/{demande}/refuser', [\App\Http\Controllers\Admin\DemandeSuppressionController::class, 'refuser'])->name('demandes-suppression.refuser');
     Route::get('/charge-clients/{user}/activites', [UserController::class, 'chargeClientActivities'])->name('charge_clients.activities');
     Route::get('/users/interactions', [UserController::class, 'interactionIndex'])->name('users.interactionindex');
     

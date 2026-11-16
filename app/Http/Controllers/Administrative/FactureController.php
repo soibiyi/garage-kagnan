@@ -7,6 +7,7 @@ use App\Models\Facture;
 use App\Models\Intervention;
 use App\Models\Paiement;
 use App\Support\PetiteFourniture;
+use App\Support\Suppressions;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -311,19 +312,16 @@ class FactureController extends Controller
     /**
      * Supprime un devis direct.
      */
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
         $dossier = Intervention::duSiege()->findOrFail($id);
 
-        $isDirect = $dossier->type === 'devis_direct' || $dossier->is_direct || empty($dossier->numero_ot);
-
-        if (!$isDirect) {
+        if (! Suppressions::estDevisDirect($dossier)) {
             return back()->withErrors(['error' => 'Seuls les devis directs peuvent être supprimés.']);
         }
 
-        // Tout est tracé (audit) et restaurable par le super admin
-        DB::transaction(fn () => $dossier->supprimerAvecDependances());
-
-        return back()->with('success', 'Le devis direct a été supprimé avec succès.');
+        // Admin : suppression immédiate. Autres : demande à valider par un administrateur.
+        // Tout est tracé (audit) et restaurable par le super admin.
+        return Suppressions::traiter('devis_direct', $dossier, $request->input('motif'), $request->user());
     }
 }

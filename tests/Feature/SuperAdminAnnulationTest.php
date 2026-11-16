@@ -115,7 +115,7 @@ class SuperAdminAnnulationTest extends TestCase
     {
         // Traces d'avant la notion d'opération : même auteur, même seconde, sans lot ni contexte
         $this->actingAs($this->admin)->delete(route('parc.destroy', $this->dossier->id));
-        AuditLog::query()->update(['lot' => null, 'contexte' => []]);
+        AuditLog::query()->where('evenement', 'supprime')->update(['lot' => null, 'contexte' => [], 'created_at' => '2026-11-16 15:25:31']);
         $trace = AuditLog::where('auditable_type', 'Facture')->where('evenement', 'supprime')->firstOrFail();
 
         $this->actingAs($this->superAdmin)->post(route('superadmin.controle.annuler', $trace))->assertSessionHas('success');

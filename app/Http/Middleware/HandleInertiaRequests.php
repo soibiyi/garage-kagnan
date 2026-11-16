@@ -51,6 +51,10 @@ class HandleInertiaRequests extends Middleware
                 'error'   => fn () => $request->session()->get('error'),
                 'missionSummary' => fn () => $request->session()->get('missionSummary'),
             ],
+            // Administrateurs : nombre de demandes de suppression à valider (pastille du menu)
+            'demandesSuppression' => fn () => $request->user()?->role === 'admin'
+                ? \App\Models\DemandeSuppression::enAttente()->count()
+                : null,
             // Liste des sièges { SGK: 'Siège Garage Kagnan', ... } disponible dans tous les composants Vue
             'sieges' => config('sieges'),
             // Paramètres globaux utiles côté navigateur (modifiables par le super administrateur)

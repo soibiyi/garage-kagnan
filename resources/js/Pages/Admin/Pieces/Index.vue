@@ -1,12 +1,15 @@
 <script setup>
 import { ref, computed } from 'vue';
-import { Head, useForm, router, Link } from '@inertiajs/vue3';
+import { Head, useForm, router, Link, usePage } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 
 const props = defineProps({
     stocks: Object,
     filters: Object
 });
+
+// Suppression d'une pièce : réservée aux administrateurs
+const estAdmin = computed(() => usePage().props.auth.user?.role === 'admin');
 
 const SIEGES = ['Terminus 27', 'Zone Industrielle', 'Yamoussoukro'];
 const SEUIL_STOCK_BAS = 5;
@@ -288,7 +291,7 @@ const submitImport = () => {
                                 </td>
                                 <td class="p-3 text-right space-x-1">
                                     <button @click="openEditModal(item)" class="p-1.5 bg-slate-100 rounded-lg hover:bg-slate-200" title="Modifier"><i class="fa-solid fa-pen"></i></button>
-                                    <button @click="deletePiece(item.id)" class="p-1.5 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
+                                    <button v-if="estAdmin" @click="deletePiece(item.id)" class="p-1.5 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
                                 </td>
                             </tr>
                             <tr v-if="stocks.data.length === 0">

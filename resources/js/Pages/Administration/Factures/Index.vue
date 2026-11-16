@@ -79,19 +79,36 @@ const dossiersAffiches = computed(() => {
 // ─────────────────────────────────────────────
 // SUPPRESSION (Réservée aux devis directs)
 // ─────────────────────────────────────────────
+// Seul un administrateur supprime directement ; les autres envoient une demande motivée à l'administrateur
+const estAdmin = computed(() => page.props.auth.user?.role === 'admin');
+
 const supprimerDossier = (dossier) => {
     const identifiant = dossier.vehicule?.immatriculation || dossier.numero_ot || `#${dossier.id}`;
-    
-    if (confirm(`Êtes-vous sûr de vouloir supprimer ce devis direct (${identifiant}) ? Cette action est irréversible.`)) {
-        router.delete(route('administration.factures.destroy', dossier.id), {
-            preserveScroll: true,
-            onSuccess: () => {
-                notification.value = `Le devis direct (${identifiant}) a été supprimé avec succès.`;
-                clearTimeout(notifTimer);
-                notifTimer = setTimeout(() => (notification.value = null), 5000);
-            },
-        });
+    let data = {};
+
+    if (estAdmin.value) {
+        if (!confirm(`Supprimer ce devis direct (${identifiant}) ? Le devis, la facture et les paiements seront supprimés.`)) return;
+    } else {
+        const motif = window.prompt(`Demande de suppression du devis direct (${identifiant}).\nUn administrateur devra la valider.\n\nMotif de la suppression :`);
+        if (motif === null) return;
+        if (motif.trim().length < 5) {
+            window.alert('Indiquez le motif de la suppression (au moins 5 caractères).');
+            return;
+        }
+        data = { motif: motif.trim() };
     }
+
+    router.delete(route('administration.factures.destroy', dossier.id), {
+        data,
+        preserveScroll: true,
+        onSuccess: () => {
+            notification.value = estAdmin.value
+                ? `Le devis direct (${identifiant}) a été supprimé.`
+                : `Demande de suppression du devis direct (${identifiant}) envoyée à l'administrateur.`;
+            clearTimeout(notifTimer);
+            notifTimer = setTimeout(() => (notification.value = null), 5000);
+        },
+    });
 };
 
 // ─────────────────────────────────────────────
@@ -413,7 +430,7 @@ const backText = computed(() => {
                                                 v-if="estDevisDirect(dossier)"
                                                 type="button"
                                                 @click="supprimerDossier(dossier)"
-                                                title="Supprimer ce devis direct"
+                                                :title="estAdmin ? 'Supprimer ce devis direct' : 'Demander la suppression de ce devis direct'"
                                                 class="inline-flex items-center justify-center h-9 w-9 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition border border-red-200 shrink-0"
                                             >
                                                 <i class="fa-solid fa-trash-can text-xs"></i>

@@ -206,9 +206,13 @@ const dossierASupprimer = ref(null);
 const suppressionEnCours = ref(false);
 const erreurSuppression = ref('');
 const boutonAnnuler = ref(null);
+// Seul un administrateur supprime directement ; les autres envoient une demande motivée
+const estAdmin = computed(() => user.value?.role === 'admin');
+const motifSuppression = ref('');
 
 const demanderSuppression = (item) => {
     erreurSuppression.value = '';
+    motifSuppression.value = '';
     dossierASupprimer.value = item;
     nextTick(() => boutonAnnuler.value?.focus());
 };
@@ -220,16 +224,21 @@ const annulerSuppression = () => {
 
 const confirmerSuppression = () => {
     if (!dossierASupprimer.value || suppressionEnCours.value) return;
+    if (!estAdmin.value && motifSuppression.value.trim().length < 5) {
+        erreurSuppression.value = 'Indiquez le motif de la suppression (au moins 5 caractères).';
+        return;
+    }
 
     suppressionEnCours.value = true;
     erreurSuppression.value = '';
     router.delete(routeSupprimer(dossierASupprimer.value), {
+        data: estAdmin.value ? {} : { motif: motifSuppression.value.trim() },
         preserveScroll: true,
         onSuccess: () => {
             dossierASupprimer.value = null;
         },
-        onError: () => {
-            erreurSuppression.value = "La suppression a échoué. Réessayez, ou contactez l'administrateur si le problème persiste.";
+        onError: (errors) => {
+            erreurSuppression.value = errors.motif || "L'opération a échoué. Réessayez, ou contactez l'administrateur si le problème persiste.";
         },
         onFinish: () => {
             suppressionEnCours.value = false;
@@ -594,7 +603,7 @@ const logout = () => {
                             <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
                         </span>
                         <div>
-                            <h3 id="titre-suppression" class="text-lg font-extrabold tracking-tight text-[var(--k-ink)]">Supprimer ce dossier ?</h3>
+                            <h3 id="titre-suppression" class="text-lg font-extrabold tracking-tight text-[var(--k-ink)]">{{ estAdmin ? 'Supprimer ce dossier ?' : 'Demander la suppression ?' }}</h3>
                             <p class="mt-1 text-sm text-gray-600">
                                 Dossier <span class="font-extrabold text-[var(--k-ink)]">{{ dossierASupprimer?.numero_ot || 'N/A' }}</span> —
                                 {{ dossierASupprimer?.vehicule?.marque }} {{ dossierASupprimer?.vehicule?.modele }}
@@ -603,10 +612,26 @@ const logout = () => {
                         </div>
                     </div>
 
-                    <p class="rounded-xl border border-[var(--k-signal)]/20 bg-[var(--k-signal)]/5 p-3 text-xs font-semibold leading-relaxed text-[#9F1239]">
-                        Cette action est définitive : la fiche de réception, les photos, le devis et la facture (avec ses paiements) de ce dossier seront supprimés.
+                    <p v-if="estAdmin" class="rounded-xl border border-[var(--k-signal)]/20 bg-[var(--k-signal)]/5 p-3 text-xs font-semibold leading-relaxed text-[#9F1239]">
+                        La fiche de réception, le devis et la facture (avec ses paiements) de ce dossier seront supprimés.
                         Le client et ses autres véhicules ne sont pas touchés.
                     </p>
+                    <template v-else>
+                        <p class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-semibold leading-relaxed text-amber-900">
+                            La suppression doit être validée par un administrateur. Le dossier reste en place en attendant sa décision.
+                        </p>
+                        <div>
+                            <label for="motif-suppression" class="text-xs font-bold text-[var(--k-ink)]">Motif de la suppression</label>
+                            <textarea
+                                id="motif-suppression"
+                                v-model="motifSuppression"
+                                rows="3"
+                                maxlength="2000"
+                                class="mt-1 w-full rounded-xl border border-gray-300 p-2 text-sm focus:border-[var(--k-signal)] focus:ring-[var(--k-signal)]"
+                                placeholder="Ex. : dossier créé en double, mauvais véhicule…"
+                            ></textarea>
+                        </div>
+                    </template>
 
                     <p v-if="erreurSuppression" class="text-xs font-bold text-[var(--k-signal)]" role="alert">{{ erreurSuppression }}</p>
 
@@ -616,7 +641,8 @@ const logout = () => {
                         </button>
                         <button type="button" @click="confirmerSuppression" :disabled="suppressionEnCours" class="k-btn k-btn--signal justify-center">
                             <i v-if="suppressionEnCours" class="fa-solid fa-circle-notch fa-spin text-xs" aria-hidden="true"></i>
-                            <span>{{ suppressionEnCours ? 'Suppression…' : 'Oui, supprimer' }}</span>
+                            <span v-if="estAdmin">{{ suppressionEnCours ? 'Suppression…' : 'Oui, supprimer' }}</span>
+                            <span v-else>{{ suppressionEnCours ? 'Envoi…' : 'Envoyer la demande' }}</span>
                         </button>
                     </div>
                 </div>
