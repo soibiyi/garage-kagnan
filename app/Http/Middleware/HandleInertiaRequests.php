@@ -53,6 +53,23 @@ class HandleInertiaRequests extends Middleware
             ],
             // Liste des sièges { SGK: 'Siège Garage Kagnan', ... } disponible dans tous les composants Vue
             'sieges' => config('sieges'),
+            // Paramètres globaux utiles côté navigateur (modifiables par le super administrateur)
+            'parametres' => fn () => [
+                'tva' => (float) \App\Support\Parametres::get('tva'),
+                'maintenance' => (bool) \App\Support\Parametres::get('maintenance_active'),
+            ],
+            // Bandeaux d'annonce visibles par l'utilisateur connecté
+            'annonces' => fn () => $request->user() instanceof \App\Models\User
+                ? \App\Models\Annonce::query()->enCours()->latest('id')->get()
+                    ->filter(fn ($a) => $a->concerne($request->user()))
+                    ->map(fn ($a) => [
+                        'id' => $a->id,
+                        'titre' => $a->titre,
+                        'message' => $a->message,
+                        'niveau' => $a->niveau,
+                        'version' => $a->updated_at?->timestamp,
+                    ])->values()
+                : [],
         ];
     }
 }

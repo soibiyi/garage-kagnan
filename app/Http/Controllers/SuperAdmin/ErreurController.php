@@ -13,6 +13,13 @@ use Inertia\Inertia;
 /** Journal des erreurs de l'application, réservé au super administrateur. */
 class ErreurController extends Controller
 {
+    /** Notifications affichées dans la cloche du super administrateur. */
+    private const TYPES_ALERTES = [
+        ErreurApplication::class,
+        \App\Notifications\ActionSensible::class,
+        \App\Notifications\RapportPeriodique::class,
+    ];
+
     public function index(Request $request)
     {
         $statut = in_array($request->input('statut'), ['ouvertes', 'resolues', 'toutes'], true) ? $request->input('statut') : 'ouvertes';
@@ -62,9 +69,9 @@ class ErreurController extends Controller
     {
         $notifications = $request->user()
             ->unreadNotifications()
-            ->where('type', ErreurApplication::class)
+            ->whereIn('type', self::TYPES_ALERTES)
             ->latest()
-            ->limit(20)
+            ->limit(30)
             ->get()
             ->map(fn ($n) => ['id' => $n->id, 'data' => $n->data, 'created_at' => $n->created_at]);
 
@@ -78,7 +85,7 @@ class ErreurController extends Controller
     public function marquerLue(Request $request, string $notification)
     {
         $request->user()->notifications()
-            ->where('type', ErreurApplication::class)
+            ->whereIn('type', self::TYPES_ALERTES)
             ->whereKey($notification)
             ->firstOrFail()
             ->markAsRead();

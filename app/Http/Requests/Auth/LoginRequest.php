@@ -42,11 +42,25 @@ class LoginRequest extends FormRequest
     {
         $this->ensureIsNotRateLimited();
 
-        if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
+        // Un compte suspendu par le super administrateur ne peut pas se connecter
+        $suspendu = false;
+        $ok = Auth::attemptWhen(
+            $this->only('email', 'password'),
+            function ($user) use (&$suspendu) {
+                $suspendu = (bool) ($user->suspendu_at ?? false);
+
+                return ! $suspendu;
+            },
+            $this->boolean('remember'),
+        );
+
+        if (! $ok) {
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
-                'email' => trans('auth.failed'),
+                'email' => $suspendu
+                    ? "Votre compte est suspendu. Contactez l'administration."
+                    : trans('auth.failed'),
             ]);
         }
 

@@ -7,9 +7,11 @@ use App\Models\Client;
 use App\Models\ClientPortalMessage;
 use App\Models\ClientPortalRequest;
 use App\Models\InteractionClient;
+use App\Models\InteractionClientPhoto;
 use App\Models\Intervention;
 use App\Models\Vehicule;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
 class ChargeClientController extends Controller
@@ -425,7 +427,7 @@ class ChargeClientController extends Controller
             'interventions.facture.paiements',
             'interventions.mecanicien',
             'interventions.receptionniste',
-            'interactions' => fn ($query) => $this->interactionsDuChargeClient()($query)->with('user:id,name'),
+            'interactions' => fn ($query) => $this->interactionsDuChargeClient()($query)->with(['user:id,name', 'photos']),
         ]);
 
         return Inertia::render('ChargeClient/VehiculeShow', [
@@ -471,7 +473,7 @@ class ChargeClientController extends Controller
         // Chargement de client.consignes.user pour afficher les consignes admin sur la vue des relances
         $vehicule->load([
             'client.consignes.user',
-            'interactions' => fn ($query) => $this->interactionsDuChargeClient()($query)->with('user:id,name'),
+            'interactions' => fn ($query) => $this->interactionsDuChargeClient()($query)->with(['user:id,name', 'photos']),
         ]);
 
         return Inertia::render('ChargeClient/VehiculeRelances', [
@@ -528,14 +530,49 @@ class ChargeClientController extends Controller
             'notes'               => 'nullable|string|max:2000',
             'accord_convenu'      => 'nullable|string|max:2000',
             'date_relance_prevue' => 'nullable|date|after_or_equal:today',
+            'photos'              => 'nullable|array|max:6',
+            'photos.*'            => 'image|mimes:jpg,jpeg,png,webp|max:5120',
+        ], [
+            'photos.max'      => '6 photos maximum par interaction.',
+            'photos.*.image'  => 'Seules les photos sont acceptées (JPG, PNG, WEBP).',
+            'photos.*.mimes'  => 'Seules les photos sont acceptées (JPG, PNG, WEBP).',
+            'photos.*.max'    => 'Chaque photo ne doit pas dépasser 5 Mo.',
+            'photos.*.uploaded' => "Une photo n'a pas pu être téléversée (taille maximale du serveur dépassée ?).",
         ]);
 
-        InteractionClient::create($data + [
+        $interaction = InteractionClient::create(collect($data)->except('photos')->all() + [
             'client_id'   => $vehicule->client_id,
             'vehicule_id' => $vehicule->id,
             'user_id'     => auth()->id(),
         ]);
 
+        foreach ($request->file('photos', []) as $photo) {
+            $interaction->photos()->create([
+                'path'   => $photo->store('interactions/'.$interaction->id, 'local'),
+                'nom'    => mb_substr($photo->getClientOriginalName(), 0, 255),
+                'mime'   => $photo->getMimeType(),
+                'taille' => $photo->getSize(),
+            ]);
+        }
+
         return back()->with('success', 'Interaction enregistrée.');
+    }
+
+    // 6. Affiche une photo jointe à une interaction (admin, auteur, ou personne ayant accès au véhicule)
+    public function interactionPhoto(InteractionClientPhoto $photo)
+    {
+        $interaction = $photo->interaction;
+
+        if (! $this->estAdmin() && $interaction->user_id !== auth()->id()) {
+            abort_unless($interaction->vehicule, 404);
+            $this->autoriserVehicule($interaction->vehicule);
+        }
+
+        abort_unless(Storage::disk('local')->exists($photo->path), 404);
+
+        return Storage::disk('local')->response($photo->path, $photo->nom, [
+            'Content-Type'  => $photo->mime ?: 'image/jpeg',
+            'Cache-Control' => 'private, max-age=86400',
+        ]);
     }
 }

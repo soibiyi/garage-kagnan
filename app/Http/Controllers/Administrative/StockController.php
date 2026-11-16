@@ -645,7 +645,8 @@ private function lireLignesImport($fichier): array
             ->get()
             ->filter(function ($stock) {
                 $totalSorties = $stock->sieges->sum('sortie');
-                return ($stock->quantite - $totalSorties) <= 5;
+                // Seuil réglé par le super administrateur (Système → Paramètres), 5 par défaut
+                return ($stock->quantite - $totalSorties) <= (int) \App\Support\Parametres::get('seuil_stock');
             })
             ->values();
 

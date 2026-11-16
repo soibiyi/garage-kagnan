@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Notifications\SecretaireTacheAssignee;
 use App\Notifications\SecretaireTacheTerminee;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 /**
@@ -16,6 +17,14 @@ use Illuminate\Validation\Rule;
  */
 class SecretariatChatController extends Controller
 {
+    /** Taille maximale d'une pièce jointe (10 Mo). */
+    private const TAILLE_MAX_KO = 10240;
+
+    private const EXTENSIONS_AUTORISEES = [
+        'jpg', 'jpeg', 'png', 'webp', 'gif',
+        'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'txt', 'csv', 'zip',
+    ];
+
     public function messages(Request $request, User $secretaire)
     {
         $this->autoriser($request, $secretaire);
@@ -45,21 +54,81 @@ class SecretariatChatController extends Controller
         $this->autoriser($request, $secretaire);
 
         $data = $request->validate([
-            'contenu' => ['required', 'string', 'max:3000'],
+            'contenu' => ['nullable', 'required_without:fichier', 'string', 'max:3000'],
+            'fichier' => [
+                'nullable',
+                'file',
+                'max:'.self::TAILLE_MAX_KO,
+                'mimes:'.implode(',', self::EXTENSIONS_AUTORISEES),
+            ],
             'tache_id' => [
                 'nullable',
                 Rule::exists('secretaire_taches', 'id')->where('secretaire_id', $secretaire->id),
             ],
+        ], [
+            'contenu.required_without' => 'Écrivez un message ou joignez un fichier.',
+            'fichier.max' => 'Le fichier ne doit pas dépasser 10 Mo.',
+            'fichier.mimes' => 'Format non accepté. Photos (JPG, PNG, WEBP, GIF) ou documents (PDF, Word, Excel, PowerPoint, TXT, CSV, ZIP).',
+            'fichier.uploaded' => "Le fichier n'a pas pu être téléversé (taille maximale du serveur dépassée ?).",
         ]);
+
+        $pieceJointe = [];
+        if ($fichier = $request->file('fichier')) {
+            $pieceJointe = [
+                'piece_jointe_path' => $fichier->store('secretariat/chat/'.$secretaire->id, 'local'),
+                'piece_jointe_nom' => mb_substr($fichier->getClientOriginalName(), 0, 255),
+                'piece_jointe_mime' => $fichier->getMimeType(),
+                'piece_jointe_taille' => $fichier->getSize(),
+            ];
+        }
+
+        $contenu = trim((string) ($data['contenu'] ?? ''));
 
         $message = SecretaireMessage::create([
             'secretaire_id' => $secretaire->id,
             'sender_id' => $request->user()->id,
             'tache_id' => $data['tache_id'] ?? null,
-            'contenu' => trim($data['contenu']),
+            'contenu' => $contenu !== '' ? $contenu : null,
+            ...$pieceJointe,
         ])->load(['sender:id,name,role', 'tache:id,titre']);
 
         return response()->json(['message' => $this->presenter($message, $request->user())], 201);
+    }
+
+    /** Liste de tous les fichiers échangés dans la conversation, du plus récent au plus ancien. */
+    public function piecesJointes(Request $request, User $secretaire)
+    {
+        $this->autoriser($request, $secretaire);
+
+        $fichiers = SecretaireMessage::query()
+            ->where('secretaire_id', $secretaire->id)
+            ->whereNotNull('piece_jointe_path')
+            ->with(['sender:id,name,role', 'tache:id,titre'])
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn (SecretaireMessage $m) => $this->presenter($m, $request->user()));
+
+        return response()->json(['fichiers' => $fichiers]);
+    }
+
+    /** Télécharge / affiche la pièce jointe d'un message (participants de la conversation uniquement). */
+    public function pieceJointe(Request $request, SecretaireMessage $message)
+    {
+        $secretaire = User::findOrFail($message->secretaire_id);
+        $this->autoriser($request, $secretaire);
+
+        abort_unless(
+            $message->piece_jointe_path && Storage::disk('local')->exists($message->piece_jointe_path),
+            404
+        );
+
+        $nom = $message->piece_jointe_nom ?: basename($message->piece_jointe_path);
+        $headers = ['Content-Type' => $message->piece_jointe_mime ?: 'application/octet-stream'];
+
+        // Les images et PDF s'ouvrent dans le navigateur ; le reste est téléchargé
+        return $this->estAffichable($message) && ! $request->boolean('download')
+            ? Storage::disk('local')->response($message->piece_jointe_path, $nom, $headers)
+            : Storage::disk('local')->download($message->piece_jointe_path, $nom, $headers);
     }
 
     public function notifications(Request $request)
@@ -149,6 +218,25 @@ class SecretariatChatController extends Controller
             'est_moi' => $m->sender_id === $lecteur->id,
             'sender' => $m->sender ? ['id' => $m->sender->id, 'name' => $m->sender->name, 'role' => $m->sender->role] : null,
             'tache' => $m->tache ? ['id' => $m->tache->id, 'titre' => $m->tache->titre] : null,
+            'piece_jointe' => $m->piece_jointe_path ? [
+                'nom' => $m->piece_jointe_nom,
+                'mime' => $m->piece_jointe_mime,
+                'taille' => $m->piece_jointe_taille,
+                'est_image' => $this->estImage($m),
+                'url' => route('secretariat.chat.piece-jointe', $m),
+                'url_telechargement' => route('secretariat.chat.piece-jointe', ['message' => $m, 'download' => 1]),
+            ] : null,
         ];
+    }
+
+    private function estImage(SecretaireMessage $m): bool
+    {
+        // Le SVG est exclu (peut contenir du script)
+        return in_array($m->piece_jointe_mime, ['image/jpeg', 'image/png', 'image/webp', 'image/gif'], true);
+    }
+
+    private function estAffichable(SecretaireMessage $m): bool
+    {
+        return $this->estImage($m) || $m->piece_jointe_mime === 'application/pdf';
     }
 }

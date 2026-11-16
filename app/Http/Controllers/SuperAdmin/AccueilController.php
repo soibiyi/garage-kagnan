@@ -36,15 +36,24 @@ class AccueilController extends Controller
             ->groupBy('role');
 
         return Inertia::render('SuperAdmin/Accueil', [
-            // Tableau de bord administrateur intégré (bloc 3) : mêmes données que la page admin
-            'admin' => app(UserController::class)->donneesTableauDeBord(),
             'comptesParRole' => $comptes,
             'stats' => [
                 'en_ligne' => User::where('last_seen_at', '>', now()->subMinutes(2))->count(),
                 'erreurs_ouvertes' => ErrorLog::whereNull('resolue_at')->count(),
                 'actions_aujourdhui' => ActivityLog::where('created_at', '>=', now()->startOfDay())->where('method', '!=', 'GET')->count(),
                 'administrateurs' => User::where('role', 'admin')->count(),
+                'alertes_7j' => \App\Models\AuditLog::whereNotNull('alerte')->where('created_at', '>=', now()->subDays(7))->count(),
+                'suspendus' => User::whereNotNull('suspendu_at')->count(),
+                'comptes' => User::where('is_superadmin', false)->count(),
             ],
+        ]);
+    }
+
+    /** Espace administrateur : le tableau de bord admin complet (CA, devis, pièces, employés). */
+    public function espaceAdmin()
+    {
+        return Inertia::render('SuperAdmin/EspaceAdmin', [
+            'admin' => app(UserController::class)->donneesTableauDeBord(),
         ]);
     }
 }

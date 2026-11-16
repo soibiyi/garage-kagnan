@@ -639,7 +639,8 @@ public function rechercherPieces(Request $request, ?Intervention $dossier = null
             $remise = min(max((float) $remise, 0), 100);
             $ht = ($qte * $pu) * (1 - $remise / 100);
             $nePasAppliquerTva = $ligne['ne_pas_appliquer_tva'] ?? false;
-            $ttc = $nePasAppliquerTva ? $ht : $ht * 1.18;
+            // Taux de TVA réglé par le super administrateur (18 % par défaut)
+            $ttc = $nePasAppliquerTva ? $ht : $ht * (1 + \App\Support\Parametres::tauxTva());
 
             $famille = !empty($ligne['famille']) ? $ligne['famille'] : null;
             $sousFamille = ($famille && !empty($ligne['sous_famille'])) ? $ligne['sous_famille'] : null;

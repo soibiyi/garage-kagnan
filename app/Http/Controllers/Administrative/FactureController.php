@@ -324,7 +324,8 @@ class FactureController extends Controller
 
         DB::transaction(function () use ($dossier) {
             if ($facture = Facture::where('intervention_id', $dossier->id)->first()) {
-                Paiement::where('facture_id', $facture->id)->delete();
+                // Un par un : chaque suppression de paiement est tracée (audit)
+                Paiement::where('facture_id', $facture->id)->get()->each->delete();
                 $facture->delete();
             }
 

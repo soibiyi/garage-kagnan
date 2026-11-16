@@ -115,7 +115,7 @@ class UserController extends Controller
         if (auth()->user()->estSuperAdmin()) {
             session()->reflash(); // garde les messages « Collaborateur créé… » après la double redirection
 
-            return redirect()->to(route('superadmin.accueil') . '#espace-admin');
+            return redirect()->route('superadmin.espace-admin');
         }
 
         return Inertia::render('Admin/Users/Index', $this->donneesTableauDeBord());
@@ -290,7 +290,7 @@ class UserController extends Controller
         $siege = $this->siegeActif();
 
         // Chargement de client.consignes.user pour récupérer les consignes associées au client
-        $interactions = InteractionClient::with(['user', 'client.consignes.user', 'vehicule'])
+        $interactions = InteractionClient::with(['user', 'client.consignes.user', 'vehicule', 'photos'])
             ->whereHas('user', fn ($q) => $q->where('siege', $siege))
             ->latest()
             ->get();

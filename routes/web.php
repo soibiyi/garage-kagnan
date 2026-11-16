@@ -102,6 +102,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 // Super administrateur : supervision en direct, journal des erreurs, « voir en tant que »
 Route::middleware(['auth', 'verified', 'superadmin'])->prefix('superadmin')->name('superadmin.')->group(function () {
     Route::get('/', [\App\Http\Controllers\SuperAdmin\AccueilController::class, 'index'])->name('accueil');
+    Route::get('/espace-admin', [\App\Http\Controllers\SuperAdmin\AccueilController::class, 'espaceAdmin'])->name('espace-admin');
     Route::get('/supervision', [SupervisionController::class, 'index'])->name('supervision.index');
     Route::get('/supervision/etat', [SupervisionController::class, 'etat'])->name('supervision.etat');
     Route::get('/supervision/flux', [SupervisionController::class, 'flux'])->name('supervision.flux');
@@ -114,6 +115,39 @@ Route::middleware(['auth', 'verified', 'superadmin'])->prefix('superadmin')->nam
     Route::get('/petites-fournitures', [\App\Http\Controllers\SuperAdmin\PetitesFournituresController::class, 'index'])->name('petites-fournitures');
     Route::get('/supervision/direct', [SupervisionController::class, 'direct'])->name('supervision.direct');
     Route::patch('/alertes/{notification}/lue', [ErreurController::class, 'marquerLue'])->name('alertes.lue');
+
+    // Comparatif des sièges
+    Route::get('/sieges', [\App\Http\Controllers\SuperAdmin\SiegesController::class, 'index'])->name('sieges');
+    Route::get('/sieges/export', [\App\Http\Controllers\SuperAdmin\SiegesController::class, 'export'])->name('sieges.export');
+
+    // Performance des équipes
+    Route::get('/equipes', [\App\Http\Controllers\SuperAdmin\EquipesController::class, 'index'])->name('equipes');
+    Route::get('/equipes/export', [\App\Http\Controllers\SuperAdmin\EquipesController::class, 'export'])->name('equipes.export');
+
+    // Contrôle et anti-fraude : actions sensibles, historique avant / après, inventaire
+    Route::get('/controle', [\App\Http\Controllers\SuperAdmin\ControleController::class, 'index'])->name('controle');
+    Route::get('/controle/export', [\App\Http\Controllers\SuperAdmin\ControleController::class, 'export'])->name('controle.export');
+    Route::post('/controle/inventaire', [\App\Http\Controllers\SuperAdmin\ControleController::class, 'compter'])->name('controle.inventaire');
+
+    // Sécurité des comptes
+    Route::get('/securite', [\App\Http\Controllers\SuperAdmin\SecuriteController::class, 'index'])->name('securite');
+    Route::post('/securite/{user}/deconnecter', [\App\Http\Controllers\SuperAdmin\SecuriteController::class, 'deconnecter'])->name('securite.deconnecter');
+    Route::post('/securite/{user}/suspendre', [\App\Http\Controllers\SuperAdmin\SecuriteController::class, 'suspendre'])->name('securite.suspendre');
+    Route::post('/securite/{user}/reactiver', [\App\Http\Controllers\SuperAdmin\SecuriteController::class, 'reactiver'])->name('securite.reactiver');
+
+    // Outils système : paramètres, maintenance, annonces
+    Route::get('/systeme', [\App\Http\Controllers\SuperAdmin\SystemeController::class, 'index'])->name('systeme');
+    Route::put('/systeme/parametres', [\App\Http\Controllers\SuperAdmin\SystemeController::class, 'parametres'])->name('systeme.parametres');
+    Route::put('/systeme/maintenance', [\App\Http\Controllers\SuperAdmin\SystemeController::class, 'maintenance'])->name('systeme.maintenance');
+    Route::post('/systeme/annonces', [\App\Http\Controllers\SuperAdmin\SystemeController::class, 'annonceStore'])->name('systeme.annonces.store');
+    Route::put('/systeme/annonces/{annonce}', [\App\Http\Controllers\SuperAdmin\SystemeController::class, 'annonceUpdate'])->name('systeme.annonces.update');
+    Route::delete('/systeme/annonces/{annonce}', [\App\Http\Controllers\SuperAdmin\SystemeController::class, 'annonceDestroy'])->name('systeme.annonces.destroy');
+
+    // Rapports quotidiens / hebdomadaires
+    Route::get('/rapports', [\App\Http\Controllers\SuperAdmin\RapportController::class, 'index'])->name('rapports.index');
+    Route::post('/rapports', [\App\Http\Controllers\SuperAdmin\RapportController::class, 'generer'])->name('rapports.generer');
+    Route::get('/rapports/{rapport}', [\App\Http\Controllers\SuperAdmin\RapportController::class, 'show'])->name('rapports.show');
+    Route::get('/rapports/{rapport}/pdf', [\App\Http\Controllers\SuperAdmin\RapportController::class, 'pdf'])->name('rapports.pdf');
 });
 
 // Accessibles à tout utilisateur connecté
@@ -135,6 +169,8 @@ Route::middleware(['auth', 'verified', 'role:secretaire'])->prefix('secretaire')
 Route::middleware(['auth', 'verified', 'role:admin,secretaire'])->prefix('secretariat')->name('secretariat.')->group(function () {
     Route::get('/chat/{secretaire}/messages', [SecretariatChatController::class, 'messages'])->name('chat.index');
     Route::post('/chat/{secretaire}/messages', [SecretariatChatController::class, 'store'])->middleware('throttle:30,1')->name('chat.store');
+    Route::get('/chat/{secretaire}/pieces-jointes', [SecretariatChatController::class, 'piecesJointes'])->name('chat.pieces-jointes');
+    Route::get('/chat/messages/{message}/piece-jointe', [SecretariatChatController::class, 'pieceJointe'])->name('chat.piece-jointe');
     Route::get('/notifications', [SecretariatChatController::class, 'notifications'])->name('notifications');
     Route::patch('/notifications/{notification}/read', [SecretariatChatController::class, 'markRead'])->name('notifications.read');
 });
@@ -179,6 +215,7 @@ Route::middleware(['auth', 'verified'])->prefix('suivi-client')->name('charge_cl
     Route::get('/vehicules/{vehicule}/interventions', [ChargeClientController::class, 'interventionsVehicule'])->name('vehicules.interventions');
     Route::patch('/interventions/{intervention}/statut', [ChargeClientController::class, 'updateStatut'])->name('vehicules.update-statut');
     Route::post('/vehicules/{vehicule}/interactions', [ChargeClientController::class, 'storeInteraction'])->name('vehicules.interactions.store');
+    Route::get('/interactions/photos/{photo}', [ChargeClientController::class, 'interactionPhoto'])->name('interactions.photos.show');
 Route::get('clients/{client}/chat', [EspaceClientController::class, 'chat'])->name('clients.chat');
 Route::get('clients/{client}/demandes', [ChargeClientController::class, 'demandes'])->name('clients.demandes');Route::get('clients/{client}/rendez-vous', [EspaceClientController::class, 'rendezVous'])->name('clients.rendez-vous');
 Route::post('clients/{client}/portal-requests/{portalRequest}/refuse',

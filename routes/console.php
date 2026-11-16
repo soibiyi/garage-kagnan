@@ -52,3 +52,29 @@ Artisan::command('superadmin:creer {email} {--nom=}', function (string $email) {
     return 0;
 })->purpose('Créer ou promouvoir un super administrateur');
 
+
+/**
+ * Rapports du super administrateur (activables dans Super admin → Système) :
+ *   php artisan superadmin:rapport jour|semaine
+ */
+Artisan::command('superadmin:rapport {periode=jour}', function (string $periode) {
+    if (! in_array($periode, ['jour', 'semaine'], true)) {
+        $this->error('Période : jour ou semaine.');
+        return 1;
+    }
+    $rapport = \App\Support\RapportBuilder::generer($periode);
+    $this->info("Rapport #{$rapport->id} généré et envoyé.");
+
+    return 0;
+})->purpose('Générer et envoyer le rapport du super administrateur');
+
+Schedule::command('superadmin:rapport jour')->dailyAt('20:00')
+    ->when(fn () => (bool) \App\Support\Parametres::get('rapport_quotidien'));
+Schedule::command('superadmin:rapport semaine')->weeklyOn(1, '07:00')
+    ->when(fn () => (bool) \App\Support\Parametres::get('rapport_hebdomadaire'));
+
+// Historiques de sécurité et d'audit : conservés 1 an
+Schedule::call(function () {
+    DB::table('connexions')->where('created_at', '<', now()->subYear())->delete();
+    DB::table('audit_logs')->where('created_at', '<', now()->subYear())->whereNull('alerte')->delete();
+})->daily();
