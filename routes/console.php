@@ -13,7 +13,7 @@ Artisan::command('inspire', function () {
 
 Schedule::call(function () {
     DB::table('notifications')
-        ->where('type', AdminInstructionReceived::class)
+        ->whereIn('type', \App\Http\Controllers\ChargeClientInstructionNotificationController::TYPES)
         ->whereNotNull('read_at')
         ->where('read_at', '<=', now()->subHours(72))
         ->delete();

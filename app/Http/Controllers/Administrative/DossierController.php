@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Barryvdh\DomPDF\Facade\Pdf;
 use App\Models\Stock;
 use App\Support\PetiteFourniture;
+use App\Support\TotauxFacture;
 
 class DossierController extends Controller
 {
@@ -129,9 +130,9 @@ class DossierController extends Controller
         $devisComplementaire = $devis->is_complementaire;
         $etaitAccepte = $devis->statut === 'accepte';
 
-        // Devis déjà accepté : on ne change plus le choix du client dès qu'un paiement existe
-        if ($etaitAccepte && !$devisComplementaire && $this->aDejaUnPaiement($dossier)) {
-            return back()->with('error', 'Un paiement a déjà été enregistré : le choix du client ne peut plus être modifié.');
+        // Devis déjà accepté : après un versement, seul un administrateur change encore le choix du client
+        if ($etaitAccepte && !$devisComplementaire && !$this->estAdmin() && $this->aDejaUnPaiement($dossier)) {
+            return back()->with('error', 'Un paiement a déjà été enregistré : seul un administrateur peut encore modifier le choix du client.');
         }
 
         $request->validate([
@@ -156,6 +157,9 @@ class DossierController extends Controller
             if (!$devisComplementaire) {
                 $dossier->update(['statut' => 'accepte']);
             }
+
+            // Facture déjà payée en partie : total contrôlé puis facture remise à jour
+            $this->controlerEtResynchroniserFacture($dossier);
         });
 
         // Redirection : dashboard du chargé de suivi client, sinon liste d'attente
@@ -258,10 +262,42 @@ class DossierController extends Controller
         )->exists();
     }
 
+    /** Seul un administrateur (ou le super administrateur) modifie une facture déjà en partie payée. */
+    private function estAdmin(): bool
+    {
+        return auth()->user()?->role === 'admin';
+    }
+
+    /**
+     * Après modification d'une facture déjà payée en partie : le nouveau total ne peut pas
+     * descendre sous ce qui a déjà été encaissé (annule la transaction en cours sinon),
+     * puis la facture stockée est remise à jour (montant total, statut payée / partielle).
+     */
+    private function controlerEtResynchroniserFacture(Intervention $dossier): void
+    {
+        $dossier->unsetRelation('devis')->unsetRelation('devisComplements');
+        $total = TotauxFacture::totalAccepte($dossier);
+        $encaisse = TotauxFacture::encaisse($dossier);
+
+        if ($encaisse > 0 && $total < $encaisse) {
+            throw ValidationException::withMessages([
+                'lignes' => sprintf(
+                    'Le nouveau total (%s F) serait inférieur au montant déjà encaissé (%s F). Gardez au moins %s F de lignes acceptées.',
+                    number_format($total, 0, ',', ' '),
+                    number_format($encaisse, 0, ',', ' '),
+                    number_format($encaisse, 0, ',', ' ')
+                ),
+            ]);
+        }
+
+        TotauxFacture::resynchroniser($dossier);
+    }
+
     /**
      * Un devis peut être modifié :
      *  - tant qu'il est en attente de validation client ;
-     *  - ou une fois accepté, mais seulement si AUCUN paiement n'a encore été enregistré.
+     *  - une fois accepté, tant qu'AUCUN paiement n'a été enregistré ;
+     *  - après un versement, uniquement par un administrateur.
      */
     private function verifierDevisModifiable(Intervention $dossier): void
     {
@@ -276,9 +312,9 @@ class DossierController extends Controller
         abort_unless($enAttente || $accepte, 403, 'Ce devis ne peut plus être modifié.');
 
         abort_if(
-            $accepte && $this->aDejaUnPaiement($dossier),
+            $accepte && ! $this->estAdmin() && $this->aDejaUnPaiement($dossier),
             403,
-            'Un paiement a déjà été enregistré : ce devis ne peut plus être modifié.'
+            'Un paiement a déjà été enregistré : seul un administrateur peut encore modifier cette facture.'
         );
     }
 
@@ -292,9 +328,20 @@ class DossierController extends Controller
 
         // Devis déjà accepté : même page que « Traiter » (cases à cocher), avec ajout / suppression de lignes
         if ($dossier->statut === 'accepte') {
+            $dossier->load('devisComplements.lignes');
+
             return Inertia::render('Administration/FacturationShow', [
                 'dossier' => $dossier,
                 'modeEdition' => true,
+                // Facture déjà payée en partie (modification réservée à l'admin) : montant encaissé
+                // et total des devis complémentaires, pour afficher le nouveau reste à payer.
+                'facturation' => [
+                    'encaisse' => TotauxFacture::encaisse($dossier),
+                    'total_complements' => $dossier->devisComplements->sum(fn ($d) => PetiteFourniture::totalFinal(
+                        $d,
+                        (float) $d->lignes->where('is_accepted', true)->sum('montant_ttc')
+                    )),
+                ],
             ]);
         }
 
@@ -351,6 +398,9 @@ class DossierController extends Controller
             $this->creerLignesDevis($devis, $lignes);
             $this->appliquerPetiteFourniture($devis, $request);
             $devis->touch();
+
+            // Facture existante (versement déjà reçu) : total contrôlé puis facture remise à jour
+            $this->controlerEtResynchroniserFacture($dossier);
         });
 
         if ($etaitAccepte) {

@@ -6,10 +6,11 @@ defineProps({
     users: Array,
     stats: Object,
     siegeFiltre: { type: String, default: null },
+    aTraiter: { type: Object, default: null },
 });
 </script>
 
 <template>
   <Head title="Gestion des utilisateurs" />
-  <TableauDeBordAdmin :users="users" :stats="stats" :siege-filtre="siegeFiltre" />
+  <TableauDeBordAdmin :users="users" :stats="stats" :siege-filtre="siegeFiltre" :a-traiter="aTraiter" />
 </template>

@@ -5,10 +5,17 @@ namespace App\Http\Controllers;
 use App\Models\InteractionClient;
 use App\Models\Vehicule;
 use App\Notifications\AdminInstructionReceived;
+use App\Notifications\ClientsAttribues;
 use Illuminate\Http\Request;
 
+/**
+ * Bulle de notifications du chargé client : consignes de l'administrateur
+ * et clients qui viennent de lui être attribués.
+ */
 class ChargeClientInstructionNotificationController extends Controller
 {
+    public const TYPES = [AdminInstructionReceived::class, ClientsAttribues::class];
+
     public function index(Request $request)
     {
         abort_unless($request->user()->role === 'charge_client' || ($request->user() instanceof \App\Models\User && $request->user()->estSuperAdmin()), 403);
@@ -17,14 +24,14 @@ class ChargeClientInstructionNotificationController extends Controller
 
         $request->user()
             ->notifications()
-            ->where('type', AdminInstructionReceived::class)
+            ->whereIn('type', self::TYPES)
             ->whereNotNull('read_at')
             ->where('read_at', '<=', $dateExpiration)
             ->delete();
 
         $notifications = $request->user()
             ->notifications()
-            ->where('type', AdminInstructionReceived::class)
+            ->whereIn('type', self::TYPES)
             ->where(fn ($query) => $query
                 ->whereNull('read_at')
                 ->orWhere('read_at', '>', $dateExpiration))
@@ -41,7 +48,7 @@ class ChargeClientInstructionNotificationController extends Controller
 
         $unreadCount = $request->user()
             ->unreadNotifications()
-            ->where('type', AdminInstructionReceived::class)
+            ->whereIn('type', self::TYPES)
             ->count();
 
         return response()->json([
@@ -56,6 +63,13 @@ class ChargeClientInstructionNotificationController extends Controller
      */
     private function urlSuivi(int $userId, array $data): ?string
     {
+        // Attribution : fiche du client s'il est seul, sinon la liste des clients du chargé
+        if (($data['kind'] ?? null) === 'attribution') {
+            return ($data['nb'] ?? 0) === 1 && ! empty($data['client_id'])
+                ? route('charge_client.clients.show', $data['client_id'])
+                : route('charge_client.clients.index');
+        }
+
         $clientId = $data['client_id'] ?? null;
         if (! $clientId) {
             return null;
@@ -80,7 +94,7 @@ class ChargeClientInstructionNotificationController extends Controller
 
         $record = $request->user()
             ->notifications()
-            ->where('type', AdminInstructionReceived::class)
+            ->whereIn('type', self::TYPES)
             ->whereKey($notification)
             ->firstOrFail();
         if ($record->read_at === null) {

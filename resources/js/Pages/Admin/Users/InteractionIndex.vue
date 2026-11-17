@@ -65,6 +65,7 @@ const TYPES = [
     { valeur: 'email', label: 'E-mail', icone: 'fa-solid fa-envelope' },
     { valeur: 'visite', label: 'Visite', icone: 'fa-solid fa-handshake' },
     { valeur: 'autre', label: 'Autre', icone: 'fa-solid fa-ellipsis' },
+    { valeur: 'attribution', label: 'Attribution par l’admin', icone: 'fa-solid fa-user-check' },
 ];
 
 const iconeType = (valeur) => TYPES.find((t) => t.valeur === valeur)?.icone || 'fa-solid fa-comment';

@@ -129,6 +129,7 @@ class ChargeClientController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'siege']);
 
+
         $clients = Client::with([
                 'vehicules' => $this->vehiculesDuSiege(),
                 'vehicules.interventions' => $this->dossiersDuSiege(),
@@ -218,11 +219,14 @@ class ChargeClientController extends Controller
                 'id' => $charge->id,
                 'name' => $charge->name,
                 'nb_clients' => (int) ($nbParCharge[$charge->id] ?? 0),
+                'siege' => $charge->siege,
                 'est_moi' => $charge->id === auth()->id(),
                 // Un chargé client n'ouvre que sa propre carte ; l'admin les ouvre toutes.
                 'accessible' => $this->estAdmin() || $charge->id === auth()->id(),
             ])->values(),
             'peutVoirGroupes' => $this->estChargeClient() || $this->estAdmin(),
+            // Seul l'administrateur attribue les clients non attribués à un chargé client
+            'peutAttribuer' => $this->estAdmin(),
             'filters' => $request->only(['search']),
         ]);
     }

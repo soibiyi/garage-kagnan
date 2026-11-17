@@ -9,6 +9,7 @@ use App\Models\Client;
 use App\Models\InteractionClient;
 use App\Models\Consigne;
 use App\Models\ClientPortalRequest;
+use App\Models\DemandeSuppression;
 use App\Notifications\AdminInstructionReceived;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -160,6 +161,32 @@ class UserController extends Controller
             'users' => $users,
             'stats' => $stats,
             'siegeFiltre' => $siege,
+            'aTraiter' => $this->elementsATraiter(),
+        ];
+    }
+
+    /**
+     * Cartes « À traiter » du tableau de bord : clients sans chargé client
+     * et demandes de suppression en attente de décision.
+     */
+    private function elementsATraiter(): array
+    {
+        $orphelins = Client::query()
+            ->whereDoesntHave('interactions', fn ($i) => $i->whereHas('user', fn ($u) => $u->where('role', 'charge_client')));
+
+        $demandes = DemandeSuppression::enAttente();
+
+        return [
+            'orphelins' => [
+                'total' => (clone $orphelins)->count(),
+                'liste' => $orphelins->latest()->limit(5)->get(['id', 'nom', 'prenom', 'telephone', 'siege', 'portal_registered', 'created_at']),
+            ],
+            'charges' => User::where('role', 'charge_client')->orderBy('name')->get(['id', 'name', 'siege']),
+            'suppressions' => [
+                'total' => (clone $demandes)->count(),
+                'liste' => $demandes->with('demandeur:id,name,role')->oldest('id')->limit(5)->get()
+                    ->map(fn (DemandeSuppression $d) => DemandeSuppressionController::presenter($d)),
+            ],
         ];
     }
 

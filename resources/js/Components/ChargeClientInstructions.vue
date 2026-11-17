@@ -21,6 +21,20 @@ let timer
 let toastTimer
 
 const nonLues = computed(() => notifications.value.filter((n) => !n.read_at))
+
+// Deux sortes de notifications : consigne de l'admin, ou client(s) attribué(s) par l'admin
+const estAttribution = (n) => n?.data?.kind === 'attribution'
+const titreToast = (n) => {
+  if (!estAttribution(n)) return 'Nouvelle consigne de l’administrateur'
+  return n.data.nb > 1 ? 'Nouveaux clients attribués' : 'Nouveau client attribué'
+}
+const detail = (n) => {
+  if (!estAttribution(n)) return n.data.consigne
+  const noms = n.data.client_names || []
+  const reste = (n.data.nb || noms.length) - noms.length
+  const liste = n.data.nb > 1 ? ` : ${noms.join(', ')}${reste > 0 ? ` et ${reste} autre${reste > 1 ? 's' : ''}` : ''}` : ''
+  return `${n.data.message}${liste}`
+}
 const listeAffichee = computed(() => (resumeConnexion.value ? nonLues.value : notifications.value))
 
 function lireSession(cle) {
@@ -138,12 +152,15 @@ onBeforeUnmount(() => {
           class="absolute bottom-20 right-0 w-80 max-w-[calc(100vw-3rem)] rounded-2xl border border-rose-200 bg-white p-4 text-left shadow-2xl"
           @click="openNotification(toast)"
         >
-          <span class="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-[#E11D48]">
-            <i class="fa-solid fa-bullhorn" aria-hidden="true"></i>
-            Nouvelle consigne de l’administrateur
+          <span
+            class="flex items-center gap-2 text-xs font-black uppercase tracking-wider"
+            :class="estAttribution(toast) ? 'text-amber-600' : 'text-[#E11D48]'"
+          >
+            <i class="fa-solid" :class="estAttribution(toast) ? 'fa-user-check' : 'fa-bullhorn'" aria-hidden="true"></i>
+            {{ titreToast(toast) }}
           </span>
           <span class="mt-1 block text-sm font-extrabold text-[#0B0F19]">{{ toast.data.client_name }}</span>
-          <span class="mt-1 block line-clamp-2 text-sm text-gray-700">{{ toast.data.consigne }}</span>
+          <span class="mt-1 block line-clamp-2 text-sm text-gray-700">{{ detail(toast) }}</span>
         </button>
       </Transition>
 
@@ -159,7 +176,7 @@ onBeforeUnmount(() => {
         >
           <p class="border-b border-gray-100 px-4 py-3 text-sm font-black text-[#0B0F19]">
             <template v-if="resumeConnexion">
-              {{ nonLues.length }} consigne{{ nonLues.length > 1 ? 's' : '' }} reçue{{ nonLues.length > 1 ? 's' : '' }} pendant votre absence
+              {{ nonLues.length }} notification{{ nonLues.length > 1 ? 's' : '' }} reçue{{ nonLues.length > 1 ? 's' : '' }} pendant votre absence
               <button
                 type="button"
                 class="mt-1 block text-xs font-bold text-[#E11D48] hover:underline"
@@ -168,7 +185,7 @@ onBeforeUnmount(() => {
                 Voir tout l’historique
               </button>
             </template>
-            <template v-else>Instructions de l’administrateur</template>
+            <template v-else>Notifications de l’administrateur</template>
           </p>
           <ul v-if="listeAffichee.length" class="max-h-96 divide-y divide-gray-100 overflow-y-auto">
             <li v-for="notification in listeAffichee" :key="notification.id">
@@ -178,10 +195,23 @@ onBeforeUnmount(() => {
                 :class="{ 'bg-rose-50/60': !notification.read_at }"
                 @click="openNotification(notification)"
               >
-                <span class="block text-sm font-extrabold text-[#E11D48]">{{ notification.data.client_name }}</span>
-                <span class="mt-1 block line-clamp-2 text-sm font-bold text-[#0B0F19]">{{ notification.data.consigne }}</span>
+                <span
+                  v-if="estAttribution(notification)"
+                  class="mb-1 inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700"
+                >
+                  <i class="fa-solid fa-user-check text-[9px]" aria-hidden="true"></i>
+                  {{ notification.data.nb > 1 ? 'Clients attribués' : 'Client attribué' }}
+                </span>
+                <span
+                  class="block text-sm font-extrabold"
+                  :class="estAttribution(notification) ? 'text-amber-700' : 'text-[#E11D48]'"
+                >{{ notification.data.client_name }}</span>
+                <span class="mt-1 block line-clamp-2 text-sm font-bold text-[#0B0F19]">{{ detail(notification) }}</span>
                 <span class="mt-2 flex items-center justify-between text-xs text-gray-500">
-                  <span><i class="fa-solid fa-arrow-right mr-1" aria-hidden="true"></i>Suivi des interactions</span>
+                  <span v-if="estAttribution(notification)">
+                    <i class="fa-solid fa-arrow-right mr-1" aria-hidden="true"></i>{{ notification.data.nb > 1 ? 'Voir mes clients' : 'Ouvrir la fiche client' }}
+                  </span>
+                  <span v-else><i class="fa-solid fa-arrow-right mr-1" aria-hidden="true"></i>Suivi des interactions</span>
                   <span
                     v-if="notification.read_at"
                     class="text-emerald-600"
@@ -195,14 +225,14 @@ onBeforeUnmount(() => {
               </button>
             </li>
           </ul>
-          <p v-else class="px-4 py-6 text-center text-sm text-gray-500">Aucune nouvelle instruction.</p>
+          <p v-else class="px-4 py-6 text-center text-sm text-gray-500">Aucune nouvelle notification.</p>
         </div>
       </Transition>
 
       <button
         type="button"
         class="relative flex h-16 w-16 items-center justify-center rounded-full bg-[#E11D48] text-white shadow-xl transition hover:scale-105 hover:bg-rose-700 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-rose-300"
-        :aria-label="unreadCount ? `${unreadCount} instruction(s) non consultée(s)` : 'Ouvrir les instructions de l’administrateur'"
+        :aria-label="unreadCount ? `${unreadCount} notification(s) non consultée(s)` : 'Ouvrir les notifications de l’administrateur'"
         :aria-expanded="open"
         @click="basculer"
       >
