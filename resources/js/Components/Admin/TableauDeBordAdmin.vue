@@ -41,6 +41,10 @@ import {
     faCircleNotch,
     faListCheck,
     faUserTie,
+    faUserPlus,
+    faUserCheck,
+    faCheck,
+    faCircleCheck,
 } from '@fortawesome/free-solid-svg-icons';
 
 const props = defineProps({
@@ -48,7 +52,79 @@ const props = defineProps({
     stats: Object,
     siegeFiltre: { type: String, default: null },
     integre: { type: Boolean, default: false },
+    // Cartes « À traiter » : clients non attribués + demandes de suppression
+    aTraiter: { type: Object, default: null },
 });
+
+// ─── À traiter : attribution des clients & demandes de suppression ──
+const orphelins = computed(() => props.aTraiter?.orphelins ?? { total: 0, liste: [] });
+const chargesAttribuables = computed(() => props.aTraiter?.charges ?? []);
+const suppressions = computed(() => props.aTraiter?.suppressions ?? { total: 0, liste: [] });
+
+const chargeChoisi = ref({});
+const actionEnCours = ref(null); // 'attr-<id>' | 'sup-<id>'
+const aConfirmer = ref(null); // demande dont la suppression attend une confirmation
+const aRefuser = ref(null); // demande en cours de refus (affiche le motif)
+const motifRefus = ref('');
+const retour = ref(null); // { type: 'success' | 'error', texte }
+let retourTimer;
+
+const nomClient = (c) => [c.prenom, c.nom].filter(Boolean).join(' ') || 'Client';
+const libelleCharge = (c) => (c.siege ? `${c.name} · ${c.siege}` : c.name);
+const depuis = (date) => {
+    const jours = Math.floor((Date.now() - new Date(date).getTime()) / 86400000);
+    if (jours <= 0) return "aujourd'hui";
+    if (jours === 1) return 'hier';
+    return `il y a ${jours} j`;
+};
+
+function afficherRetour() {
+    const flash = page.props.flash || {};
+    retour.value = flash.error
+        ? { type: 'error', texte: flash.error }
+        : flash.success ? { type: 'success', texte: flash.success } : null;
+    window.clearTimeout(retourTimer);
+    retourTimer = window.setTimeout(() => { retour.value = null; }, 6000);
+}
+
+const optionsAction = (cle, apres = () => {}) => ({
+    preserveScroll: true,
+    onStart: () => { actionEnCours.value = cle; },
+    onFinish: () => { actionEnCours.value = null; },
+    onSuccess: () => { apres(); afficherRetour(); },
+    onError: (erreurs) => { retour.value = { type: 'error', texte: Object.values(erreurs)[0] || "L'action a échoué." }; },
+});
+
+function attribuerDepuisCarte(client) {
+    const chargeId = chargeChoisi.value[client.id];
+    if (!chargeId || actionEnCours.value) return;
+    router.post(
+        route('admin.clients.attribuer'),
+        { client_ids: [client.id], charge_id: chargeId },
+        optionsAction(`attr-${client.id}`, () => { delete chargeChoisi.value[client.id]; })
+    );
+}
+
+function validerSuppression(d) {
+    if (actionEnCours.value) return;
+    router.post(
+        route('admin.demandes-suppression.approuver', d.id),
+        {},
+        optionsAction(`sup-${d.id}`, () => { aConfirmer.value = null; })
+    );
+}
+
+function refuserSuppression(d) {
+    if (actionEnCours.value) return;
+    router.post(
+        route('admin.demandes-suppression.refuser', d.id),
+        { reponse: motifRefus.value.trim() || null },
+        optionsAction(`sup-${d.id}`, () => { aRefuser.value = null; motifRefus.value = ''; })
+    );
+}
+
+const ouvrirRefus = (d) => { aConfirmer.value = null; aRefuser.value = d.id; motifRefus.value = ''; };
+const ouvrirConfirmation = (d) => { aRefuser.value = null; aConfirmer.value = d.id; };
 
 const page = usePage();
 const meId = computed(() => page.props.auth?.user?.id);
@@ -429,6 +505,181 @@ const logout = () => {
             <p class="mt-1 text-sm font-medium text-[#6B6E70]">Clients totaux</p>
           </div>
         </Link>
+      </section>
+
+      <!-- ═══ À TRAITER : attribution des clients & demandes de suppression ═══ -->
+      <section
+        v-if="aTraiter"
+        class="space-y-3"
+        :class="ready ? 'kg-rise' : 'opacity-0'"
+        style="--d: 135ms"
+        aria-label="À traiter"
+      >
+        <p
+          v-if="retour"
+          role="status"
+          class="flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-bold"
+          :class="retour.type === 'error' ? 'bg-red-50 text-red-700 ring-1 ring-red-200' : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'"
+        >
+          <font-awesome-icon :icon="retour.type === 'error' ? faTriangleExclamation : faCircleCheck" />
+          {{ retour.texte }}
+        </p>
+
+        <div class="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-2">
+          <!-- Clients non attribués -->
+          <div class="glass glass-lg flex flex-col">
+            <div class="card-head flex items-center gap-3">
+              <span class="tile-base flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
+                <font-awesome-icon :icon="faUserPlus" />
+              </span>
+              <div class="min-w-0 flex-1">
+                <h2 class="text-base font-black text-[#1A1A1A]">Clients non attribués</h2>
+                <p class="mt-0.5 text-xs text-[#6B6E70]">Confiez chaque nouveau client à un chargé client.</p>
+              </div>
+              <span
+                class="grid h-8 min-w-8 place-items-center rounded-full px-2 text-sm font-black tabular-nums"
+                :class="orphelins.total ? 'bg-amber-500 text-white' : 'bg-gray-100 text-gray-500'"
+              >{{ orphelins.total }}</span>
+            </div>
+
+            <ul v-if="orphelins.liste.length" class="flex-1 divide-y divide-black/5 px-4 py-2 sm:px-5">
+              <li v-for="client in orphelins.liste" :key="client.id" class="flex flex-col gap-2 py-3 sm:flex-row sm:items-center">
+                <div class="min-w-0 flex-1">
+                  <p class="truncate text-sm font-bold text-[#1A1A1A]">
+                    {{ nomClient(client) }}
+                    <span v-if="client.portal_registered" class="ml-1 rounded-md bg-[#C8102E]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#C8102E]">En ligne</span>
+                  </p>
+                  <p class="truncate text-xs text-[#6B6E70]">
+                    {{ client.telephone || 'Téléphone non renseigné' }}<template v-if="client.siege"> · {{ client.siege }}</template> · {{ depuis(client.created_at) }}
+                  </p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <label :for="`dash-charge-${client.id}`" class="sr-only">Chargé client pour {{ nomClient(client) }}</label>
+                  <select
+                    :id="`dash-charge-${client.id}`"
+                    v-model="chargeChoisi[client.id]"
+                    class="min-h-9 w-full min-w-0 rounded-xl border border-black/10 bg-white/80 px-2 py-1 text-xs font-bold text-[#1A1A1A] focus:border-amber-500 focus:ring-amber-400/30 sm:w-44"
+                  >
+                    <option :value="undefined" disabled>Attribuer à…</option>
+                    <option v-for="c in chargesAttribuables" :key="c.id" :value="c.id">{{ libelleCharge(c) }}</option>
+                  </select>
+                  <button
+                    type="button"
+                    class="gbtn gbtn-sm gbtn-neutral shrink-0"
+                    :disabled="!chargeChoisi[client.id] || !!actionEnCours"
+                    :aria-label="`Attribuer ${nomClient(client)}`"
+                    @click="attribuerDepuisCarte(client)"
+                  >
+                    <font-awesome-icon :icon="actionEnCours === `attr-${client.id}` ? faCircleNotch : faUserCheck" :spin="actionEnCours === `attr-${client.id}`" />
+                    <span>Attribuer</span>
+                  </button>
+                </div>
+              </li>
+            </ul>
+            <p v-else class="flex flex-1 items-center justify-center gap-2 px-5 py-8 text-sm font-medium text-emerald-700">
+              <font-awesome-icon :icon="faCircleCheck" /> Tous les clients ont un chargé client.
+            </p>
+            <p v-if="orphelins.liste.length && !chargesAttribuables.length" class="px-5 pb-2 text-xs font-bold text-red-600">
+              Aucun chargé client n'existe encore : créez-en un dans la liste des employés.
+            </p>
+
+            <div v-if="orphelins.total" class="panel-divider rounded-b-[28px] px-5 py-3">
+              <Link :href="route('admin.clients.index', { vue: 'orphelins' })" class="group inline-flex items-center gap-2 text-xs font-bold text-[#1A1A1A] hover:text-[#C8102E]">
+                {{ orphelins.total > orphelins.liste.length ? `Voir les ${orphelins.total} clients et attribuer en lot` : 'Attribuer en lot depuis la liste des clients' }}
+                <font-awesome-icon :icon="faArrowRight" class="text-[10px] transition-transform duration-300 group-hover:translate-x-1" />
+              </Link>
+            </div>
+          </div>
+
+          <!-- Demandes de suppression -->
+          <div class="glass glass-lg flex flex-col">
+            <div class="card-head flex items-center gap-3">
+              <span class="tile-base tile-red flex h-10 w-10 shrink-0 items-center justify-center rounded-xl">
+                <font-awesome-icon :icon="faTrashCan" />
+              </span>
+              <div class="min-w-0 flex-1">
+                <h2 class="text-base font-black text-[#1A1A1A]">Demandes de suppression</h2>
+                <p class="mt-0.5 text-xs text-[#6B6E70]">Validez ou refusez les suppressions demandées par l'équipe.</p>
+              </div>
+              <span
+                class="grid h-8 min-w-8 place-items-center rounded-full px-2 text-sm font-black tabular-nums"
+                :class="suppressions.total ? 'bg-[#C8102E] text-white' : 'bg-gray-100 text-gray-500'"
+              >{{ suppressions.total }}</span>
+            </div>
+
+            <ul v-if="suppressions.liste.length" class="flex-1 divide-y divide-black/5 px-4 py-2 sm:px-5">
+              <li v-for="d in suppressions.liste" :key="d.id" class="space-y-2 py-3">
+                <div class="flex items-start gap-2">
+                  <div class="min-w-0 flex-1">
+                    <p class="text-sm font-bold text-[#1A1A1A]">
+                      <span class="mr-1 rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-bold uppercase text-gray-600">{{ d.type }}</span>
+                      {{ d.libelle }}
+                    </p>
+                    <p class="mt-0.5 truncate text-xs text-[#6B6E70]">
+                      <template v-if="d.contexte?.client">{{ d.contexte.client }} · </template>
+                      par <b>{{ d.demandeur?.name || '—' }}</b> · {{ depuis(d.date) }}
+                    </p>
+                  </div>
+                  <span v-if="!d.existe" class="shrink-0 rounded-md bg-gray-200 px-1.5 py-0.5 text-[10px] font-bold text-gray-600">Déjà supprimé</span>
+                </div>
+                <p class="line-clamp-2 rounded-xl border-l-4 border-[#C8102E] bg-white/70 px-3 py-1.5 text-xs text-[#1A1A1A]">
+                  <span class="font-bold text-gray-500">Motif :</span> {{ d.motif }}
+                </p>
+
+                <!-- Confirmation de la suppression -->
+                <div v-if="aConfirmer === d.id" class="flex flex-wrap items-center gap-2 rounded-xl bg-red-50 px-3 py-2 ring-1 ring-red-200">
+                  <p class="min-w-0 flex-1 text-xs font-bold text-red-700">
+                    Supprimer {{ d.libelle }} ? Devis, facture et paiements liés partiront aussi (restaurable par le super administrateur).
+                  </p>
+                  <button type="button" class="gbtn gbtn-sm gbtn-neutral" @click="aConfirmer = null">Annuler</button>
+                  <button type="button" class="gbtn gbtn-sm gbtn-red" :disabled="!!actionEnCours" @click="validerSuppression(d)">
+                    <font-awesome-icon :icon="actionEnCours === `sup-${d.id}` ? faCircleNotch : faTrashCan" :spin="actionEnCours === `sup-${d.id}`" />
+                    Oui, supprimer
+                  </button>
+                </div>
+
+                <!-- Refus avec motif facultatif -->
+                <form v-else-if="aRefuser === d.id" class="flex flex-col gap-2 sm:flex-row sm:items-center" @submit.prevent="refuserSuppression(d)">
+                  <label :for="`refus-${d.id}`" class="sr-only">Motif du refus</label>
+                  <input
+                    :id="`refus-${d.id}`"
+                    v-model="motifRefus"
+                    type="text"
+                    maxlength="500"
+                    placeholder="Motif du refus (facultatif)"
+                    class="min-h-9 min-w-0 flex-1 rounded-xl border border-black/10 bg-white/80 px-3 text-xs text-[#1A1A1A] focus:border-[#C8102E] focus:ring-[#C8102E]/20"
+                  />
+                  <div class="flex gap-2">
+                    <button type="button" class="gbtn gbtn-sm gbtn-neutral" @click="aRefuser = null">Annuler</button>
+                    <button type="submit" class="gbtn gbtn-sm gbtn-neutral" :disabled="!!actionEnCours">
+                      <font-awesome-icon :icon="actionEnCours === `sup-${d.id}` ? faCircleNotch : faXmark" :spin="actionEnCours === `sup-${d.id}`" />
+                      Confirmer le refus
+                    </button>
+                  </div>
+                </form>
+
+                <div v-else class="flex justify-end gap-2">
+                  <button type="button" class="gbtn gbtn-sm gbtn-neutral" :disabled="!!actionEnCours" @click="ouvrirRefus(d)">
+                    <font-awesome-icon :icon="faXmark" /> Refuser
+                  </button>
+                  <button type="button" class="gbtn gbtn-sm gbtn-red" :disabled="!!actionEnCours" @click="ouvrirConfirmation(d)">
+                    <font-awesome-icon :icon="faCheck" /> Valider la suppression
+                  </button>
+                </div>
+              </li>
+            </ul>
+            <p v-else class="flex flex-1 items-center justify-center gap-2 px-5 py-8 text-sm font-medium text-emerald-700">
+              <font-awesome-icon :icon="faCircleCheck" /> Aucune demande en attente.
+            </p>
+
+            <div class="panel-divider rounded-b-[28px] px-5 py-3">
+              <Link :href="route('admin.demandes-suppression.index')" class="group inline-flex items-center gap-2 text-xs font-bold text-[#1A1A1A] hover:text-[#C8102E]">
+                {{ suppressions.total > suppressions.liste.length ? `Voir les ${suppressions.total} demandes et l'historique` : "Voir l'historique des demandes" }}
+                <font-awesome-icon :icon="faArrowRight" class="text-[10px] transition-transform duration-300 group-hover:translate-x-1" />
+              </Link>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- ═══ NAVIGATION RAPIDE ═══ -->

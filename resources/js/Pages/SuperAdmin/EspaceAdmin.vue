@@ -33,7 +33,7 @@ defineProps({
                     </div>
                 </Entete>
 
-                <TableauDeBordAdmin integre :users="admin.users" :stats="admin.stats" :siege-filtre="admin.siegeFiltre" />
+                <TableauDeBordAdmin integre :users="admin.users" :stats="admin.stats" :siege-filtre="admin.siegeFiltre" :a-traiter="admin.aTraiter" />
             </div>
         </div>
     </AuthenticatedLayout>

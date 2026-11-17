@@ -13,9 +13,10 @@ use RuntimeException;
 /** Validation par un administrateur des demandes de suppression faites par les collaborateurs. */
 class DemandeSuppressionController extends Controller
 {
-    public function index()
+    /** Présentation d'une demande pour le front (page dédiée et carte du tableau de bord). */
+    public static function presenter(DemandeSuppression $d): array
     {
-        $presenter = fn (DemandeSuppression $d) => [
+        return [
             'id' => $d->id,
             'type' => DemandeSuppression::TYPES[$d->type] ?? $d->type,
             'libelle' => $d->libelle,
@@ -30,6 +31,11 @@ class DemandeSuppressionController extends Controller
             'traite_le' => $d->traite_le,
             'existe' => Intervention::whereKey($d->cible_id)->exists(),
         ];
+    }
+
+    public function index()
+    {
+        $presenter = fn (DemandeSuppression $d) => self::presenter($d);
 
         return Inertia::render('Admin/DemandesSuppression', [
             'enAttente' => DemandeSuppression::enAttente()->with('demandeur:id,name,role')->oldest('id')->get()->map($presenter),
