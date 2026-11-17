@@ -13,12 +13,15 @@ const tauxLigne = (ligne) => {
     return ht > 0 ? Math.round((Number(ligne.montant_ttc) / ht - 1) * 1000) / 10 : Math.round(TAUX_TVA * 1000) / 10;
 };
 
+const page = usePage();
+const estAdmin = computed(() => page.props.auth?.user?.role === 'admin');
+
 const props = defineProps({
     dossier: Object,
     devisId: { type: Number, default: null },
     // Modification d'un devis déjà accepté (aucun paiement) : lignes modifiables + cases à cocher
     modeEdition: { type: Boolean, default: false },
-    // Facture déjà payée en partie (modification par l'admin) : { encaisse, total_complements }
+    // Facture déjà payée en partie (modification par l'admin) : { encaisse, total_autres_devis }
     facturation: { type: Object, default: null },
 });
 
@@ -141,7 +144,7 @@ const totauxAcceptes = computed(() =>
 // Facture déjà payée en partie : nouveau total de la facture (devis + compléments) vs déjà encaissé
 const encaisse = computed(() => Number(props.facturation?.encaisse || 0));
 const factureDejaPayee = computed(() => props.modeEdition && encaisse.value > 0);
-const nouveauTotalFacture = computed(() => totauxCoches.value.ttc + Number(props.facturation?.total_complements || 0));
+const nouveauTotalFacture = computed(() => totauxCoches.value.ttc + Number(props.facturation?.total_autres_devis || 0));
 const nouveauReste = computed(() => nouveauTotalFacture.value - encaisse.value);
 const totalSousEncaisse = computed(() => factureDejaPayee.value && nouveauReste.value < 0);
 
@@ -274,6 +277,8 @@ const submitValidation = () => {
             ? null : Math.round(Number(devis.petite_fourniture_montant));
 
         form.transform(() => ({
+            // Devis principal ou complémentaire : on cible toujours le devis affiché
+            devis_id: devis.id,
             lignes: lignesLocales.value.map((l) => ({
                 quantite: l.quantite,
                 designation: l.designation,
@@ -294,6 +299,32 @@ const submitValidation = () => {
     }
 
     form.post(route('administration.facturation.valider-devis', props.dossier.id), {
+        preserveScroll: true,
+    });
+};
+
+// Lien de modification d'un devis précis (principal ou complémentaire)
+const lienModification = (devis) => devis?.is_complementaire
+    ? `${route('administration.devis.edit', props.dossier.id)}?devis_id=${devis.id}`
+    : route('administration.devis.edit', props.dossier.id);
+
+// Un devis complémentaire en attente reste modifiable par tous ; une fois validé, l'admin garde la main
+const peutModifier = (devis) => !!devis && (estAdmin.value || devis.statut === 'en_attente');
+
+// Un seul devis complémentaire par dossier
+const aDejaUnComplement = computed(() =>
+    !!props.dossier?.devis?.is_complementaire || (props.dossier?.devis_complements?.length ?? 0) > 0
+);
+
+// Suppression totale d'un devis (admin) : le devis principal emporte ses devis complémentaires
+const supprimerDevis = (devis) => {
+    if (!devis) return;
+    const message = devis.is_complementaire
+        ? `Supprimer définitivement le devis complémentaire #${devis.id} ?\n\nLa facture sera recalculée.`
+        : `Supprimer définitivement le devis #${devis.id}${props.dossier?.devis_complements?.length ? ' ET ses devis complémentaires' : ''} ?\n\nLe dossier reviendra à l'atelier (ou sera annulé s'il s'agit d'un devis direct).`;
+    if (!window.confirm(message)) return;
+
+    router.delete(route('administration.devis.destroy', { dossier: props.dossier.id, devis: devis.id }), {
         preserveScroll: true,
     });
 };
@@ -330,12 +361,30 @@ const retour = () => {
                 <div class="flex items-center gap-2">
                     <h2 class="text-xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
                         <i class="fa-solid fa-file-invoice text-[#E11D48]"></i>
-                        <span>{{ modeEdition ? 'Modification du Devis' : (dossier.devis?.is_complementaire ? 'Validation du devis complémentaire' : 'Validation Devis / Facturation') }} - OT : {{ dossier.numero_ot || dossier.id }}</span>
+                        <span>{{ modeEdition ? (dossier.devis?.is_complementaire ? 'Modification du devis complémentaire' : 'Modification du Devis') : (dossier.devis?.is_complementaire ? 'Validation du devis complémentaire' : 'Validation Devis / Facturation') }} - OT : {{ dossier.numero_ot || dossier.id }}</span>
                     </h2>
                 </div>
                 <div class="flex items-center space-x-3">
                     <Link
-                        v-if="!modeEdition && dossier.devis"
+                        v-if="!modeEdition && dossier.devis?.is_complementaire && peutModifier(dossier.devis)"
+                        :href="lienModification(dossier.devis)"
+                        class="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wider text-gray-700 shadow-sm transition hover:bg-gray-50"
+                    >
+                        <i class="fa-solid fa-pen text-[11px]"></i>
+                        <span>Modifier</span>
+                    </Link>
+                    <button
+                        v-if="!modeEdition && estAdmin && dossier.devis"
+                        type="button"
+                        @click="supprimerDevis(dossier.devis)"
+                        class="inline-flex items-center gap-1.5 rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-xs font-bold uppercase tracking-wider text-red-700 shadow-sm transition hover:bg-red-100"
+                        title="Suppression définitive (réservée à l'administrateur)"
+                    >
+                        <i class="fa-solid fa-trash text-[11px]"></i>
+                        <span>Supprimer le devis</span>
+                    </button>
+                    <Link
+                        v-if="!modeEdition && dossier.devis && !aDejaUnComplement"
                         :href="route('administration.devis.complementaire.create', dossier.id)"
                         class="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-4 py-2 text-xs font-bold uppercase tracking-wider text-white shadow-sm transition hover:bg-amber-600"
                     >
@@ -400,6 +449,21 @@ const retour = () => {
                                 >
                                     Consulter
                                 </Link>
+                                <Link
+                                    v-if="peutModifier(devisComplement)"
+                                    :href="lienModification(devisComplement)"
+                                    class="font-semibold text-gray-700 underline"
+                                >
+                                    Modifier
+                                </Link>
+                                <button
+                                    v-if="estAdmin"
+                                    type="button"
+                                    @click="supprimerDevis(devisComplement)"
+                                    class="font-semibold text-red-700 underline"
+                                >
+                                    Supprimer
+                                </button>
                             </span>
                         </div>
                     </div>

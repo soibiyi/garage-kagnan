@@ -193,6 +193,10 @@ class DossierController extends Controller
         abort_unless($dossier->devis()->exists(), 404);
         abort_if(in_array($dossier->statut, ['annule', 'livre'], true), 403);
 
+        if ($existant = $this->complementExistant($dossier)) {
+            return $existant;
+        }
+
         $dossier->load(['vehicule.client', 'mecanicien', 'receptionniste']);
 
         return Inertia::render('Administration/DossierShow', [
@@ -207,7 +211,27 @@ class DossierController extends Controller
         abort_unless($dossier->devis()->exists(), 404);
         abort_if(in_array($dossier->statut, ['annule', 'livre'], true), 403);
 
+        if ($existant = $this->complementExistant($dossier)) {
+            return $existant;
+        }
+
         return $this->enregistrerDevis($request, $dossier, true);
+    }
+
+    /**
+     * Un seul devis complémentaire par dossier : s'il existe déjà, on renvoie vers lui
+     * (il reste modifiable) au lieu d'en créer un second.
+     */
+    private function complementExistant(Intervention $dossier)
+    {
+        $complement = $dossier->devisComplements()->first();
+        if (! $complement) {
+            return null;
+        }
+
+        return redirect()
+            ->route('administration.facturation.show', ['dossier' => $dossier->id, 'devis_id' => $complement->id])
+            ->with('error', 'Ce dossier a déjà un devis complémentaire (un seul par dossier). Modifiez-le plutôt que d’en créer un nouveau.');
     }
 
     private function enregistrerDevis(Request $request, Intervention $dossier, bool $complementaire = false)
@@ -299,15 +323,16 @@ class DossierController extends Controller
      *  - une fois accepté, tant qu'AUCUN paiement n'a été enregistré ;
      *  - après un versement, uniquement par un administrateur.
      */
-    private function verifierDevisModifiable(Intervention $dossier): void
+    private function verifierDevisModifiable(Intervention $dossier, ?Devis $devis): void
     {
-        $enAttente = $dossier->statut === 'attente_accord'
-            && $dossier->devis
-            && $dossier->devis->statut === 'en_attente';
+        abort_unless($devis, 404);
 
-        $accepte = $dossier->statut === 'accepte'
-            && $dossier->devis
-            && $dossier->devis->statut === 'accepte';
+        // Le devis principal suit le statut du dossier ; un devis complémentaire a son propre statut
+        $enAttente = $devis->statut === 'en_attente'
+            && ($devis->is_complementaire || $dossier->statut === 'attente_accord');
+
+        $accepte = $devis->statut === 'accepte'
+            && ($devis->is_complementaire || $dossier->statut === 'accepte');
 
         abort_unless($enAttente || $accepte, 403, 'Ce devis ne peut plus être modifié.');
 
@@ -319,35 +344,55 @@ class DossierController extends Controller
     }
 
     // MODIFICATION : affiche le formulaire de devis pré-rempli avec les lignes existantes
-    public function editDevis(Intervention $dossier)
+    /** Devis visé : celui passé en « devis_id » (principal ou complémentaire du dossier), sinon le devis principal. */
+    private function devisCible(Intervention $dossier, $devisId): ?Devis
+    {
+        if (! $devisId) {
+            return $dossier->devis;
+        }
+
+        return Devis::query()
+            ->where('intervention_id', $dossier->id)
+            ->whereKey((int) $devisId)
+            ->firstOrFail();
+    }
+
+    // MODIFICATION : affiche le formulaire de devis pré-rempli avec les lignes existantes
+    // (devis principal, ou devis complémentaire avec ?devis_id=)
+    public function editDevis(Request $request, Intervention $dossier)
     {
         $this->autoriser($dossier);
-        $this->verifierDevisModifiable($dossier);
+        $devis = $this->devisCible($dossier, $request->query('devis_id'));
+        $this->verifierDevisModifiable($dossier, $devis);
 
-        $dossier->load(['vehicule.client', 'mecanicien', 'receptionniste', 'devis.lignes']);
+        $dossier->load(['vehicule.client', 'mecanicien', 'receptionniste', 'devis.lignes', 'devisComplements.lignes']);
+        $devis->load('lignes');
 
         // Devis déjà accepté : même page que « Traiter » (cases à cocher), avec ajout / suppression de lignes
-        if ($dossier->statut === 'accepte') {
-            $dossier->load('devisComplements.lignes');
+        if ($devis->statut === 'accepte') {
+            // Total des AUTRES devis du dossier : avec le devis modifié, il donne le nouveau total de la facture
+            $totalAutres = collect([$dossier->devis])->filter()->concat($dossier->devisComplements)
+                ->reject(fn (Devis $d) => $d->id === $devis->id)
+                ->sum(fn (Devis $d) => TotauxFacture::totalDevis($d));
+
+            $dossier->setRelation('devis', $devis);
 
             return Inertia::render('Administration/FacturationShow', [
                 'dossier' => $dossier,
+                'devisId' => $devis->id,
                 'modeEdition' => true,
                 // Facture déjà payée en partie (modification réservée à l'admin) : montant encaissé
-                // et total des devis complémentaires, pour afficher le nouveau reste à payer.
+                // et total des autres devis, pour afficher le nouveau reste à payer.
                 'facturation' => [
                     'encaisse' => TotauxFacture::encaisse($dossier),
-                    'total_complements' => $dossier->devisComplements->sum(fn ($d) => PetiteFourniture::totalFinal(
-                        $d,
-                        (float) $d->lignes->where('is_accepted', true)->sum('montant_ttc')
-                    )),
+                    'total_autres_devis' => $totalAutres,
                 ],
             ]);
         }
 
         return Inertia::render('Administration/DossierShow', [
             'dossier' => $dossier,
-            'devis'   => $dossier->devis,
+            'devis'   => $devis,
         ]);
     }
 
@@ -355,7 +400,9 @@ class DossierController extends Controller
     public function updateDevis(Request $request, Intervention $dossier)
     {
         $this->autoriser($dossier);
-        $this->verifierDevisModifiable($dossier);
+        $request->validate(['devis_id' => ['nullable', 'integer']]);
+        $devis = $this->devisCible($dossier, $request->input('devis_id'));
+        $this->verifierDevisModifiable($dossier, $devis);
 
         $request->validate([
             'lignes' => 'required|array|min:1',
@@ -373,7 +420,7 @@ class DossierController extends Controller
         ]);
 
         // Devis déjà accepté (sans paiement) : il reste accepté, le dossier reste dans les devis validés
-        $etaitAccepte = $dossier->statut === 'accepte';
+        $etaitAccepte = $devis->statut === 'accepte';
 
         $lignes = $request->lignes;
 
@@ -389,9 +436,7 @@ class DossierController extends Controller
             }
         }
 
-        DB::transaction(function () use ($request, $dossier, $lignes) {
-            $devis = $dossier->devis;
-
+        DB::transaction(function () use ($request, $dossier, $devis, $lignes) {
             // Aucun paiement (ou devis non encore validé) : on peut remplacer les lignes
             // Une par une : chaque ligne supprimée est tracée (audit) et peut être restaurée par le super admin
             $devis->lignes()->get()->each->delete();
@@ -403,11 +448,80 @@ class DossierController extends Controller
             $this->controlerEtResynchroniserFacture($dossier);
         });
 
+        // Devis complémentaire : retour sur sa fiche
+        if ($devis->is_complementaire) {
+            return $this->redirectApresAction(
+                'Devis complémentaire modifié avec succès.',
+                'administration.facturation.show',
+                ['dossier' => $dossier->id, 'devis_id' => $devis->id]
+            );
+        }
+
         if ($etaitAccepte) {
             return $this->redirectApresAction('Devis modifié avec succès.', 'administration.devis.acceptes');
         }
 
         return $this->redirectApresAction('Devis modifié avec succès.');
+    }
+
+    /**
+     * SUPPRESSION TOTALE d'un devis (administrateur uniquement), validé ou non.
+     *  - devis complémentaire : lui seul est supprimé, la facture est recalculée ;
+     *  - devis principal : il est supprimé avec ses devis complémentaires, et le dossier
+     *    revient à l'atelier (ou est annulé pour un devis direct).
+     * Refusé si le total restant devient inférieur aux versements déjà encaissés.
+     * Chaque suppression est tracée (audit) et restaurable par le super administrateur.
+     */
+    public function destroyDevis(Intervention $dossier, Devis $devis)
+    {
+        $this->autoriser($dossier);
+        abort_unless($this->estAdmin(), 403, 'Seul un administrateur peut supprimer un devis.');
+        abort_unless((int) $devis->intervention_id === (int) $dossier->id, 404);
+
+        $principal = ! $devis->is_complementaire;
+        $encaisse = TotauxFacture::encaisse($dossier);
+        $totalRestant = $principal ? 0 : TotauxFacture::totalAccepte($dossier) - TotauxFacture::totalDevis($devis);
+
+        if ($encaisse > 0 && $totalRestant < $encaisse) {
+            return back()->with('error', sprintf(
+                'Suppression impossible : %s F ont déjà été encaissés sur ce dossier et le total restant serait de %s F. Retirez d’abord les versements concernés.',
+                number_format($encaisse, 0, ',', ' '),
+                number_format($totalRestant, 0, ',', ' ')
+            ));
+        }
+
+        DB::transaction(function () use ($dossier, $devis, $principal, $encaisse) {
+            $aSupprimer = $principal
+                ? Devis::where('intervention_id', $dossier->id)->get()
+                : collect([$devis]);
+
+            // Un par un : chaque ligne et chaque devis supprimés sont tracés (audit)
+            foreach ($aSupprimer as $d) {
+                $d->lignes()->get()->each->delete();
+                $d->delete();
+            }
+
+            if ($principal) {
+                if (in_array($dossier->statut, ['attente_accord', 'accepte'], true)) {
+                    $dossier->update(['statut' => $dossier->circuit === 'devis_direct' ? 'annule' : 'atelier']);
+                }
+
+                // Plus aucun devis et aucun versement : la facture n'a plus lieu d'être
+                if ($encaisse === 0) {
+                    Facture::where('intervention_id', $dossier->id)->get()->each->delete();
+                }
+            }
+
+            TotauxFacture::resynchroniser($dossier);
+        });
+
+        $message = $principal
+            ? 'Devis supprimé avec ses devis complémentaires.'
+            : 'Devis complémentaire supprimé.';
+
+        return $principal
+            ? redirect()->route('administration.devis.acceptes')->with('success', $message)
+            : redirect()->route('administration.facturation.show', $dossier->id)->with('success', $message);
     }
 
     // NOUVELLE MÉTHODE : Vue globale de tous les devis pour l'administration
