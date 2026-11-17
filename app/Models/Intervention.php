@@ -45,6 +45,21 @@ class Intervention extends Model
         return $query->where($query->getModel()->getTable() . '.siege', $user->siege);
     }
 
+    /** Statuts dont le dossier apparaît dans la facturation, en plus de tout dossier ayant déjà une facture. */
+    public const STATUTS_FACTURATION = ['accepte', 'livre', 'annule'];
+
+    /**
+     * Dossiers à afficher en facturation : devis validé, véhicule livré ou dossier annulé,
+     * ainsi que tout dossier qui a déjà une facture, quel que soit son statut actuel.
+     */
+    public function scopeFacturables($query)
+    {
+        return $query->where(function ($q) {
+            $q->whereIn($q->getModel()->getTable() . '.statut', self::STATUTS_FACTURATION)
+              ->orWhereHas('facture');
+        });
+    }
+
     /** Ce dossier est-il accessible à cet utilisateur ? (utilisé pour les pages de détail) */
     public function estVisiblePar(?User $user): bool
     {
