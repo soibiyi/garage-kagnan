@@ -13,6 +13,20 @@ const page = usePage();
 // L'admin peut encore modifier une facture déjà payée en partie
 const estAdmin = computed(() => page.props.auth?.user?.role === 'admin');
 
+// Suppression totale du devis validé (admin) avec ses devis complémentaires
+const supprimerDevis = (dossier) => {
+    if (!dossier.devis) return;
+    const message = `Supprimer définitivement le devis validé #${dossier.devis.id} (et ses éventuels devis complémentaires) ?\n\n`
+        + (dossier.a_paiement
+            ? 'Attention : un versement a déjà été encaissé, la suppression sera refusée tant qu’il reste des versements.'
+            : 'Le dossier reviendra à l’atelier (ou sera annulé s’il s’agit d’un devis direct).');
+    if (!window.confirm(message)) return;
+
+    router.delete(route('administration.devis.destroy', { dossier: dossier.id, devis: dossier.devis.id }), {
+        preserveScroll: true,
+    });
+};
+
 // Gestion de la recherche
 const search = ref(props.filters?.search || '');
 
@@ -155,6 +169,16 @@ const backText = computed(() => {
                                                 <i class="fa-solid fa-lock text-[10px]"></i>
                                                 <span>Paiement enregistré</span>
                                             </span>
+
+                                            <button
+                                                v-if="estAdmin && dossier.devis"
+                                                type="button"
+                                                @click="supprimerDevis(dossier)"
+                                                class="inline-flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-300 font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-[11px]"
+                                                title="Supprimer définitivement ce devis (réservé à l'administrateur)"
+                                            >
+                                                <i class="fa-solid fa-trash text-[10px]"></i>
+                                            </button>
 
                                             <Link
                                                 :href="route('administration.facturation.show', dossier.id)"

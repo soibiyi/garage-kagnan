@@ -225,6 +225,8 @@ const submitDevis = () => {
     form.transform((data) => ({
         ...data,
         lignes: data.lignes.map(({ famille_verrouillee, ...ligne }) => ligne),
+        // Modification : on cible le devis ouvert (principal ou complémentaire)
+        ...(props.devis ? { devis_id: props.devis.id } : {}),
     }));
 
     if (modeModification.value) {
@@ -267,7 +269,7 @@ const submitDevis = () => {
                     </div>
                     <h2 class="text-xl font-bold tracking-tight text-slate-900 mt-2 flex items-center gap-2">
                         <i class="fa-solid fa-file-invoice-dollar text-[#E11D48]"></i>
-                        <span>{{ modeModification ? 'Modification du Devis' : (complementaire ? 'Établissement du Devis complémentaire' : 'Établissement du Devis & Chiffrage') }}</span>
+                        <span>{{ modeModification ? (devis?.is_complementaire ? 'Modification du devis complémentaire' : 'Modification du Devis') : (complementaire ? 'Établissement du Devis complémentaire' : 'Établissement du Devis & Chiffrage') }}</span>
                     </h2>
                 </div>
             </div>

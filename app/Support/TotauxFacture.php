@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\Devis;
 use App\Models\Facture;
 use App\Models\Intervention;
 use App\Models\Paiement;
@@ -21,11 +22,16 @@ class TotauxFacture
         $dossier->loadMissing(['devis.lignes', 'devisComplements.lignes']);
 
         return collect([$dossier->devis])->filter()->concat($dossier->devisComplements)
-            ->sum(function ($devis) {
-                $brut = (float) $devis->lignes->where('is_accepted', true)->sum('montant_ttc');
+            ->sum(fn (Devis $devis) => self::totalDevis($devis));
+    }
 
-                return PetiteFourniture::totalFinal($devis, $brut);
-            });
+    /** Total TTC (petite fourniture comprise) des lignes acceptées d'un seul devis. */
+    public static function totalDevis(Devis $devis): int
+    {
+        $devis->loadMissing('lignes');
+        $brut = (float) $devis->lignes->where('is_accepted', true)->sum('montant_ttc');
+
+        return (int) PetiteFourniture::totalFinal($devis, $brut);
     }
 
     /** Somme des versements déjà enregistrés sur la facture du dossier. */

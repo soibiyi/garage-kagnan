@@ -246,6 +246,8 @@ Route::middleware(['auth'])->prefix('administration')->name('administration.')->
     Route::post('/dossiers/{dossier}/devis-complementaire', [DossierController::class, 'storeDevisComplementaire'])->name('devis.complementaire.store');
     Route::get('/dossiers/{dossier}/devis/modifier', [DossierController::class, 'editDevis'])->name('devis.edit');
     Route::put('/dossiers/{dossier}/devis', [DossierController::class, 'updateDevis'])->name('devis.update');
+    // Suppression totale d'un devis (validé ou non) : administrateur uniquement
+    Route::delete('/dossiers/{dossier}/devis/{devis}', [DossierController::class, 'destroyDevis'])->name('devis.destroy');
 
     Route::get('/facturation', [DossierController::class, 'facturationIndex'])->name('facturation.index');
     Route::get('/facturation/{dossier}', [DossierController::class, 'facturationShow'])->name('facturation.show');

@@ -1,6 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link, usePage } from '@inertiajs/vue3';
+import { Head, Link, usePage, router } from '@inertiajs/vue3';
 import { computed, ref } from 'vue';
 
 const props = defineProps({
@@ -8,6 +8,25 @@ const props = defineProps({
 });
 
 const page = usePage();
+const estAdmin = computed(() => page.props.auth?.user?.role === 'admin');
+
+// Modification du devis de la ligne (principal, ou complémentaire via devis_id)
+const lienModification = (dossier) => dossier.devis?.is_complementaire
+    ? `${route('administration.devis.edit', dossier.id)}?devis_id=${dossier.devis_id}`
+    : route('administration.devis.edit', dossier.id);
+
+// Suppression totale du devis (admin uniquement)
+const supprimerDevis = (dossier) => {
+    const complementaire = !!dossier.devis?.is_complementaire;
+    const message = complementaire
+        ? `Supprimer définitivement ce devis complémentaire (#${dossier.devis_id}) ?`
+        : `Supprimer définitivement ce devis (#${dossier.devis_id}) et ses éventuels devis complémentaires ?\n\nLe dossier reviendra à l'atelier (ou sera annulé s'il s'agit d'un devis direct).`;
+    if (!window.confirm(message)) return;
+
+    router.delete(route('administration.devis.destroy', { dossier: dossier.id, devis: dossier.devis_id }), {
+        preserveScroll: true,
+    });
+};
 
 // ---------- Recherche (filtre côté navigateur) ----------
 const search = ref('');
@@ -167,13 +186,21 @@ const backText = computed(() => {
                                     <td class="px-6 py-4 whitespace-nowrap text-right">
                                         <div class="inline-flex items-center gap-2">
                                             <Link
-                                                v-if="!dossier.devis?.is_complementaire"
-                                                :href="route('administration.devis.edit', dossier.id)"
+                                                :href="lienModification(dossier)"
                                                 class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-[11px]"
                                             >
                                                 <i class="fa-solid fa-pen text-[10px]"></i>
                                                 <span>Modifier</span>
                                             </Link>
+                                            <button
+                                                v-if="estAdmin"
+                                                type="button"
+                                                @click="supprimerDevis(dossier)"
+                                                class="inline-flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-300 font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-[11px]"
+                                                title="Suppression définitive (réservée à l'administrateur)"
+                                            >
+                                                <i class="fa-solid fa-trash text-[10px]"></i>
+                                            </button>
                                             <Link
                                                 :href="`${route('administration.facturation.show', dossier.id)}?devis_id=${dossier.devis_id}`"
                                                 class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#E11D48] hover:bg-rose-700 text-white font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-[11px]"
