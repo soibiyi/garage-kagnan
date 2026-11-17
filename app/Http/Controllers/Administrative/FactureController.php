@@ -75,7 +75,7 @@ class FactureController extends Controller
         $search = $request->input('search');
 
         $dossiers = Intervention::duSiege()->with(['vehicule.client', 'devis.lignes', 'devisComplements.lignes', 'mecanicien'])
-            ->where('statut', 'accepte')
+            ->facturables()
             ->when($search, function ($query, $search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('numero_ot', 'like', "%{$search}%")
@@ -119,7 +119,7 @@ class FactureController extends Controller
         $fileName = 'tableau_de_creance_' . date('Y-m-d') . '.csv';
 
         $dossiers = Intervention::duSiege()->with(['vehicule.client', 'devis.lignes'])
-            ->where('statut', 'accepte')
+            ->facturables()
             ->latest()
             ->get();
 

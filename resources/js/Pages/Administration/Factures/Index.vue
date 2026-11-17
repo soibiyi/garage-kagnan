@@ -39,6 +39,13 @@ const resteAPayer = (dossier) => Number(dossier.resume_paiement?.reste ?? 0);
 
 const estSolde = (dossier) => Boolean(dossier.resume_paiement?.soldee);
 
+// Badge du statut du dossier (livré, annulé, ou autre statut d'un dossier déjà facturé)
+const badgeStatut = (statut) => {
+    if (statut === 'livre') return { libelle: 'Livré', classe: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+    if (statut === 'annule') return { libelle: 'Annulé', classe: 'bg-gray-100 text-gray-600 border-gray-300' };
+    return { libelle: (statut || 'inconnu').replace(/_/g, ' '), classe: 'bg-amber-50 text-amber-700 border-amber-200' };
+};
+
 // Vérifie si le dossier est un devis direct
 const estDevisDirect = (dossier) => {
     return dossier.circuit === 'devis_direct' || dossier.type === 'devis_direct' || dossier.is_direct || !dossier.numero_ot;
@@ -383,6 +390,13 @@ const backText = computed(() => {
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <span class="px-2.5 py-1 inline-flex text-[11px] font-semibold rounded-md bg-blue-50 text-blue-700 border border-blue-200">
                                             {{ dossier.numero_ot ? `OT: ${dossier.numero_ot}` : (estDevisDirect(dossier) ? 'Devis Direct' : 'Sans OT') }}
+                                        </span>
+                                        <span
+                                            v-if="dossier.statut !== 'accepte'"
+                                            class="ml-1.5 px-2.5 py-1 inline-flex text-[11px] font-semibold rounded-md border"
+                                            :class="badgeStatut(dossier.statut).classe"
+                                        >
+                                            {{ badgeStatut(dossier.statut).libelle }}
                                         </span>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right">
