@@ -187,7 +187,7 @@ class StatsEquipes
     {
         $ids = $users->pluck('id');
 
-        $interactions = InteractionClient::query()->whereIn('user_id', $ids)->whereBetween('created_at', [$debut, $fin])
+        $interactions = InteractionClient::query()->contacts()->whereIn('user_id', $ids)->whereBetween('created_at', [$debut, $fin])
             ->selectRaw('user_id, COUNT(*) AS n, COUNT(DISTINCT client_id) AS clients')
             ->groupBy('user_id')->get()->keyBy('user_id');
 
@@ -201,6 +201,7 @@ class StatsEquipes
             ->join('vehicules AS v', 'v.client_id', '=', 'ic.client_id')
             ->join('interventions AS i', 'i.vehicule_id', '=', 'v.id')
             ->whereIn('ic.user_id', $ids)
+            ->where('ic.type', '!=', InteractionClient::TYPE_ATTRIBUTION)
             ->whereBetween('ic.created_at', [$debut, $fin])
             ->whereColumn(DB::raw('COALESCE(i.date_reception, i.created_at)'), '>=', 'ic.created_at')
             ->selectRaw('ic.user_id AS uid, COUNT(DISTINCT ic.client_id) AS n')

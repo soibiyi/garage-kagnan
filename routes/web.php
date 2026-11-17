@@ -74,6 +74,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::put('/users/{user}', [UserController::class, 'update'])->name('users.update');
     Route::delete('/users/{user}', [UserController::class, 'destroy'])->name('users.destroy'); 
     Route::get('/clients', [ChargeClientController::class, 'index'])->name('clients.index');
+    Route::post('/clients/attribuer', [\App\Http\Controllers\Admin\ClientAttributionController::class, 'store'])->name('clients.attribuer');
     Route::get('/clients/gestion', [\App\Http\Controllers\Admin\ClientManagementController::class, 'index'])->name('clients.gestion');
     Route::get('/clients/gestion/{client}', [\App\Http\Controllers\Admin\ClientManagementController::class, 'show'])->name('clients.gestion.show');
     Route::patch('/clients/gestion/{client}/status', [\App\Http\Controllers\Admin\ClientManagementController::class, 'toggleStatus'])->name('clients.gestion.status');

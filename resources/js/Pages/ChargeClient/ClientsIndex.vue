@@ -8,6 +8,7 @@ const props = defineProps({
     orphelins: { type: Array, default: () => [] },
     chargesClients: { type: Array, default: () => [] },
     peutVoirGroupes: { type: Boolean, default: false },
+    peutAttribuer: { type: Boolean, default: false },
     filters: Object,
 });
 
@@ -17,8 +18,12 @@ const props = defineProps({
 const ORPHELINS = 'orphelins';
 const maCarte = props.chargesClients.find((c) => c.est_moi);
 // Par défaut : sa propre carte (chargé client), sinon la première carte accessible.
+// Lien direct « ?vue=orphelins » (carte du tableau de bord admin) : ouvre les clients non attribués.
+const vueDemandee = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('vue') : null;
 const selection = ref(
-    maCarte?.id ?? props.chargesClients.find((c) => c.accessible)?.id ?? (props.orphelins.length ? ORPHELINS : null)
+    vueDemandee === ORPHELINS
+        ? ORPHELINS
+        : maCarte?.id ?? props.chargesClients.find((c) => c.accessible)?.id ?? (props.orphelins.length ? ORPHELINS : null)
 );
 
 const choisir = (carte) => {
@@ -40,6 +45,49 @@ const sourceClients = computed(() => {
     if (selection.value === null) return [];
     return (props.clients || []).filter((c) => (c.charge_ids || []).includes(selection.value));
 });
+
+/* ------------------------------------------------------------------ */
+/* Attribution des clients non attribués (administrateur)              */
+/* ------------------------------------------------------------------ */
+const modeAttribution = computed(() => props.peutAttribuer && selection.value === ORPHELINS);
+const chargesAttribuables = computed(() => props.chargesClients || []);
+const libelleCharge = (c) => (c.siege ? `${c.name} · ${c.siege}` : c.name);
+
+// Chargé choisi pour chaque fiche, et sélection multiple pour une attribution groupée
+const chargeParClient = ref({});
+const coches = ref([]);
+const chargeGroupe = ref('');
+const attributionEnCours = ref(false);
+const erreurAttribution = ref('');
+
+// Changer de carte vide la sélection en cours
+watch(selection, () => { coches.value = []; chargeGroupe.value = ''; erreurAttribution.value = ''; });
+
+const estCoche = (id) => coches.value.includes(id);
+const basculerCoche = (id) => {
+    coches.value = estCoche(id) ? coches.value.filter((c) => c !== id) : [...coches.value, id];
+};
+
+function attribuer(clientIds, chargeId) {
+    if (!clientIds.length || !chargeId || attributionEnCours.value) return;
+    erreurAttribution.value = '';
+    router.post(
+        route('admin.clients.attribuer'),
+        { client_ids: clientIds, charge_id: chargeId },
+        {
+            preserveScroll: true,
+            preserveState: true,
+            onStart: () => { attributionEnCours.value = true; },
+            onFinish: () => { attributionEnCours.value = false; },
+            onSuccess: () => {
+                coches.value = coches.value.filter((id) => !clientIds.includes(id));
+                clientIds.forEach((id) => delete chargeParClient.value[id]);
+                if (!coches.value.length) chargeGroupe.value = '';
+            },
+            onError: (erreurs) => { erreurAttribution.value = Object.values(erreurs)[0] || "L'attribution a échoué."; },
+        }
+    );
+}
 
 const initialesNom = (nom) =>
     String(nom || '?')
@@ -340,7 +388,8 @@ const messageVide = computed(() => {
                     <p v-if="selection !== null" class="mt-4 text-sm font-bold text-[#0B0F19]">
                         <template v-if="selection === ORPHELINS">
                             Clients non attribués
-                            <span class="font-medium text-[#8A8D8F]">— enregistrez une interaction sur un véhicule pour prendre le client en charge.</span>
+                            <span v-if="peutAttribuer" class="font-medium text-[#8A8D8F]">— choisissez un chargé client sous chaque fiche, ou cochez plusieurs clients pour les attribuer d'un coup.</span>
+                            <span v-else class="font-medium text-[#8A8D8F]">— enregistrez une interaction sur un véhicule pour prendre le client en charge.</span>
                         </template>
                         <template v-else-if="carteSelectionnee">
                             Clients suivis par {{ carteSelectionnee.est_moi ? 'vous' : carteSelectionnee.name }}
@@ -413,18 +462,64 @@ const messageVide = computed(() => {
                     </div>
                 </div>
 
+                <!-- ATTRIBUTION GROUPÉE (admin, clients non attribués) -->
+                <div
+                    v-if="modeAttribution && rowsFiltrees.length > 0"
+                    class="flex flex-col gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 sm:flex-row sm:items-center"
+                >
+                    <label class="inline-flex min-h-10 cursor-pointer items-center gap-2 text-xs font-bold text-[#0B0F19]">
+                        <input
+                            type="checkbox"
+                            class="h-4 w-4 rounded border-gray-300 text-amber-500 focus:ring-amber-400/40"
+                            :checked="coches.length > 0 && coches.length === rowsFiltrees.length"
+                            :indeterminate.prop="coches.length > 0 && coches.length < rowsFiltrees.length"
+                            @change="coches = $event.target.checked ? rowsFiltrees.map((r) => r.client.id) : []"
+                        />
+                        <span>{{ coches.length ? `${coches.length} client${coches.length > 1 ? 's' : ''} sélectionné${coches.length > 1 ? 's' : ''}` : 'Tout sélectionner' }}</span>
+                    </label>
+                    <div class="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                        <label for="charge-groupe" class="sr-only">Chargé client pour la sélection</label>
+                        <select
+                            id="charge-groupe"
+                            v-model="chargeGroupe"
+                            :disabled="!coches.length"
+                            class="min-h-10 rounded-xl border border-gray-200 bg-white px-3 text-xs font-bold text-[#0B0F19] focus:border-amber-500 focus:ring-amber-400/30 disabled:opacity-50 sm:w-64"
+                        >
+                            <option value="" disabled>Attribuer la sélection à…</option>
+                            <option v-for="c in chargesAttribuables" :key="c.id" :value="c.id">{{ libelleCharge(c) }}</option>
+                        </select>
+                        <button
+                            type="button"
+                            :disabled="!coches.length || !chargeGroupe || attributionEnCours"
+                            class="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 text-xs font-extrabold text-white transition hover:bg-amber-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+                            @click="attribuer([...coches], chargeGroupe)"
+                        >
+                            <i class="fa-solid text-[11px]" :class="attributionEnCours ? 'fa-spinner fa-spin' : 'fa-user-check'" aria-hidden="true"></i>
+                            Attribuer
+                        </button>
+                    </div>
+                    <p v-if="!chargesAttribuables.length" class="text-xs font-bold text-red-600">
+                        Aucun chargé client n'existe encore : créez-en un dans la gestion des utilisateurs.
+                    </p>
+                </div>
+                <p v-if="erreurAttribution" class="text-xs font-bold text-red-600" role="alert">{{ erreurAttribution }}</p>
+
                 <!-- LISTE : fiches clients -->
                 <div
                     v-if="rowsFiltrees.length > 0"
                     class="grid grid-cols-1 gap-4 transition-opacity duration-200 md:grid-cols-2 xl:grid-cols-3"
                     :class="{ 'opacity-60': loading }"
                 >
-                    <Link
+                    <div
                         v-for="(row, index) in rowsFiltrees"
                         :key="row.client.id"
-                        :href="route('charge_client.clients.show', row.client.id)"
-                        class="fiche-in group relative flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E11D48]/40"
+                        class="fiche-in flex flex-col"
                         :style="{ animationDelay: Math.min(index, 9) * 40 + 'ms' }"
+                    >
+                    <Link
+                        :href="route('charge_client.clients.show', row.client.id)"
+                        class="group relative flex flex-1 flex-col overflow-hidden border border-gray-200 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E11D48]/40"
+                        :class="modeAttribution ? 'rounded-t-2xl' : 'rounded-2xl'"
                     >
                         <!-- Liseré de statut -->
                         <span
@@ -535,6 +630,40 @@ const messageVide = computed(() => {
                             </span>
                         </div>
                     </Link>
+
+                    <!-- Attribution de ce client (admin) : hors du lien pour rester cliquable -->
+                    <div
+                        v-if="modeAttribution"
+                        class="flex items-center gap-2 rounded-b-2xl border border-t-0 px-3 py-2.5 transition"
+                        :class="estCoche(row.client.id) ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-[#F8FAFC]'"
+                    >
+                        <input
+                            type="checkbox"
+                            class="h-4 w-4 shrink-0 rounded border-gray-300 text-amber-500 focus:ring-amber-400/40"
+                            :checked="estCoche(row.client.id)"
+                            :aria-label="`Sélectionner ${row.client.nom} ${row.client.prenom || ''}`"
+                            @change="basculerCoche(row.client.id)"
+                        />
+                        <label :for="`charge-${row.client.id}`" class="sr-only">Chargé client pour {{ row.client.nom }}</label>
+                        <select
+                            :id="`charge-${row.client.id}`"
+                            v-model="chargeParClient[row.client.id]"
+                            class="min-h-9 min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-bold text-[#0B0F19] focus:border-amber-500 focus:ring-amber-400/30"
+                        >
+                            <option :value="undefined" disabled>Attribuer à…</option>
+                            <option v-for="c in chargesAttribuables" :key="c.id" :value="c.id">{{ libelleCharge(c) }}</option>
+                        </select>
+                        <button
+                            type="button"
+                            :disabled="!chargeParClient[row.client.id] || attributionEnCours"
+                            class="inline-flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg bg-[#0B0F19] px-3 text-[11px] font-extrabold text-white transition hover:bg-amber-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                            @click="attribuer([row.client.id], chargeParClient[row.client.id])"
+                        >
+                            <i class="fa-solid fa-user-check text-[10px]" aria-hidden="true"></i>
+                            Attribuer
+                        </button>
+                    </div>
+                    </div>
                 </div>
 
                 <!-- ÉTAT VIDE -->
