@@ -10,6 +10,9 @@ const props = defineProps({
 
 const page = usePage();
 
+// L'admin peut encore modifier une facture déjà payée en partie
+const estAdmin = computed(() => page.props.auth?.user?.role === 'admin');
+
 // Gestion de la recherche
 const search = ref(props.filters?.search || '');
 
@@ -128,14 +131,19 @@ const backText = computed(() => {
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right">
                                         <div class="inline-flex items-center gap-2">
-                                            <!-- Modifiable uniquement tant qu'aucun paiement n'a été enregistré -->
-                                            <template v-if="!dossier.a_paiement">
+                                            <!-- Modifiable tant qu'aucun paiement n'a été enregistré ; ensuite par l'admin seulement -->
+                                            <template v-if="!dossier.a_paiement || estAdmin">
                                                 <Link
                                                     :href="route('administration.devis.edit', dossier.id)"
-                                                    class="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-[11px]"
-                                                    title="Ajouter ou supprimer des lignes, cocher ou décocher les choix du client"
+                                                    class="inline-flex items-center gap-1.5 px-3.5 py-2 font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-[11px]"
+                                                    :class="dossier.a_paiement
+                                                        ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300'
+                                                        : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-300'"
+                                                    :title="dossier.a_paiement
+                                                        ? 'Facture déjà payée en partie : ajouter ou retirer des éléments (réservé à l’administrateur)'
+                                                        : 'Ajouter ou supprimer des lignes, cocher ou décocher les choix du client'"
                                                 >
-                                                    <i class="fa-solid fa-pen text-[10px]"></i>
+                                                    <i class="fa-solid text-[10px]" :class="dossier.a_paiement ? 'fa-user-shield' : 'fa-pen'"></i>
                                                     <span>Modifier</span>
                                                 </Link>
                                             </template>

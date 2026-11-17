@@ -8,6 +8,7 @@ use App\Models\Intervention;
 use App\Models\Paiement;
 use App\Support\PetiteFourniture;
 use App\Support\Suppressions;
+use App\Support\TotauxFacture;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -26,11 +27,7 @@ class FactureController extends Controller
     /** Total TTC (avec petite fourniture auto 3 % ou saisie, arrondi au FCFA) des lignes acceptées. */
     private function totalAccepte(Intervention $dossier): int
     {
-        return $this->devisDuDossier($dossier)->sum(function ($devis) {
-            $brut = (float) $devis->lignes->where('is_accepted', true)->sum('montant_ttc');
-
-            return PetiteFourniture::totalFinal($devis, $brut);
-        });
+        return TotauxFacture::totalAccepte($dossier);
     }
 
     /** Numéro de facture, même format que celui affiché sur la vue. */
@@ -67,11 +64,7 @@ class FactureController extends Controller
     /** Statut stocké dans la table factures. */
     private function statutFacture(int $total, int $paye): string
     {
-        if ($total > 0 && $paye >= $total) {
-            return 'payee';
-        }
-
-        return $paye > 0 ? 'partiellement_payee' : 'impayee';
+        return TotauxFacture::statut($total, $paye);
     }
 
     /**

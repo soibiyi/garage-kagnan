@@ -18,6 +18,8 @@ const props = defineProps({
     devisId: { type: Number, default: null },
     // Modification d'un devis déjà accepté (aucun paiement) : lignes modifiables + cases à cocher
     modeEdition: { type: Boolean, default: false },
+    // Facture déjà payée en partie (modification par l'admin) : { encaisse, total_complements }
+    facturation: { type: Object, default: null },
 });
 
 // Numéro de facture déduit du numéro d'OT :
@@ -135,6 +137,13 @@ const totauxCoches = computed(() =>
 const totauxAcceptes = computed(() =>
     calculerTotaux((props.dossier?.devis?.lignes || []).filter(l => l.is_accepted))
 );
+
+// Facture déjà payée en partie : nouveau total de la facture (devis + compléments) vs déjà encaissé
+const encaisse = computed(() => Number(props.facturation?.encaisse || 0));
+const factureDejaPayee = computed(() => props.modeEdition && encaisse.value > 0);
+const nouveauTotalFacture = computed(() => totauxCoches.value.ttc + Number(props.facturation?.total_complements || 0));
+const nouveauReste = computed(() => nouveauTotalFacture.value - encaisse.value);
+const totalSousEncaisse = computed(() => factureDejaPayee.value && nouveauReste.value < 0);
 
 // --- Mode édition : ajout / suppression de lignes ---
 let idTemporaire = 0;
@@ -604,15 +613,43 @@ const retour = () => {
                                         ? 'Ajoutez ou supprimez des lignes, cochez celles acceptées par le client puis enregistrez : tout est enregistré en une seule fois.'
                                         : 'Cochez les lignes acceptées par le client puis enregistrez pour valider la facture définitive.' }}
                                 </span>
-                                <button 
-                                    type="submit" 
-                                    :disabled="form.processing"
-                                    class="px-4 py-2 bg-[#E11D48] hover:bg-rose-700 text-white font-bold uppercase tracking-wider rounded-lg shadow transition text-xs"
+                                <button
+                                    type="submit"
+                                    :disabled="form.processing || totalSousEncaisse"
+                                    class="px-4 py-2 bg-[#E11D48] hover:bg-rose-700 text-white font-bold uppercase tracking-wider rounded-lg shadow transition text-xs disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {{ modeEdition ? 'Enregistrer les modifications' : 'Enregistrer le choix du client' }}
                                 </button>
                             </div>
-                            <div v-if="modeEdition && Object.keys(form.errors).length" class="mb-4 print:hidden bg-rose-50 border border-rose-200 text-[#E11D48] text-xs font-bold rounded-lg p-3">
+
+                            <!-- Facture déjà payée en partie : modification réservée à l'admin -->
+                            <div
+                                v-if="factureDejaPayee"
+                                class="mb-4 print:hidden rounded-lg border p-3 text-xs"
+                                :class="totalSousEncaisse ? 'border-rose-300 bg-rose-50 text-[#BE123C]' : 'border-amber-300 bg-amber-50 text-amber-900'"
+                            >
+                                <p class="flex items-center gap-2 font-black uppercase tracking-wider">
+                                    <i class="fa-solid fa-user-shield" aria-hidden="true"></i>
+                                    Facture déjà payée en partie — modification administrateur
+                                </p>
+                                <div class="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                    <p>Déjà encaissé : <b class="tabular-nums">{{ encaisse.toLocaleString() }} F</b></p>
+                                    <p>Nouveau total facture : <b class="tabular-nums">{{ nouveauTotalFacture.toLocaleString() }} F</b></p>
+                                    <p>
+                                        Nouveau reste à payer :
+                                        <b class="tabular-nums">{{ Math.max(nouveauReste, 0).toLocaleString() }} F</b>
+                                        <span v-if="nouveauReste === 0" class="ml-1 font-bold text-emerald-700">(soldée)</span>
+                                    </p>
+                                </div>
+                                <p v-if="totalSousEncaisse" class="mt-2 font-bold">
+                                    Le nouveau total est inférieur à ce qui a déjà été encaissé : gardez au moins {{ encaisse.toLocaleString() }} F de lignes acceptées.
+                                </p>
+                                <p v-else class="mt-2">
+                                    Les versements déjà enregistrés sont conservés ; le statut de la facture (payée / partiellement payée) est recalculé à l'enregistrement.
+                                </p>
+                            </div>
+
+                            <div v-if="Object.keys(form.errors).length" class="mb-4 print:hidden bg-rose-50 border border-rose-200 text-[#E11D48] text-xs font-bold rounded-lg p-3">
                                 {{ Object.values(form.errors)[0] }}
                             </div>
 

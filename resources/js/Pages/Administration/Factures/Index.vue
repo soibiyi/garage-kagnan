@@ -399,14 +399,19 @@ const backText = computed(() => {
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-right">
                                         <div class="inline-flex items-center justify-end gap-2">
-                                            <!-- Modifiable uniquement tant qu'aucun paiement n'a été enregistré -->
+                                            <!-- Modifiable tant qu'aucun paiement n'a été enregistré ; ensuite par l'admin seulement -->
                                             <Link
-                                                v-if="!dossier.a_paiement"
+                                                v-if="!dossier.a_paiement || estAdmin"
                                                 :href="route('administration.devis.edit', dossier.id)"
-                                                class="inline-flex items-center justify-center gap-1.5 h-9 px-4 w-40 bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-[11px] shrink-0"
-                                                title="Ajouter ou supprimer des lignes, cocher ou décocher les choix du client"
+                                                class="inline-flex items-center justify-center gap-1.5 h-9 px-4 w-40 font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-[11px] shrink-0"
+                                                :class="dossier.a_paiement
+                                                    ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300'
+                                                    : 'bg-white hover:bg-gray-50 text-gray-700 border border-gray-300'"
+                                                :title="dossier.a_paiement
+                                                    ? 'Facture déjà payée en partie : ajouter ou retirer des éléments (réservé à l’administrateur)'
+                                                    : 'Ajouter ou supprimer des lignes, cocher ou décocher les choix du client'"
                                             >
-                                                <i class="fa-solid fa-pen text-[10px]"></i>
+                                                <i class="fa-solid text-[10px]" :class="dossier.a_paiement ? 'fa-user-shield' : 'fa-pen'"></i>
                                                 <span>Modifier</span>
                                             </Link>
                                             <span

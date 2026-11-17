@@ -1,6 +1,6 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
 import { FAMILLES, FAMILLE_PAR_DEFAUT } from '@/constants/familles.js';
 
@@ -9,6 +9,12 @@ const props = defineProps({
     paiements: Array,
     resume: Object,
 });
+
+// Seul l'admin modifie une facture (devis accepté) ; possible même après un versement
+const pageInertia = usePage();
+const peutModifierFacture = computed(() =>
+    pageInertia.props.auth?.user?.role === 'admin' && props.dossier?.statut === 'accepte' && !!props.dossier?.devis
+);
 
 // Numéro de facture déduit du numéro d'OT (même règle que la page devis) :
 //   SGK-02102026/001 (OT)  →  SGK-FAC-02102026/001 (facture)
@@ -213,6 +219,16 @@ onUnmounted(() => {
                     </h2>
                 </div>
                 <div class="flex items-center space-x-3">
+                    <!-- Admin : ajouter / retirer des éléments même après un versement -->
+                    <Link
+                        v-if="peutModifierFacture"
+                        :href="route('administration.devis.edit', dossier.id)"
+                        class="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-xs"
+                        title="Ajouter ou retirer des éléments de la facture (réservé à l’administrateur)"
+                    >
+                        <i class="fa-solid fa-user-shield text-[11px]"></i>
+                        <span>Modifier la facture</span>
+                    </Link>
                     <button @click="imprimer" class="inline-flex items-center gap-1.5 px-4 py-2 bg-gray-800 hover:bg-gray-900 text-white font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-xs">
                         <i class="fa-solid fa-print text-[11px]"></i>
                         <span>Imprimer</span>
