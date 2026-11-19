@@ -81,6 +81,19 @@ class AdminModificationFacturePayeeTest extends TestCase
         ]);
     }
 
+    public function test_frontend_payment_methods_are_accepted_by_the_server(): void
+    {
+        foreach (['Chèque', 'Wave', 'Djamo'] as $mode) {
+            $this->actingAs($this->admin)
+                ->post(route('administration.factures.encaisser', $this->dossier->id), [
+                    'montant' => 1000,
+                    'mode_paiement' => $mode,
+                    'date_paiement' => now()->toDateString(),
+                ])
+                ->assertSessionHasNoErrors();
+        }
+    }
+
     public function test_admin_adds_an_item_after_a_payment_and_invoice_is_resynchronised(): void
     {
         $this->actingAs($this->admin)

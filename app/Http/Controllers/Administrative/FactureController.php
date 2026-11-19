@@ -233,7 +233,7 @@ class FactureController extends Controller
     {
         $request->validate([
             'montant' => 'required|integer|min:1',
-            'mode_paiement' => 'required|string|in:Especes,Carte Bancaire,Virement,Orange Money,MTN Money,Moov Money',
+            'mode_paiement' => 'required|string|in:Especes,Carte Bancaire,Virement,Orange Money,MTN Money,Moov Money,Chèque,Wave,Djamo',
             'notes' => 'nullable|string|max:255',
             'date_paiement' => 'required|date|before_or_equal:today',
         ]);

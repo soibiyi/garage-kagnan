@@ -514,6 +514,7 @@ onUnmounted(() => {
                                 </div>
                             </div>
                             <p v-if="form.errors.montant" class="mt-2 text-[11px] font-semibold text-rose-600">{{ form.errors.montant }}</p>
+                            <p v-if="form.errors.mode_paiement" class="mt-1 text-[11px] font-semibold text-rose-600">{{ form.errors.mode_paiement }}</p>
                             <p v-if="form.errors.date_paiement" class="mt-1 text-[11px] font-semibold text-rose-600">{{ form.errors.date_paiement }}</p>
                             <div class="mt-3 flex justify-end">
                                 <button type="submit" :disabled="form.processing"
