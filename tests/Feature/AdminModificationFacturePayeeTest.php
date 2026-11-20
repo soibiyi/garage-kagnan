@@ -119,6 +119,29 @@ class AdminModificationFacturePayeeTest extends TestCase
                 ->where('resume.reste', 90000));
     }
 
+    public function test_admin_can_update_small_supplies_while_editing_an_accepted_quote(): void
+    {
+        $devis = $this->dossier->fresh()->devis;
+
+        $this->actingAs($this->admin)
+            ->put(route('administration.devis.update', $this->dossier->id), [
+                'lignes' => [$this->ligne('Vidange', 100000)],
+                'petite_fourniture_active' => true,
+                'petite_fourniture_montant' => 12000,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('devis', [
+            'id' => $devis->id,
+            'petite_fourniture_active' => true,
+            'petite_fourniture_montant' => 12000,
+        ]);
+        $this->assertSame(
+            112000.0,
+            (float) Facture::where('intervention_id', $this->dossier->id)->value('montant_total')
+        );
+    }
+
     public function test_admin_removes_items_down_to_the_paid_amount_and_invoice_becomes_paid(): void
     {
         $this->modifier([$this->ligne('Vidange', 60000), $this->ligne('Option refusée', 30000, false)])

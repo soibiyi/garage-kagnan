@@ -24,6 +24,12 @@ const props = defineProps({
     // Facture déjà payée en partie (modification par l'admin) : { encaisse, total_autres_devis }
     facturation: { type: Object, default: null },
 });
+const petiteFournitureActive = ref(
+    props.dossier?.devis?.petite_fourniture_active == null
+        ? true
+        : !!props.dossier.devis.petite_fourniture_active
+);
+const petiteFournitureMontantSaisi = ref(props.dossier?.devis?.petite_fourniture_montant ?? '');
 
 // Numéro de facture déduit du numéro d'OT :
 //   SGK-02102026/001 (OT)  →  SGK-FAC-02102026/001 (facture)
@@ -120,18 +126,36 @@ const calculerTotaux = (lignes) => {
     const ht = lignes.reduce((a, l) => a + Number(l.montant_ht || 0), 0);
     const ttcBrut = lignes.reduce((a, l) => a + Number(l.montant_ttc || 0), 0);
     const remises = Math.round(lignes.reduce((a, l) => a + montantRemise(l), 0));
-    const actif = devis.petite_fourniture_active === null || devis.petite_fourniture_active === undefined
-        ? true : !!devis.petite_fourniture_active;
-    const manuel = devis.petite_fourniture_montant !== null && devis.petite_fourniture_montant !== undefined;
+    const actif = props.modeEdition
+        ? petiteFournitureActive.value
+        : devis.petite_fourniture_active === null || devis.petite_fourniture_active === undefined
+            ? true
+            : !!devis.petite_fourniture_active;
+    const montantSaisi = props.modeEdition
+        ? petiteFournitureMontantSaisi.value
+        : devis.petite_fourniture_montant;
+    const manuel = montantSaisi !== null && montantSaisi !== undefined && montantSaisi !== '';
 
     let pf = 0;
     if (ttcBrut > 0 && actif) {
         pf = manuel
-            ? Math.round(ttcBrut + Number(devis.petite_fourniture_montant)) - Math.round(ttcBrut)
+            ? Math.round(Number(montantSaisi) || 0)
             : Math.round(ttcBrut * 1.03) - Math.round(ttcBrut);
     }
 
-    return { ht, remises, tva: ttcBrut - ht, pf, manuel, ttc: Math.round(ttcBrut) + pf };
+    return { ht, remises, tva: ttcBrut - ht, ttcBrut, pf, manuel, ttc: Math.round(ttcBrut) + pf };
+};
+
+const petiteFournitureAuto = computed(() =>
+    Math.round(totauxCoches.value.ttcBrut * 1.03) - Math.round(totauxCoches.value.ttcBrut)
+);
+const petiteFournitureManuelle = computed(() =>
+    petiteFournitureMontantSaisi.value !== '' &&
+    petiteFournitureMontantSaisi.value !== null &&
+    petiteFournitureMontantSaisi.value !== undefined
+);
+const activerPetiteFournitureSaisie = () => {
+    if (petiteFournitureManuelle.value) petiteFournitureActive.value = true;
 };
 
 const totauxCoches = computed(() =>
@@ -271,10 +295,10 @@ const submitValidation = () => {
     // Devis déjà accepté : on enregistre les lignes ET les cases cochées en une seule fois
     if (props.modeEdition) {
         const devis = props.dossier.devis;
-        const pfActive = devis.petite_fourniture_active === null || devis.petite_fourniture_active === undefined
-            ? true : !!devis.petite_fourniture_active;
-        const pfMontant = devis.petite_fourniture_montant === null || devis.petite_fourniture_montant === undefined
-            ? null : Math.round(Number(devis.petite_fourniture_montant));
+        const pfActive = petiteFournitureActive.value;
+        const pfMontant = petiteFournitureManuelle.value
+            ? Math.round(Number(petiteFournitureMontantSaisi.value) || 0)
+            : null;
 
         form.transform(() => ({
             // Devis principal ou complémentaire : on cible toujours le devis affiché
@@ -749,6 +773,42 @@ const retour = () => {
                                         </span>
                                     </div>
                                 </div>
+                            </div>
+                            <div
+                                v-if="modeEdition && estAdmin"
+                                class="mb-3 flex flex-wrap items-end justify-end gap-x-3 gap-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs print:hidden"
+                            >
+                                <label
+                                    class="flex items-center gap-1.5 font-semibold text-gray-700"
+                                    :class="petiteFournitureManuelle ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'"
+                                >
+                                    <input
+                                        v-model="petiteFournitureActive"
+                                        type="checkbox"
+                                        :disabled="petiteFournitureManuelle"
+                                        class="rounded border-gray-300 text-[#E11D48] focus:ring-[#E11D48]"
+                                    />
+                                    Petite fourniture
+                                </label>
+                                <label class="text-[10px] font-semibold text-gray-600">
+                                    Montant manuel (F)
+                                    <input
+                                        v-model="petiteFournitureMontantSaisi"
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        :disabled="!petiteFournitureActive"
+                                        :placeholder="`Automatique 3 % : ${petiteFournitureAuto.toLocaleString()}`"
+                                        class="mt-1 block w-48 rounded-lg border-gray-300 text-right text-xs text-gray-900 focus:border-[#E11D48] focus:ring-[#E11D48] disabled:bg-gray-100"
+                                        @input="activerPetiteFournitureSaisie"
+                                    />
+                                </label>
+                                <span class="font-bold text-gray-700">
+                                    Appliquée : {{ totauxCoches.pf.toLocaleString() }} F
+                                </span>
+                                <p class="basis-full text-right text-[10px] text-gray-500">
+                                    Vide = calcul automatique à 3 %. Saisir 0 désactive le supplément.
+                                </p>
                             </div>
 
                             <!-- Conditions -->
