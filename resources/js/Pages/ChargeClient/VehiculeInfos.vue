@@ -40,6 +40,20 @@ const hrefRetour = computed(() => {
 /* Action de livraison                                                */
 /* ------------------------------------------------------------------ */
 const enCoursDeLivraison = ref(false);
+const enCoursAnnulation = ref(false);
+const statutRetourLivraison = ref('');
+const statutsAvantLivraison = [
+    { value: 'reception', label: 'À la réception' },
+    { value: 'en_essai', label: 'En essai' },
+    { value: 'diagnostic', label: 'En diagnostic' },
+    { value: 'devis', label: 'Devis en cours' },
+    { value: 'atelier', label: 'En atelier' },
+    { value: 'en_cours', label: 'En réparation' },
+    { value: 'attente_accord', label: 'Attente accord devis' },
+    { value: 'accepte', label: 'Devis accepté' },
+    { value: 'facture', label: 'Facturation' },
+    { value: 'termine', label: 'Terminé' },
+];
 
 const marquerCommeLivre = () => {
     if (!fiche.value) return;
@@ -50,6 +64,28 @@ const marquerCommeLivre = () => {
         }, {
             onFinish: () => {
                 enCoursDeLivraison.value = false;
+            }
+        });
+    }
+};
+
+const annulerLivraison = () => {
+    if (!fiche.value || fiche.value.statut !== 'livre') return;
+
+    const statutRetour = fiche.value.statut_avant_livraison || statutRetourLivraison.value;
+    if (!statutRetour) return;
+
+    const libelleStatut = statutsAvantLivraison.find((statut) => statut.value === statutRetour)?.label
+        || getStatutBadge(statutRetour).text;
+
+    if (confirm(`Annuler la livraison et rétablir le statut « ${libelleStatut} » ?`)) {
+        enCoursAnnulation.value = true;
+        router.patch(route('charge_client.vehicules.annuler-livraison', fiche.value.id), {
+            ...(fiche.value.statut_avant_livraison ? {} : { statut: statutRetour }),
+        }, {
+            onFinish: () => {
+                enCoursAnnulation.value = false;
+                statutRetourLivraison.value = '';
             }
         });
     }
@@ -218,6 +254,28 @@ const photosSupplementaires = computed(() => {
                             <FontAwesomeIcon :icon="faCircleCheck" class="text-xs" />
                             Véhicule livré
                         </span>
+                        <template v-if="user?.role === 'admin' && fiche.statut === 'livre'">
+                            <select
+                                v-if="!fiche.statut_avant_livraison"
+                                v-model="statutRetourLivraison"
+                                aria-label="Statut à rétablir après annulation de la livraison"
+                                class="min-h-10 rounded-xl border border-gray-200 bg-white px-3 text-xs font-semibold text-[#0B0F19] focus:border-[#E11D48] focus:outline-none focus:ring-2 focus:ring-[#E11D48]/10"
+                            >
+                                <option value="" disabled>Choisir le statut de retour</option>
+                                <option v-for="statut in statutsAvantLivraison" :key="statut.value" :value="statut.value">
+                                    {{ statut.label }}
+                                </option>
+                            </select>
+                            <button
+                                type="button"
+                                @click="annulerLivraison"
+                                :disabled="enCoursAnnulation || (!fiche.statut_avant_livraison && !statutRetourLivraison)"
+                                class="inline-flex items-center gap-2 rounded-xl border border-amber-300 bg-white px-4 py-2 text-xs font-bold text-amber-800 shadow-sm transition hover:bg-amber-50 focus:outline-none focus:ring-2 focus:ring-amber-500/20 disabled:opacity-50"
+                            >
+                                <FontAwesomeIcon :icon="faXmark" class="text-xs" />
+                                <span>{{ enCoursAnnulation ? 'Annulation...' : 'Annuler la livraison' }}</span>
+                            </button>
+                        </template>
 
                         <div v-if="receptions.length > 1" class="sm:w-56">
                             <select

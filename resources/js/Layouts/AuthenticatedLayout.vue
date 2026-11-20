@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { Head, Link, usePage, router } from '@inertiajs/vue3'; // 1. Ajoute Head ici
 import FlashToast from '@/Components/FlashToast.vue';
 import NotificationsMessages from '@/Components/NotificationsMessages.vue';
+import VehicleExpiryNotifications from '@/Components/VehicleExpiryNotifications.vue';
 import ChargeClientInstructions from '@/Components/ChargeClientInstructions.vue';
 import AdminMissionNotifications from '@/Components/AdminMissionNotifications.vue';
 import SecretariatNotifications from '@/Components/SecretariatNotifications.vue';
@@ -23,6 +24,7 @@ const MENUS = {
         { label: 'Secrétariat', route: 'admin.secretariat.index', icon: 'fa-solid fa-list-check', match: ['admin.secretariat.*'] },
         { label: 'Interactions', route: 'admin.users.interactionindex', icon: 'fa-solid fa-comments', match: ['admin.users.interactionindex'] },
         { label: 'Véhicules', route: 'admin.vehicules.status', icon: 'fa-solid fa-car', match: ['admin.vehicules.*'] },
+        { label: 'Échéances véhicules', route: 'charge_client.vehicules.echeances.index', icon: 'fa-solid fa-calendar-days', match: ['charge_client.vehicules.echeances.*'] },
         { label: "Chiffre d'affaires", route: 'admin.chiffre-affaires', icon: 'fa-solid fa-chart-line', match: ['admin.chiffre-affaires'] },
         { label: 'Suppressions', route: 'admin.demandes-suppression.index', icon: 'fa-solid fa-trash-can', match: ['admin.demandes-suppression.*'], pastille: 'demandesSuppression' },
     ],
@@ -47,7 +49,8 @@ const MENUS = {
     ],
     charge_client: [
         ACCUEIL,
-        { label: 'Clients', route: 'charge_client.clients.index', icon: 'fa-solid fa-address-book', match: ['charge_client.*'] },
+        { label: 'Clients', route: 'charge_client.clients.index', icon: 'fa-solid fa-address-book', match: ['charge_client.clients.*', 'charge_client.vehicules.show', 'charge_client.vehicules.infos', 'charge_client.vehicules.relances', 'charge_client.vehicules.interventions'] },
+        { label: 'Échéances véhicules', route: 'charge_client.vehicules.echeances.index', icon: 'fa-solid fa-calendar-days', match: ['charge_client.vehicules.echeances.*'] },
     ],
     secretaire: [
         { label: 'Mes tâches', route: 'secretaire.index', icon: 'fa-solid fa-list-check', match: ['secretaire.*'] },
@@ -150,6 +153,7 @@ const logout = () => {
 
                         <!-- DROITE : notifications (chargé client) + nom de l'utilisateur (lien profil) + Se déconnecter -->
                         <div class="flex items-center gap-2 sm:gap-3">
+                            <VehicleExpiryNotifications v-if="role === 'admin' || role === 'charge_client'" />
                             <NotificationsMessages v-if="role === 'charge_client'" />
                             <ChargeClientInstructions v-if="role === 'charge_client'" />
                             <AdminMissionNotifications v-if="role === 'admin'" />

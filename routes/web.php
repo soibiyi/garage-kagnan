@@ -209,6 +209,8 @@ Route::middleware(['auth'])->prefix('parc')->name('parc.')->group(function () {
 Route::middleware(['auth', 'verified'])->prefix('suivi-client')->name('charge_client.')->group(function () {
     Route::get('/clients', [ChargeClientController::class, 'index'])->name('clients.index');
     Route::get('/clients/{client}', [ChargeClientController::class, 'showClient'])->name('clients.show');
+    Route::get('/echeances-vehicules', [ChargeClientController::class, 'echeancesVehicules'])->name('vehicules.echeances.index');
+    Route::get('/notifications/echeances-vehicules', [ChargeClientController::class, 'notificationsEcheancesVehicules'])->name('vehicules.echeances.notifications');
     Route::post('/clients/{client}/portail/mot-de-passe-provisoire', [ChargeClientController::class, 'resetPortalPassword'])->name('clients.portal-password.reset');
     Route::post('/clients/{client}/portail/demandes/{portalRequest}/accepter', [ChargeClientController::class, 'acceptPortalAppointment'])->name('clients.portal-requests.accept');
     Route::get('/clients/{client}/portail/messages', [ChargeClientController::class, 'portalMessages'])->name('clients.portal-messages.index');
@@ -221,6 +223,7 @@ Route::middleware(['auth', 'verified'])->prefix('suivi-client')->name('charge_cl
     Route::get('/vehicules/{vehicule}/relances', [ChargeClientController::class, 'relancesVehicule'])->name('vehicules.relances');
     Route::get('/vehicules/{vehicule}/interventions', [ChargeClientController::class, 'interventionsVehicule'])->name('vehicules.interventions');
     Route::patch('/interventions/{intervention}/statut', [ChargeClientController::class, 'updateStatut'])->name('vehicules.update-statut');
+    Route::patch('/interventions/{intervention}/annuler-livraison', [ChargeClientController::class, 'annulerLivraison'])->name('vehicules.annuler-livraison');
     Route::post('/vehicules/{vehicule}/interactions', [ChargeClientController::class, 'storeInteraction'])->name('vehicules.interactions.store');
     Route::get('/interactions/photos/{photo}', [ChargeClientController::class, 'interactionPhoto'])->name('interactions.photos.show');
 Route::get('clients/{client}/chat', [EspaceClientController::class, 'chat'])->name('clients.chat');

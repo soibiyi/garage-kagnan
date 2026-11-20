@@ -11,6 +11,7 @@ use App\Models\InteractionClientPhoto;
 use App\Models\Intervention;
 use App\Models\Vehicule;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
@@ -454,6 +455,108 @@ class ChargeClientController extends Controller
         return back()->with('success', 'Les dates d’assurance et de visite technique ont été mises à jour.');
     }
 
+    public function echeancesVehicules(Request $request)
+    {
+        abort_unless(in_array(auth()->user()->role, ['admin', 'charge_client'], true), 403);
+
+        $filters = $request->validate([
+            'search' => ['nullable', 'string', 'max:100'],
+            'vehicule' => ['nullable', 'integer', 'min:1'],
+            'type' => ['nullable', 'in:expiration_assurance,expiration_sicta'],
+        ]);
+
+        $vehicules = $this->vehiculesEcheancesAccessibles()
+            ->with('client:id,nom,prenom')
+            ->when($filters['vehicule'] ?? null, fn ($query, $id) => $query->whereKey($id))
+            ->when($filters['search'] ?? null, function ($query, $search) {
+                $query->where(function ($query) use ($search) {
+                    $query->where('immatriculation', 'like', "%{$search}%")
+                        ->orWhere('marque', 'like', "%{$search}%")
+                        ->orWhere('modele', 'like', "%{$search}%")
+                        ->orWhereHas('client', fn ($client) => $client
+                            ->where('nom', 'like', "%{$search}%")
+                            ->orWhere('prenom', 'like', "%{$search}%"));
+                });
+            })
+            ->orderBy('immatriculation')
+            ->paginate(30)
+            ->withQueryString();
+
+        return Inertia::render('ChargeClient/VehiculeEcheancesIndex', [
+            'vehicules' => $vehicules,
+            'filtres' => [
+                'search' => $filters['search'] ?? '',
+                'vehicule' => $filters['vehicule'] ?? null,
+                'type' => $filters['type'] ?? null,
+            ],
+        ]);
+    }
+
+    public function notificationsEcheancesVehicules()
+    {
+        abort_unless(in_array(auth()->user()->role, ['admin', 'charge_client'], true), 403);
+
+        $dateLimite = today()->addDays(5)->toDateString();
+        $vehicules = $this->vehiculesEcheancesAccessibles()
+            ->with('client:id,nom,prenom')
+            ->where(function ($query) use ($dateLimite) {
+                $query->whereDate('expiration_assurance', '<=', $dateLimite)
+                    ->orWhereDate('expiration_sicta', '<=', $dateLimite);
+            })
+            ->get([
+                'id',
+                'client_id',
+                'immatriculation',
+                'expiration_assurance',
+                'expiration_sicta',
+            ]);
+
+        $notifications = $vehicules->flatMap(function (Vehicule $vehicule) {
+            return collect([
+                'expiration_assurance' => 'Assurance',
+                'expiration_sicta' => 'Visite technique (SICTA)',
+            ])->map(function (string $libelle, string $champ) use ($vehicule) {
+                $date = $vehicule->getRawOriginal($champ);
+                if (!$date) {
+                    return null;
+                }
+
+                $dateExpiration = \Illuminate\Support\Carbon::parse($date)->startOfDay();
+                $joursRestants = (int) today()->diffInDays($dateExpiration, false);
+                if ($joursRestants > 5) {
+                    return null;
+                }
+
+                return [
+                    'id' => "{$vehicule->id}-{$champ}",
+                    'vehicule_id' => $vehicule->id,
+                    'immatriculation' => $vehicule->immatriculation,
+                    'client' => trim(($vehicule->client?->prenom ?? '') . ' ' . ($vehicule->client?->nom ?? '')),
+                    'type' => $champ,
+                    'libelle' => $libelle,
+                    'date' => $dateExpiration->toDateString(),
+                    'jours_restants' => $joursRestants,
+                ];
+            })->filter();
+        })->sortBy('jours_restants')->values();
+
+        return response()->json([
+            'notifications' => $notifications,
+            'count' => $notifications->count(),
+        ]);
+    }
+
+    private function vehiculesEcheancesAccessibles()
+    {
+        return Vehicule::query()->when(
+            $this->estChargeClient(),
+            fn ($query) => $query->whereIn(
+                'client_id',
+                Client::query()->accessiblesAuChargeClient(auth()->user())->select('id')
+            )
+        );
+    }
+
     // 3 bis. Page dédiée : infos du véhicule
     public function infosVehicule(Vehicule $vehicule)
     {
@@ -516,11 +619,44 @@ class ChargeClientController extends Controller
             'statut' => 'required|string',
         ]);
 
-        $intervention->update([
-            'statut' => $data['statut'],
-        ]);
+        $updates = ['statut' => $data['statut']];
+
+        if ($data['statut'] === 'livre' && $intervention->statut !== 'livre') {
+            $updates['statut_avant_livraison'] = $intervention->statut;
+        } elseif ($data['statut'] !== 'livre') {
+            $updates['statut_avant_livraison'] = null;
+        }
+
+        $intervention->update($updates);
 
         return back()->with('success', 'Statut de l’intervention mis à jour avec succès.');
+    }
+
+    public function annulerLivraison(Request $request, Intervention $intervention)
+    {
+        abort_unless($this->estAdmin(), 403);
+
+        $statutsAutorises = 'reception,en_essai,diagnostic,devis,atelier,en_cours,attente_accord,accepte,facture,termine';
+        $data = $request->validate([
+            'statut' => $intervention->statut_avant_livraison === null
+                ? "required|in:{$statutsAutorises}"
+                : "nullable|in:{$statutsAutorises}",
+        ]);
+
+        DB::transaction(function () use ($intervention, $data) {
+            $intervention = Intervention::query()->lockForUpdate()->findOrFail($intervention->id);
+            abort_unless($intervention->statut === 'livre', 422);
+
+            $statutRetour = $intervention->statut_avant_livraison ?? ($data['statut'] ?? null);
+            abort_if($statutRetour === null, 422);
+
+            $intervention->update([
+                'statut' => $statutRetour,
+                'statut_avant_livraison' => null,
+            ]);
+        });
+
+        return back()->with('success', 'La livraison a été annulée et le statut de l’intervention a été rétabli.');
     }
 
     // 5. Enregistre une interaction au sujet d'un véhicule
