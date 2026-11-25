@@ -14,15 +14,6 @@ use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
-/**
- * Récapitulatif des petites fournitures (super administrateur).
- *
- * - Facturé : dossier dont le devis est accepté (même règle que la page Factures).
- *   Date retenue : date d'acceptation du devis (dernière mise à jour du devis).
- * - Soldé : facture entièrement payée. Date retenue : date du paiement qui l'a soldée.
- * - Montant : petite fourniture des lignes acceptées (3 % automatique ou montant saisi),
- *   calculée exactement comme sur la facture (App\Support\PetiteFourniture).
- */
 class PetitesFournituresController extends Controller
 {
     private const NB_MOIS = 12;
@@ -51,41 +42,60 @@ class PetitesFournituresController extends Controller
             ],
             'parMois' => $this->periodes($dossiers, 'mois'),
             'parSemaine' => $this->periodes($dossiers, 'semaine'),
-            // Détail des dossiers (les plus récents) pour la liste filtrable côté page
             'dossiers' => $dossiers->sortByDesc('date_facturation')->take(400)->values(),
         ]);
     }
 
-    /** Tous les dossiers facturés avec leur petite fourniture, état de paiement et dates. */
+    /** Dossiers réellement facturés : devis accepté + facture existante en base. */
     private function dossiers(?string $siege): Collection
     {
         $interventions = Intervention::query()
             ->where('statut', 'accepte')
             ->when($siege, fn ($q) => $q->where('siege', $siege))
-            ->whereHas('devis')
-            ->with(['devis.lignes:id,devis_id,montant_ttc,is_accepted', 'vehicule:id,client_id,immatriculation,marque,modele', 'vehicule.client:id,nom,prenom'])
+            ->whereHas('devis', fn ($q) => $q->where('statut', 'accepte'))
+            ->whereHas('facture')
+            ->with([
+                'devis' => fn ($q) => $q->where('statut', 'accepte'),
+                'devis.lignes' => fn ($q) => $q->select('id', 'devis_id', 'montant_ttc', 'is_accepted')->where('is_accepted', true),
+                'vehicule:id,client_id,immatriculation,marque,modele',
+                'vehicule.client:id,nom,prenom',
+            ])
             ->get();
 
-        $factures = Facture::whereIn('intervention_id', $interventions->pluck('id'))->get()->keyBy('intervention_id');
+        $factures = Facture::whereIn('intervention_id', $interventions->pluck('id'))
+            ->get()
+            ->keyBy('intervention_id');
 
-        // Date du paiement qui a soldé la facture = dernier paiement d'une facture soldée
-        $derniersPaiements = Paiement::query()
-            ->whereIn('facture_id', $factures->pluck('id'))
-            ->selectRaw('facture_id, MAX(date_paiement) as dernier')
+        $factureIds = $factures->pluck('id');
+
+        $paiementsParFacture = Paiement::query()
+            ->whereIn('facture_id', $factureIds)
+            ->selectRaw('facture_id, COALESCE(SUM(montant), 0) as total_paye, MAX(date_paiement) as dernier_paiement')
             ->groupBy('facture_id')
-            ->pluck('dernier', 'facture_id');
+            ->get()
+            ->keyBy('facture_id');
 
         return $interventions
-            ->map(function (Intervention $d) use ($factures, $derniersPaiements) {
-                $brut = (float) $d->devis->lignes->where('is_accepted', true)->sum('montant_ttc');
-                $total = PetiteFourniture::totalFinal($d->devis, $brut);
-                $petiteFourniture = PetiteFourniture::montant($d->devis, $brut);
+            ->map(function (Intervention $d) use ($factures, $paiementsParFacture) {
                 $facture = $factures->get($d->id);
-                $paye = (int) round((float) optional($facture)->montant_paye);
+
+                // Si la facture n'existe plus en base : aucune petite fourniture ni statut soldé
+                if (!$facture || !$d->devis) {
+                    return null;
+                }
+
+                $brut = (float) $d->devis->lignes->sum('montant_ttc');
+                $total = (float) PetiteFourniture::totalFinal($d->devis, $brut);
+                $petiteFourniture = (float) PetiteFourniture::montant($d->devis, $brut);
+
+                $statsPaiement = $paiementsParFacture->get($facture->id);
+                $paye = $statsPaiement
+                    ? (int) round((float) $statsPaiement->total_paye)
+                    : (int) round((float) $facture->montant_paye);
+
                 $soldee = $total > 0 && $paye >= $total;
-                $dernierPaiement = $facture ? ($derniersPaiements[$facture->id] ?? null) : null;
+                $dernierPaiement = $statsPaiement?->dernier_paiement;
                 $client = $d->vehicule?->client;
-                // Même règle que PetiteFourniture : null = active
                 $actif = $d->devis->petite_fourniture_active === null || (bool) $d->devis->petite_fourniture_active;
 
                 return [
@@ -105,15 +115,10 @@ class PetitesFournituresController extends Controller
                     'date_solde' => $soldee && $dernierPaiement ? Carbon::parse($dernierPaiement)->toIso8601String() : null,
                 ];
             })
-            ->filter(fn ($d) => $d['total_ttc'] > 0)
+            ->filter(fn ($d) => $d !== null && $d['total_ttc'] > 0)
             ->values();
     }
 
-    /**
-     * Agrégat d'une période :
-     *  - total : petites fournitures facturées dans la période (soldées ou non)
-     *  - soldees : petites fournitures des factures soldées dans la période (date du solde)
-     */
     private function agreger(Collection $dossiers, CarbonImmutable $debut, CarbonImmutable $fin): array
     {
         $dans = fn (?string $date) => $date && ($c = CarbonImmutable::parse($date))->gte($debut) && $c->lte($fin);
