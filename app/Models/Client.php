@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -117,6 +118,22 @@ class Client extends Authenticatable
     public function interactions()
     {
         return $this->hasMany(InteractionClient::class);
+    }
+
+    /**
+     * Chargé client rattaché : celui qui a pris le client en charge en premier,
+     * c'est-à-dire l'auteur de la PREMIÈRE interaction faite par un chargé client.
+     * Utiliser avec : 'chargeClientRattache.user'
+     */
+    public function chargeClientRattache(): HasOne
+    {
+        return $this->hasOne(InteractionClient::class)->ofMany(
+            ['id' => 'min'],
+            fn ($interactions) => $interactions->whereHas(
+                'user',
+                fn ($users) => $users->where('role', 'charge_client')
+            )
+        );
     }
 
     /** Clients rattachés au siège : par leur fiche ou par un dossier ouvert dans ce siège. */

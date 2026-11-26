@@ -398,26 +398,37 @@ class UserController extends Controller
         return back()->with('success', 'Consigne enregistrée avec succès.');
     }
 
-    /**
-     * Afficher tous les véhicules avec leur propriétaire et leur dernier statut
-     */
-    public function vehiculesStatus()
-    {
-        $siege = $this->siegeActif();
+   /**
+ * Afficher tous les véhicules avec leur propriétaire, leur chargé client rattaché
+ * et leur dernier statut
+ */
+public function vehiculesStatus()
+{
+    $siege = $this->siegeActif();
 
-        $vehicules = Vehicule::with(['client', 'interventions' => function ($q) use ($siege) {
+    $vehicules = Vehicule::with([
+        'client',
+        // Chargé client du siège actif : auteur de la première interaction d'un chargé de CE siège
+        'client.interactions' => fn ($i) => $i
+            ->select('id', 'client_id', 'user_id')
+            ->whereHas('user', fn ($u) => $u
+                ->where('role', 'charge_client')
+                ->where('siege', $siege))
+            ->with('user:id,name')
+            ->oldest('id'),
+        'interventions' => function ($q) use ($siege) {
             $q->when($siege, fn ($i) => $i->where('siege', $siege))->latest();
-        }])
-            ->when($siege, fn ($q) => $q->whereHas('interventions', fn ($i) => $i->where('siege', $siege)))
-            ->latest()
-            ->get();
+        },
+    ])
+        ->when($siege, fn ($q) => $q->whereHas('interventions', fn ($i) => $i->where('siege', $siege)))
+        ->latest()
+        ->get();
 
-        return Inertia::render('Admin/Status', [
-            'vehicules' => $vehicules,
-            'siegeFiltre' => $siege,
-        ]);
-    }
-
+    return Inertia::render('Admin/Status', [
+        'vehicules' => $vehicules,
+        'siegeFiltre' => $siege,
+    ]);
+}
     /**
      * Historique du chiffre d'affaires par année
      */

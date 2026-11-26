@@ -12,10 +12,10 @@ import {
     faArrowUp,
     faArrowDown,
     faClock,
-    faChevronRight,
     faRotateLeft,
     faPhone,
     faEye,
+    faUserTie,
 } from '@fortawesome/free-solid-svg-icons';
 
 const props = defineProps({
@@ -102,12 +102,18 @@ const libelleAnciennete = (jours) => {
     return `Depuis ${jours} jour${jours > 1 ? 's' : ''}`;
 };
 
+// Nom affichable d'un utilisateur (gère "name" ou "nom" + "prenom")
+const nomUtilisateur = (u) => {
+    if (!u) return '';
+    return (u.name ?? `${u.nom ?? ''} ${u.prenom ?? ''}`).trim();
+};
+
 const vehiculesEnrichis = computed(() =>
     props.vehicules.map((v) => {
         const ot = v.interventions?.[0] ?? null;
         const statut = ot && ot.statut in STATUTS ? ot.statut : 'aucun';
         const jours = ot && statut !== 'livre' ? joursDepuis(ot.updated_at ?? ot.created_at) : null;
-
+        const nomChargeClient = nomUtilisateur(v.client?.interactions?.[0]?.user);
         return {
             ...v,
             ot,
@@ -118,6 +124,7 @@ const vehiculesEnrichis = computed(() =>
             anciennete: libelleAnciennete(jours),
             nomComplet: v.client ? `${v.client.nom ?? ''} ${v.client.prenom ?? ''}`.trim() : '',
             nomVehicule: `${v.marque ?? ''} ${v.modele ?? ''}`.trim(),
+            nomChargeClient,
             texte: normaliser([
                 v.immatriculation,
                 v.marque,
@@ -126,6 +133,7 @@ const vehiculesEnrichis = computed(() =>
                 v.client?.prenom,
                 v.client?.telephone,
                 ot?.numero_ot,
+                nomChargeClient,
             ].join(' ')),
         };
     })
@@ -158,6 +166,7 @@ const comparateurs = {
     vehicule: (a, b) => comparer(a.nomVehicule, b.nomVehicule),
     immatriculation: (a, b) => comparer(a.immatriculation, b.immatriculation),
     proprietaire: (a, b) => comparer(a.nomComplet, b.nomComplet),
+    chargeClient: (a, b) => comparer(a.nomChargeClient, b.nomChargeClient),
 };
 
 const trierPar = (cle) => {
@@ -241,7 +250,7 @@ const pluriel = (n) => (n > 1 ? 's' : '');
                         v-model="search"
                         type="text"
                         autocomplete="off"
-                        placeholder="Plaque, marque, propriétaire, téléphone, n° d'OT"
+                        placeholder="Plaque, marque, propriétaire, chargé client, téléphone, n° d'OT"
                         class="w-full min-h-[44px] pl-10 pr-10 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-[#C8102E]/25 focus:border-[#C8102E] transition"
                     />
                     <button
@@ -354,11 +363,20 @@ const pluriel = (n) => (n > 1 ? 's' : '');
                             </p>
                         </div>
 
+                        <!-- Chargé client rattaché -->
+                        <p class="flex items-center gap-1.5 text-xs text-gray-500">
+                            <FontAwesomeIcon :icon="faUserTie" class="text-[10px]" />
+                            <template v-if="v.nomChargeClient">
+                                Chargé client : <span class="font-semibold text-gray-700">{{ v.nomChargeClient }}</span>
+                            </template>
+                            <span v-else class="italic text-gray-400">Non pris en charge</span>
+                        </p>
+
                         <div class="pt-3 border-t border-gray-100 flex items-center justify-between gap-3 text-sm">
                             <span class="font-mono font-bold" :class="v.numeroOt ? 'text-[#C8102E]' : 'text-gray-400 font-normal'">
                                 {{ v.numeroOt || 'Aucun OT' }}
                             </span>
-                            
+
                             <!-- Bouton Consulter pour mobile -->
                             <Link
                                 :href="lienDetail(v)"
@@ -393,6 +411,12 @@ const pluriel = (n) => (n > 1 ? 's' : '');
                                         <button type="button" @click="trierPar('proprietaire')" class="inline-flex items-center gap-1.5 hover:text-gray-900 transition focus:outline-none focus-visible:text-[#C8102E]">
                                             Propriétaire
                                             <FontAwesomeIcon v-if="tri.cle === 'proprietaire'" :icon="tri.dir === 'asc' ? faArrowUp : faArrowDown" class="text-[10px] text-[#C8102E]" />
+                                        </button>
+                                    </th>
+                                    <th scope="col" class="py-3.5 px-4" :aria-sort="ariaSort('chargeClient')">
+                                        <button type="button" @click="trierPar('chargeClient')" class="inline-flex items-center gap-1.5 hover:text-gray-900 transition focus:outline-none focus-visible:text-[#C8102E]">
+                                            Chargé client
+                                            <FontAwesomeIcon v-if="tri.cle === 'chargeClient'" :icon="tri.dir === 'asc' ? faArrowUp : faArrowDown" class="text-[10px] text-[#C8102E]" />
                                         </button>
                                     </th>
                                     <th scope="col" class="py-3.5 px-4">Dernier OT</th>
@@ -439,6 +463,17 @@ const pluriel = (n) => (n > 1 ? 's' : '');
                                             <span v-else class="text-xs text-gray-400">Sans téléphone</span>
                                         </div>
                                         <span v-else class="italic text-gray-400">Aucun propriétaire</span>
+                                    </td>
+
+                                    <!-- Chargé client rattaché -->
+                                    <td class="py-4 px-4">
+                                        <div v-if="v.nomChargeClient" class="flex items-center gap-2">
+                                            <span class="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 shrink-0">
+                                                <FontAwesomeIcon :icon="faUserTie" class="text-xs" />
+                                            </span>
+                                            <span class="font-semibold text-gray-900">{{ v.nomChargeClient }}</span>
+                                        </div>
+                                        <span v-else class="italic text-gray-400">Non pris en charge</span>
                                     </td>
 
                                     <!-- Dernier OT -->
