@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Head, Link, usePage, router } from '@inertiajs/vue3'; // 1. Ajoute Head ici
 import FlashToast from '@/Components/FlashToast.vue';
 import NotificationsMessages from '@/Components/NotificationsMessages.vue';
@@ -87,13 +87,90 @@ const MENU_SUPERADMIN = [
 
 const menu = computed(() => (estSuperAdmin.value ? MENU_SUPERADMIN : MENUS[role.value] ?? []));
 
+const paletteOuverte = ref(false);
+const recherchePalette = ref('');
+const indexPalette = ref(0);
+const saisiePalette = ref(null);
+
+const normaliserRecherche = (valeur) =>
+    String(valeur).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+const destinationsPalette = computed(() => {
+    const acces = [...(menu.value ?? [])];
+
+    if (!acces.some((item) => item.route === 'dashboard') && !estSuperAdmin.value) {
+        acces.unshift(ACCUEIL);
+    }
+
+    if (!acces.some((item) => item.route === 'profile.edit')) {
+        acces.push({ label: 'Mon profil', route: 'profile.edit', icon: 'fa-solid fa-user' });
+    }
+
+    const requete = normaliserRecherche(recherchePalette.value.trim());
+    const resultats = requete
+        ? acces.filter((item) => normaliserRecherche(item.label).includes(requete))
+        : acces;
+
+    return resultats.slice(0, 10);
+});
+
+watch(recherchePalette, () => {
+    indexPalette.value = 0;
+});
+
+const ouvrirPalette = () => {
+    paletteOuverte.value = true;
+    recherchePalette.value = '';
+    indexPalette.value = 0;
+    nextTick(() => saisiePalette.value?.focus());
+};
+
+const fermerPalette = () => {
+    paletteOuverte.value = false;
+    recherchePalette.value = '';
+};
+
+const visiterPalette = (item) => {
+    if (!item) return;
+    fermerPalette();
+    router.visit(route(item.route));
+};
+
+const gererClavierPalette = (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLower?.() === 'k') {
+        event.preventDefault();
+        if (paletteOuverte.value) fermerPalette();
+        else ouvrirPalette();
+        return;
+    }
+
+    if (!paletteOuverte.value) return;
+
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        fermerPalette();
+    } else if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        if (destinationsPalette.value.length) {
+            indexPalette.value = Math.min(indexPalette.value + 1, destinationsPalette.value.length - 1);
+        }
+    } else if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        indexPalette.value = Math.max(indexPalette.value - 1, 0);
+    } else if (event.key === 'Enter') {
+        event.preventDefault();
+        visiterPalette(destinationsPalette.value[indexPalette.value]);
+    }
+};
+
+onMounted(() => document.addEventListener('keydown', gererClavierPalette));
+onBeforeUnmount(() => document.removeEventListener('keydown', gererClavierPalette));
+
 // « Voir en tant que » : le super administrateur navigue avec le compte d'un collaborateur
 const impersonation = computed(() => page.props.auth.impersonation);
 const revenirAMonCompte = () => router.post(route('superadmin.impersonate.stop'));
 
 const logout = () => {
-    sessionStorage.removeItem('dashboard_loaded');
-    sessionStorage.removeItem('admin_loaded');
     // Prochaine connexion : réafficher les consignes reçues pendant l'absence
     sessionStorage.removeItem('instructions_resume_connexion');
     router.post(route('logout'));
@@ -160,6 +237,17 @@ const logout = () => {
                             <SecretariatNotifications v-if="role === 'admin' || role === 'secretaire'" />
                             <SuperAdminAlertes v-if="estSuperAdmin" />
 
+                            <button
+                                type="button"
+                                @click="ouvrirPalette"
+                                class="inline-flex h-9 items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 text-xs font-bold text-[#6B6E70] transition hover:border-gray-300 hover:bg-gray-50"
+                                aria-label="Ouvrir la recherche rapide"
+                            >
+                                <i class="fa-solid fa-magnifying-glass text-[11px]" aria-hidden="true"></i>
+                                <span class="hidden md:inline">Rechercher</span>
+                                <kbd class="hidden rounded border border-gray-200 bg-gray-50 px-1.5 py-0.5 text-[10px] font-bold text-gray-500 lg:inline">Ctrl K</kbd>
+                            </button>
+
                             <Link
                                 :href="route('profile.edit')"
                                 class="inline-flex max-w-[140px] items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-xs font-bold text-[#0B0F19] transition hover:border-[#0B0F19] hover:bg-gray-50 sm:max-w-[240px] sm:px-4"
@@ -208,6 +296,63 @@ const logout = () => {
             </nav>
             <AnnoncesBandeau />
             <FlashToast />
+
+            <div
+                v-if="paletteOuverte"
+                class="fixed inset-0 z-[100] flex items-start justify-center bg-[#0B0F19]/40 px-4 pt-[12vh] backdrop-blur-sm print:hidden"
+                role="dialog"
+                aria-modal="true"
+                aria-label="Recherche rapide"
+                @mousedown.self="fermerPalette"
+            >
+                <div class="w-full max-w-xl overflow-hidden rounded-2xl border border-white/70 bg-white shadow-2xl">
+                    <div class="flex items-center gap-3 border-b border-gray-100 px-4">
+                        <i class="fa-solid fa-magnifying-glass text-sm text-[#E11D48]" aria-hidden="true"></i>
+                        <input
+                            ref="saisiePalette"
+                            v-model="recherchePalette"
+                            type="search"
+                            class="h-14 min-w-0 flex-1 border-0 bg-transparent text-sm font-semibold text-[#0B0F19] outline-none ring-0 placeholder:text-gray-400 focus:ring-0"
+                            placeholder="Rechercher une page..."
+                            aria-label="Rechercher une page"
+                        />
+                        <button type="button" class="rounded-md border border-gray-200 px-2 py-1 text-[10px] font-bold text-gray-500" @click="fermerPalette">
+                            Échap
+                        </button>
+                    </div>
+
+                    <div class="max-h-[55vh] overflow-y-auto p-2" role="listbox">
+                        <button
+                            v-for="(item, index) in destinationsPalette"
+                            :key="item.label"
+                            type="button"
+                            role="option"
+                            :aria-selected="indexPalette === index"
+                            class="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left transition"
+                            :class="indexPalette === index ? 'bg-[#0B0F19] text-white' : 'text-[#0B0F19] hover:bg-gray-50'"
+                            @mouseenter="indexPalette = index"
+                            @click="visiterPalette(item)"
+                        >
+                            <span
+                                class="grid h-9 w-9 shrink-0 place-items-center rounded-lg"
+                                :class="indexPalette === index ? 'bg-white/10 text-white' : 'bg-[#F3F4F6] text-[#E11D48]'"
+                            >
+                                <i :class="item.icon" class="text-sm" aria-hidden="true"></i>
+                            </span>
+                            <span class="min-w-0 flex-1">
+                                <span class="block truncate text-sm font-bold">{{ item.label }}</span>
+                                <span class="mt-0.5 block text-[11px]" :class="indexPalette === index ? 'text-white/60' : 'text-gray-400'">Ouvrir cette page</span>
+                            </span>
+                            <i v-if="indexPalette === index" class="fa-solid fa-arrow-right text-xs" aria-hidden="true"></i>
+                        </button>
+
+                        <div v-if="!destinationsPalette.length" class="px-4 py-10 text-center">
+                            <p class="text-sm font-bold text-[#0B0F19]">Aucune page trouvée</p>
+                            <p class="mt-1 text-xs text-gray-500">Essayez un autre terme.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <!-- Page Heading -->
             <header class="bg-white shadow print:hidden" v-if="$slots.header">

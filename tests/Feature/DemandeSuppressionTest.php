@@ -88,6 +88,54 @@ class DemandeSuppressionTest extends TestCase
         $this->assertSame('Facture à conserver', $demande->fresh()->reponse);
     }
 
+    public function test_admin_can_approve_and_refuse_requests_in_batches(): void
+    {
+        $this->actingAs($this->receptionniste)
+            ->delete(route('parc.destroy', $this->dossier->id), ['motif' => 'Dossier créé en double']);
+
+        $demandeApprouvee = DemandeSuppression::firstOrFail();
+
+        $client = Client::create(['nom' => 'Koné', 'prenom' => 'Moussa', 'telephone' => '0700000002']);
+        $vehicule = Vehicule::create(['client_id' => $client->id, 'immatriculation' => 'XY-988-CI', 'marque' => 'Toyota', 'modele' => 'Hilux']);
+        $secondDossier = Intervention::create([
+            'vehicule_id' => $vehicule->id,
+            'kilometrage' => 6000,
+            'siege' => 'SGK',
+            'statut' => 'facture',
+            'numero_ot' => 'OT-78',
+        ]);
+
+        $this->actingAs($this->receptionniste)
+            ->delete(route('parc.destroy', $secondDossier->id), ['motif' => 'Saisie incorrecte']);
+
+        $demandeRefusee = DemandeSuppression::where('id', '!=', $demandeApprouvee->id)->firstOrFail();
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.demandes-suppression.approuver-selection'), [
+                'ids' => [$demandeApprouvee->id],
+                'reponse' => 'Demande validée',
+            ])
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseMissing('interventions', ['id' => $this->dossier->id]);
+        $this->assertSame('approuvee', $demandeApprouvee->fresh()->statut);
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.demandes-suppression.refuser-selection'), [
+                'ids' => [$demandeRefusee->id],
+                'reponse' => 'Conserver ce dossier',
+            ])
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('interventions', ['id' => $secondDossier->id]);
+        $this->assertSame('refusee', $demandeRefusee->fresh()->statut);
+        $this->assertSame('Conserver ce dossier', $demandeRefusee->fresh()->reponse);
+
+        $this->actingAs($this->receptionniste)
+            ->post(route('admin.demandes-suppression.refuser-selection'), ['ids' => [$demandeApprouvee->id]])
+            ->assertForbidden();
+    }
+
     public function test_admin_deletes_directly(): void
     {
         $this->actingAs($this->admin)->delete(route('parc.destroy', $this->dossier->id))->assertSessionHas('success');

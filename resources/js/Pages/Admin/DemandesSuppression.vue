@@ -4,7 +4,7 @@ import { Head, router } from '@inertiajs/vue3';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { dateHeure, fcfa } from '@/utils/format.js';
 
-defineProps({
+const props = defineProps({
     enAttente: { type: Array, default: () => [] },
     traitees: { type: Array, default: () => [] },
 });
@@ -17,6 +17,44 @@ const STATUTS = {
 
 const enCours = ref(null);
 const reponses = ref({});
+const selection = ref([]);
+const reponseSelection = ref('');
+
+const toutesSelectionnees = () => props.enAttente.length > 0
+    && props.enAttente.every((demande) => selection.value.includes(demande.id));
+
+function basculerTout() {
+    selection.value = toutesSelectionnees()
+        ? []
+        : props.enAttente.map((demande) => demande.id);
+}
+
+function basculerSelection(id) {
+    selection.value = selection.value.includes(id)
+        ? selection.value.filter((selectionId) => selectionId !== id)
+        : [...selection.value, id];
+}
+
+function traiterSelection(action) {
+    if (!selection.value.length || enCours.value) return;
+
+    if (action === 'approuver') {
+        if (!window.confirm(`Supprimer définitivement ${selection.value.length} demande(s) sélectionnée(s) ?\n\nLe super administrateur pourra restaurer les éléments supprimés.`)) return;
+    }
+
+    enCours.value = 'selection';
+    router.post(route(`admin.demandes-suppression.${action}-selection`), {
+        ids: selection.value,
+        reponse: reponseSelection.value.trim() || null,
+    }, {
+        preserveScroll: true,
+        onFinish: () => {
+            enCours.value = null;
+            selection.value = [];
+            reponseSelection.value = '';
+        },
+    });
+}
 
 const vehicule = (c) => [c?.vehicule, c?.immatriculation ? `(${c.immatriculation})` : null].filter(Boolean).join(' ');
 
@@ -68,6 +106,39 @@ function envoyer(d, action) {
                         <i class="fa-solid fa-hourglass-half text-[#E11D48]" aria-hidden="true"></i>À valider ({{ enAttente.length }})
                     </h2>
 
+                    <div v-if="enAttente.length" class="sg-glass sg-glass-strong flex flex-col gap-3 p-3 sm:flex-row sm:items-center">
+                        <label class="flex min-h-10 items-center gap-2 text-sm font-bold text-[#0B0F19]">
+                            <input
+                                type="checkbox"
+                                :checked="toutesSelectionnees()"
+                                class="h-4 w-4 rounded border-gray-300 text-[#E11D48] focus:ring-[#E11D48]"
+                                aria-label="Sélectionner toutes les demandes"
+                                @change="basculerTout"
+                            />
+                            Tout sélectionner
+                        </label>
+
+                        <div v-if="selection.length" class="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+                            <span class="shrink-0 rounded-full bg-[#0B0F19] px-3 py-1.5 text-xs font-bold text-white">
+                                {{ selection.length }} sélectionnée{{ selection.length > 1 ? 's' : '' }}
+                            </span>
+                            <input
+                                v-model="reponseSelection"
+                                type="text"
+                                maxlength="500"
+                                class="sg-field min-w-0 flex-1"
+                                placeholder="Réponse commune (facultatif)"
+                                aria-label="Réponse commune pour les demandes sélectionnées"
+                            />
+                            <button type="button" class="sg-btn sg-btn-glass" :disabled="enCours !== null" @click="traiterSelection('refuser')">
+                                <i class="fa-solid fa-xmark" aria-hidden="true"></i>Refuser
+                            </button>
+                            <button type="button" class="sg-btn sg-btn-red" :disabled="enCours !== null" @click="traiterSelection('approuver')">
+                                <i class="fa-solid" :class="enCours === 'selection' ? 'fa-spinner fa-spin' : 'fa-trash-can'" aria-hidden="true"></i>Supprimer
+                            </button>
+                        </div>
+                    </div>
+
                     <div v-if="!enAttente.length" class="sg-empty p-10 text-center">
                         <i class="fa-solid fa-circle-check text-3xl text-emerald-500" aria-hidden="true"></i>
                         <p class="mt-3 font-bold text-[#0B0F19]">Aucune demande en attente.</p>
@@ -75,7 +146,15 @@ function envoyer(d, action) {
 
                     <article v-for="d in enAttente" :key="d.id" class="sg-glass sg-glass-strong space-y-3 p-4 sm:p-5">
                         <div class="flex flex-wrap items-start justify-between gap-3">
-                            <div class="min-w-0">
+                            <label class="flex items-start gap-3 min-w-0">
+                                <input
+                                    type="checkbox"
+                                    :checked="selection.includes(d.id)"
+                                    class="mt-1 h-4 w-4 shrink-0 rounded border-gray-300 text-[#E11D48] focus:ring-[#E11D48]"
+                                    :aria-label="`Sélectionner la demande ${d.libelle}`"
+                                    @change="basculerSelection(d.id)"
+                                />
+                                <div class="min-w-0">
                                 <p class="flex flex-wrap items-center gap-2 font-black text-[#0B0F19]">
                                     <span class="sg-chip bg-red-50 text-red-700">{{ d.type }}</span>
                                     {{ d.libelle }}
@@ -89,7 +168,8 @@ function envoyer(d, action) {
                                 <p class="mt-1 text-xs text-gray-500">
                                     Demandé par <b>{{ d.demandeur?.name || '—' }}</b><template v-if="d.demandeur?.role"> ({{ d.demandeur.role }})</template> · {{ dateHeure(d.date) }}
                                 </p>
-                            </div>
+                                </div>
+                            </label>
                             <span v-if="!d.existe" class="sg-chip bg-gray-200 text-gray-700">Déjà supprimé</span>
                         </div>
 

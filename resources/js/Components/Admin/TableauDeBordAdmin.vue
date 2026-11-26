@@ -132,8 +132,7 @@ const estSuperAdmin = computed(() => !!page.props.auth?.user?.is_superadmin);
 // Les comptes administrateurs ne sont gérés que par le super administrateur (l'admin garde la main sur le sien)
 const peutGerer = (user) => estSuperAdmin.value || user.role !== 'admin' || user.id === meId.value;
 
-// ─── Écran de chargement (une seule fois par session) ───────────────
-const isLoading = ref(false);
+// ─── Entrée du contenu ───────────────────────────────────────────────
 const ready = ref(false); // déclenche l'entrée du contenu + le compteur du CA
 
 const prefersReducedMotion = () =>
@@ -141,21 +140,7 @@ const prefersReducedMotion = () =>
 
 onMounted(() => {
     window.addEventListener('keydown', onKeydown);
-
-    const hasLoaded = sessionStorage.getItem('admin_loaded');
-
-    if (props.integre) {
-        ready.value = true;
-    } else if (!hasLoaded) {
-        isLoading.value = true;
-        setTimeout(() => {
-            isLoading.value = false;
-            ready.value = true;
-            sessionStorage.setItem('admin_loaded', 'true');
-        }, 1500);
-    } else {
-        ready.value = true;
-    }
+    ready.value = true;
 });
 
 onBeforeUnmount(() => {
@@ -365,7 +350,6 @@ function onKeydown(e) {
 }
 
 const logout = () => {
-    sessionStorage.removeItem('admin_loaded');
     router.post(route('logout'));
 };
 </script>
@@ -378,25 +362,6 @@ const logout = () => {
       <span class="orb orb-2"></span>
       <span class="orb orb-3"></span>
     </div>
-
-    <!-- ÉCRAN DE CHARGEMENT -->
-    <Transition name="kg-fade">
-      <div v-if="isLoading" class="loader fixed inset-0 z-50 flex items-center justify-center px-6">
-        <div class="glass glass-lg w-full max-w-xs p-8 text-center">
-          <span class="tile-base tile-red-solid mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl text-white">
-            <font-awesome-icon :icon="faGear" class="kg-gear text-2xl" />
-          </span>
-          <h1 class="text-xl font-extrabold tracking-tight text-[#1A1A1A]">
-            Garage Kagnan <span class="text-[#C8102E]">Administration</span>
-          </h1>
-          <p class="mt-1.5 text-xs font-medium text-[#6B6E70]">Chargement de l'espace d'administration…</p>
-
-          <div class="progress mt-6">
-            <div class="kg-loader h-full rounded-full bg-[#C8102E]"></div>
-          </div>
-        </div>
-      </div>
-    </Transition>
 
     <div
       class="relative space-y-5 sm:space-y-7"
@@ -1476,35 +1441,6 @@ li + li > .nav-row {
   box-shadow: inset 0 1px 0 #fff, 0 0 0 1px rgba(26, 26, 26, 0.06);
 }
 
-/* ════════════ Écran de chargement ════════════ */
-.loader {
-  background: rgba(245, 245, 246, 0.55);
-  -webkit-backdrop-filter: blur(30px) saturate(160%);
-  backdrop-filter: blur(30px) saturate(160%);
-}
-.progress {
-  height: 5px;
-  width: 100%;
-  overflow: hidden;
-  border-radius: 9999px;
-  background: rgba(26, 26, 26, 0.08);
-  box-shadow: inset 0 1px 2px rgba(26, 26, 26, 0.1);
-}
-.kg-fade-leave-active { transition: opacity 0.4s ease-out; }
-.kg-fade-leave-to { opacity: 0; }
-
-@keyframes kgLoading {
-  from { width: 0%; }
-  to { width: 100%; }
-}
-.kg-loader { animation: kgLoading 1.5s var(--ease) forwards; }
-
-@keyframes kgGear {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(180deg); }
-}
-.kg-gear { animation: kgGear 1.5s var(--ease) forwards; }
-
 /* ════════════ Entrée échelonnée après le chargement ════════════ */
 @keyframes kgRise {
   from { opacity: 0; transform: translateY(14px) scale(0.985); }
@@ -1550,12 +1486,8 @@ li + li > .nav-row {
 /* ════════════ Accessibilité : mouvement réduit ════════════ */
 @media (prefers-reduced-motion: reduce) {
   .kg-rise,
-  .kg-loader,
-  .kg-gear,
   .orb { animation: none; }
-  .kg-loader { width: 100%; }
   .kg-collapse,
-  .kg-fade-leave-active,
   .kg-modal-enter-active,
   .kg-modal-leave-active,
   .kg-modal-enter-active .kg-sheet,

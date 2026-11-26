@@ -81,6 +81,62 @@ class DemandeSuppressionController extends Controller
         return back()->with('success', 'Demande refusée : rien n\'a été supprimé.');
     }
 
+    public function approuverSelection(Request $request)
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:100'],
+            'ids.*' => ['integer', 'distinct'],
+            'reponse' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $demandes = DemandeSuppression::enAttente()->whereIn('id', $data['ids'])->get();
+        $approuvees = 0;
+
+        foreach ($demandes as $demande) {
+            $dossier = Intervention::find($demande->cible_id);
+            if (! $dossier) {
+                $this->clore($demande, $request, 'caduque', 'Élément déjà supprimé.');
+                $approuvees++;
+                continue;
+            }
+
+            try {
+                Suppressions::executer($demande->type, $dossier);
+                $this->clore($demande, $request, 'approuvee', $data['reponse'] ?? null);
+                $approuvees++;
+            } catch (RuntimeException) {
+                // Une demande incompatible reste en attente afin de pouvoir la traiter séparément.
+            }
+        }
+
+        if (! $approuvees) {
+            return back()->with('error', 'Aucune demande n’a pu être approuvée.');
+        }
+
+        return back()->with('success', "{$approuvees} demande(s) traitée(s) avec succès.");
+    }
+
+    public function refuserSelection(Request $request)
+    {
+        $data = $request->validate([
+            'ids' => ['required', 'array', 'min:1', 'max:100'],
+            'ids.*' => ['integer', 'distinct'],
+            'reponse' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $demandes = DemandeSuppression::enAttente()->whereIn('id', $data['ids'])->get();
+
+        foreach ($demandes as $demande) {
+            $this->clore($demande, $request, 'refusee', $data['reponse'] ?? null);
+        }
+
+        if (! $demandes->count()) {
+            return back()->with('error', 'Aucune demande en attente n’a été trouvée.');
+        }
+
+        return back()->with('success', "{$demandes->count()} demande(s) refusée(s).");
+    }
+
     private function clore(DemandeSuppression $demande, Request $request, string $statut, ?string $reponse): void
     {
         $demande->update([

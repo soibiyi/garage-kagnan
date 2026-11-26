@@ -13,6 +13,9 @@ use Illuminate\Support\Str;
 
 class StockController extends Controller
 {
+    private const SEUIL_STOCK_BAS = 5;
+    private const SIEGES_DISPONIBLES = ['Terminus 27', 'Zone Industrielle', 'Yamoussoukro'];
+
     public function index(Request $request)
     {
         $query = Stock::query();
@@ -38,6 +41,31 @@ class StockController extends Controller
     public function adminIndex(Request $request)
     {
         $query = Stock::query();
+        $siegesTotaux = DB::table('stock_sieges')
+            ->select('stock_id')
+            ->selectRaw('SUM(sortie) as sorties')
+            ->selectRaw('SUM(quantite_attribuee) as attribue')
+            ->groupBy('stock_id');
+        $resume = DB::table('stocks')
+            ->leftJoinSub($siegesTotaux, 'sieges_totaux', fn ($join) => $join->on('stocks.id', '=', 'sieges_totaux.stock_id'))
+            ->selectRaw('COUNT(*) as total')
+            ->selectRaw('COALESCE(SUM(CASE WHEN stocks.quantite - COALESCE(sieges_totaux.sorties, 0) <= ? THEN 1 ELSE 0 END), 0) as stock_bas', [self::SEUIL_STOCK_BAS])
+            ->selectRaw('COALESCE(SUM(CASE WHEN stocks.quantite - COALESCE(sieges_totaux.sorties, 0) > ? THEN 1 ELSE 0 END), 0) as stock_normal', [self::SEUIL_STOCK_BAS])
+            ->selectRaw('COALESCE(SUM(CASE WHEN stocks.quantite - COALESCE(sieges_totaux.attribue, 0) > 0 THEN stocks.quantite - COALESCE(sieges_totaux.attribue, 0) ELSE 0 END), 0) as non_attribues')
+            ->first();
+
+        $resumeStock = [
+            'total' => (int) $resume->total,
+            'stock_bas' => (int) $resume->stock_bas,
+            'stock_normal' => (int) $resume->stock_normal,
+            'non_attribues' => (int) $resume->non_attribues,
+        ];
+        $filter = in_array($request->input('filter'), ['stock_bas', 'stock_normal'], true)
+            ? $request->input('filter')
+            : 'tous';
+        $siege = in_array($request->input('siege'), self::SIEGES_DISPONIBLES, true)
+            ? $request->input('siege')
+            : null;
 
         if ($request->filled('search')) {
             $search = $request->input('search');
@@ -50,11 +78,30 @@ class StockController extends Controller
             });
         }
 
+        if ($siege) {
+            $operateur = $filter === 'stock_bas' ? '<=' : '>';
+            $query->whereHas('sieges', function ($siegeQuery) use ($siege, $filter, $operateur) {
+                $siegeQuery->where('siege', $siege);
+                if ($filter !== 'tous') {
+                    $siegeQuery->whereRaw("(quantite_attribuee - sortie) {$operateur} ?", [self::SEUIL_STOCK_BAS]);
+                }
+            });
+        } elseif ($filter !== 'tous') {
+            $operateur = $filter === 'stock_bas' ? '<=' : '>';
+            $query->whereRaw(
+                "(stocks.quantite - COALESCE((SELECT SUM(stock_sieges.sortie) FROM stock_sieges WHERE stock_sieges.stock_id = stocks.id), 0)) {$operateur} ?",
+                [self::SEUIL_STOCK_BAS]
+            );
+        }
+
         $stocks = $query->with('sieges')->orderBy('designation_piece', 'asc')->paginate(25)->withQueryString();
 
         return Inertia::render('Admin/Pieces/Index', [
             'stocks' => $stocks,
-            'filters' => $request->only(['search'])
+            'filters' => array_merge($request->only(['search']), ['filter' => $filter, 'siege' => $siege]),
+            'seuilStockBas' => self::SEUIL_STOCK_BAS,
+            'resumeStock' => $resumeStock,
+            'siegesDisponibles' => self::SIEGES_DISPONIBLES,
         ]);
     }
 
@@ -408,6 +455,23 @@ class StockController extends Controller
         }, 200, $headers);
     }
 
+    public function previewImport(Request $request)
+    {
+        $request->validate([
+            'fichier' => 'required|file|mimes:xlsx,xls,csv,txt|max:10240',
+        ], [
+            'fichier.mimes' => 'Le fichier doit être au format Excel (.xlsx, .xls) ou CSV.',
+        ]);
+
+        try {
+            [$entetes, $lignes] = $this->lireLignesImport($request->file('fichier'));
+        } catch (\Throwable) {
+            return response()->json(['message' => 'Impossible de lire ce fichier. Vérifiez son format et réessayez.'], 422);
+        }
+
+        return response()->json($this->analyserImport($entetes, $lignes));
+    }
+
     public function import(Request $request)
 {
     $request->validate([
@@ -427,6 +491,14 @@ class StockController extends Controller
     if (!isset($col['designation_piece'])) {
         return redirect()->back()->withErrors([
             'fichier' => 'Colonne « designation_piece » (ou « Désignation Pièce ») introuvable dans la première ligne du fichier.'
+        ]);
+    }
+
+    $analyse = $this->analyserImport($entetes, $lignes);
+    if ($analyse['issue_count'] > 0 || ! $analyse['can_import']) {
+        $details = implode(' ', array_slice($analyse['issues'], 0, 3));
+        return redirect()->back()->withErrors([
+            'fichier' => $details ?: 'Aucune ligne valide à importer.',
         ]);
     }
 
@@ -550,6 +622,122 @@ class StockController extends Controller
         DB::rollBack();
         return redirect()->back()->withErrors(['fichier' => 'Erreur : ' . $e->getMessage()]);
     }
+}
+
+private function analyserImport(array $entetes, array $lignes): array
+{
+    $col = $this->mapperEntetes($entetes);
+    if (! isset($col['designation_piece'])) {
+        $issues = ['Colonne « designation_piece » (ou « Désignation Pièce ») introuvable dans la première ligne du fichier.'];
+
+        return ['rows' => [], 'issues' => $issues, 'issue_count' => 1, 'crees' => 0, 'mis_a_jour' => 0, 'ignores' => 0, 'can_import' => false];
+    }
+
+    $quantites = [
+        'quantite',
+        'terminus_27_attribuee', 'terminus_27_sortie',
+        'zone_industrielle_attribuee', 'zone_industrielle_sortie',
+        'yamoussoukro_attribuee', 'yamoussoukro_sortie',
+    ];
+    $nombres = ['prix_achat', 'marge_vente', 'prix_marche_ht', 'ecart_pct', 'prix_ttc_kagnan'];
+    $issues = [];
+    $exemples = [];
+    $dejaVues = [];
+    $crees = 0;
+    $misAJour = 0;
+    $ignores = 0;
+
+    foreach ($lignes as $index => $data) {
+        if (! count(array_filter($data, fn ($value) => trim((string) $value) !== ''))) {
+            $ignores++;
+            continue;
+        }
+
+        $numeroLigne = $index + 2;
+        $designation = trim((string) ($data[$col['designation_piece']] ?? ''));
+        if ($designation === '') {
+            $ignores++;
+            $issues[] = "Ligne {$numeroLigne} : désignation de pièce manquante.";
+            if (count($exemples) < 12) {
+                $exemples[] = ['ligne' => $numeroLigne, 'designation' => '—', 'reference' => '', 'action' => 'À corriger'];
+            }
+            continue;
+        }
+
+        $reference = isset($col['reference']) ? trim((string) ($data[$col['reference']] ?? '')) : '';
+        $cle = $reference !== '' ? 'reference:' . $reference : 'designation:' . $designation;
+        $double = isset($dejaVues[$cle]);
+        $dejaVues[$cle] = true;
+
+        foreach (array_merge($quantites, $nombres) as $champ) {
+            if (! isset($col[$champ])) {
+                continue;
+            }
+            $valeur = trim((string) ($data[$col[$champ]] ?? ''));
+            if ($valeur === '') {
+                continue;
+            }
+            $valide = is_numeric($valeur) && (float) $valeur >= 0;
+            if (in_array($champ, $quantites, true)) {
+                $valide = $valide && (float) $valeur === (float) (int) $valeur;
+            }
+            if (! $valide) {
+                $issues[] = "Ligne {$numeroLigne} : valeur numérique invalide pour « {$champ} ».";
+            }
+        }
+
+        if (isset($col['date_entree'])) {
+            $date = trim((string) ($data[$col['date_entree']] ?? ''));
+            if ($date !== '') {
+                try {
+                    $dateValide = $this->normaliserDate($date) !== null;
+                } catch (\Throwable) {
+                    $dateValide = false;
+                }
+                if (! $dateValide) {
+                    $issues[] = "Ligne {$numeroLigne} : date d’entrée invalide.";
+                }
+            }
+        }
+
+        if ($double) {
+            $issues[] = "Ligne {$numeroLigne} : référence ou désignation en doublon dans le fichier.";
+            if (count($exemples) < 12) {
+                $exemples[] = ['ligne' => $numeroLigne, 'designation' => $designation, 'reference' => $reference, 'action' => 'Doublon'];
+            }
+            continue;
+        }
+
+        $stockQuery = Stock::query();
+        if ($reference !== '') {
+            $stockQuery->where('reference', $reference);
+        } else {
+            $stockQuery->where('designation_piece', $designation)->whereNull('reference');
+        }
+        $existant = $stockQuery->exists();
+        $action = $existant ? 'Mise à jour' : 'Création';
+        $existant ? $misAJour++ : $crees++;
+
+        if (count($exemples) < 12) {
+            $exemples[] = ['ligne' => $numeroLigne, 'designation' => $designation, 'reference' => $reference, 'action' => $action];
+        }
+    }
+
+    if ($crees + $misAJour === 0) {
+        $issues[] = 'Le fichier ne contient aucune ligne de données.';
+    }
+
+    $issueCount = count($issues);
+
+    return [
+        'rows' => $exemples,
+        'issues' => array_slice($issues, 0, 20),
+        'issue_count' => $issueCount,
+        'crees' => $crees,
+        'mis_a_jour' => $misAJour,
+        'ignores' => $ignores,
+        'can_import' => $issueCount === 0 && ($crees + $misAJour) > 0,
+    ];
 }
 
 /**

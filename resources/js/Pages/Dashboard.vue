@@ -194,12 +194,6 @@ const vuesParRole = {
 const vue = computed(() => vuesParRole[user.value?.role]?.() ?? null);
 
 /* ------------------------------------------------------------------ */
-/* Écran de chargement : une seule fois par session                    */
-/* Initialisé de façon synchrone pour éviter un flash du dashboard     */
-/* ------------------------------------------------------------------ */
-const isLoading = ref(typeof window !== 'undefined' && !sessionStorage.getItem('dashboard_loaded'));
-
-/* ------------------------------------------------------------------ */
 /* Suppression d'un dossier                                            */
 /* ------------------------------------------------------------------ */
 const dossierASupprimer = ref(null);
@@ -252,13 +246,6 @@ const onKeydown = (e) => {
 
 onMounted(() => {
     window.addEventListener('keydown', onKeydown);
-
-    if (isLoading.value) {
-        setTimeout(() => {
-            isLoading.value = false;
-            sessionStorage.setItem('dashboard_loaded', 'true');
-        }, 1500);
-    }
 });
 
 onBeforeUnmount(() => {
@@ -268,34 +255,12 @@ onBeforeUnmount(() => {
 
 // Déconnexion avec nettoyage de session
 const logout = () => {
-    sessionStorage.removeItem('dashboard_loaded');
-    sessionStorage.removeItem('admin_loaded');
     router.post(route('logout'));
 };
 </script>
 
 <template>
     <Head title="Tableau de bord — Garage Kagnan" />
-
-    <!-- ÉCRAN DE CHARGEMENT : le moment fort de l'écran, une fois par session -->
-    <Transition name="fade">
-        <div v-if="isLoading" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white" role="status" aria-live="polite">
-            <div class="w-full max-w-sm px-6 text-center">
-                <h1 class="text-2xl font-extrabold tracking-tight text-[var(--k-ink)] k-rise">
-                    Garage Kagnan
-                </h1>
-                <p class="mt-1 text-sm font-semibold text-[var(--k-signal)] k-rise" style="animation-delay: 80ms">
-                    {{ roleInfo.label }}
-                </p>
-                <p class="mt-5 text-xs font-medium text-[var(--k-muted)] k-rise" style="animation-delay: 160ms">
-                    Chargement de votre espace de travail…
-                </p>
-                <div class="mt-3 h-1 w-full overflow-hidden rounded-full bg-[var(--k-line)]">
-                    <div class="k-loader h-full rounded-full bg-[var(--k-signal)]"></div>
-                </div>
-            </div>
-        </div>
-    </Transition>
 
     <AuthenticatedLayout>
         <template #header>
@@ -1010,13 +975,6 @@ const logout = () => {
     to { transform: translateX(250%); }
 }
 
-/* ---------- Écran de chargement ---------- */
-.fade-leave-active { transition: opacity 0.4s ease; }
-.fade-leave-to { opacity: 0; }
-
-.k-loader { width: 0; animation: k-load 1.4s var(--k-ease) forwards; }
-@keyframes k-load { to { width: 100%; } }
-
 .k-rise { opacity: 0; animation: k-rise 0.5s var(--k-ease) forwards; }
 @keyframes k-rise {
     from { opacity: 0; transform: translateY(8px); }
@@ -1045,7 +1003,6 @@ const logout = () => {
     .sheet-enter-active, .sheet-leave-active,
     .sheet-enter-active .k-sheet, .sheet-leave-active .k-sheet { transition: none; }
     .k-action:hover { transform: none; }
-    .k-loader { animation: none; width: 100%; }
     .k-rise { animation: none; opacity: 1; }
     .k-bar::after { animation: none; width: 100%; }
 }

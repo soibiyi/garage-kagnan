@@ -1,27 +1,51 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onBeforeUnmount, onMounted, watch } from 'vue';
 import { Head, useForm, router, Link, usePage } from '@inertiajs/vue3';
+import axios from 'axios';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 
 const props = defineProps({
     stocks: Object,
-    filters: Object
+    filters: Object,
+    seuilStockBas: { type: Number, default: 5 },
+    resumeStock: { type: Object, default: () => ({ total: 0, stock_bas: 0, stock_normal: 0, non_attribues: 0 }) },
+    siegesDisponibles: { type: Array, default: () => ['Terminus 27', 'Zone Industrielle', 'Yamoussoukro'] },
 });
 
 // Suppression d'une pièce : réservée aux administrateurs
 const estAdmin = computed(() => usePage().props.auth.user?.role === 'admin');
 
-const SIEGES = ['Terminus 27', 'Zone Industrielle', 'Yamoussoukro'];
-const SEUIL_STOCK_BAS = 5;
+const filtresMemorises = (() => {
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    if (['search', 'filter', 'siege'].some((key) => params.has(key))) return null;
+    const filter = sessionStorage.getItem('admin-pieces-filter') || 'tous';
+    const siege = sessionStorage.getItem('admin-pieces-siege') || '';
 
-const search = ref(props.filters.search || '');
+    return {
+        search: sessionStorage.getItem('admin-pieces-search') || '',
+        filter: ['tous', 'stock_bas', 'stock_normal'].includes(filter) ? filter : 'tous',
+        siege: props.siegesDisponibles.includes(siege) ? siege : '',
+    };
+})();
+
+const search = ref(props.filters?.search || '');
+const filtreStock = ref(props.filters?.filter || 'tous');
+const siegeFiltre = ref(props.filters?.siege || '');
+if (filtresMemorises) {
+    search.value = filtresMemorises.search;
+    filtreStock.value = filtresMemorises.filter;
+    siegeFiltre.value = filtresMemorises.siege;
+}
+const rechercheEnCours = ref(false);
+let searchTimer = null;
 const showModal = ref(false);
 const showImportModal = ref(false);
 const isEditing = ref(false);
 const currentStockId = ref(null);
 const step = ref(1); // 1 = infos pièce, 2 = distribution aux sièges
 
-const siegesVides = () => SIEGES.map(siege => ({ siege, quantite_attribuee: 0, sortie: 0 }));
+const siegesVides = () => props.siegesDisponibles.map(siege => ({ siege, quantite_attribuee: 0, sortie: 0 }));
 
 // Formulaire complet pour l'Admin (Pièce + Sièges + Prix)
 const form = useForm({
@@ -43,6 +67,9 @@ const form = useForm({
 const importForm = useForm({
     fichier: null,
 });
+const importPreview = ref(null);
+const previewEnCours = ref(false);
+const erreurApercu = ref('');
 
 // ---------- Helpers affichage tableau ----------
 const totalSorties = (item) => (item.sieges ?? []).reduce((a, s) => a + Number(s.sortie || 0), 0);
@@ -50,6 +77,15 @@ const totalAttribue = (item) => (item.sieges ?? []).reduce((a, s) => a + Number(
 const stockRestant = (item) => Number(item.quantite || 0) - totalSorties(item);
 const nonAttribue = (item) => Number(item.quantite || 0) - totalAttribue(item);
 const restantSiege = (s) => Number(s.quantite_attribuee || 0) - Number(s.sortie || 0);
+const siegesAffiches = (item) => siegeFiltre.value
+    ? (item.sieges ?? []).filter((siege) => siege.siege === siegeFiltre.value)
+    : item.sieges ?? [];
+const stockRestantAffiche = (item) => siegeFiltre.value
+    ? restantSiege((item.sieges ?? []).find((siege) => siege.siege === siegeFiltre.value) ?? { quantite_attribuee: 0, sortie: 0 })
+    : stockRestant(item);
+const sortiesAffichees = (item) => siegeFiltre.value
+    ? Number((item.sieges ?? []).find((siege) => siege.siege === siegeFiltre.value)?.sortie || 0)
+    : totalSorties(item);
 
 // ---------- Helpers formulaire (distribution) ----------
 const totalAttribueForm = computed(() =>
@@ -111,7 +147,7 @@ const openEditModal = (item) => {
     form.prix_kagnan_ht = item.prix_kagnan_ht || '';
 
     // Charger les attributions et initialiser les sorties à 0 pour la saisie de nouveaux mouvements incrémentaux
-    form.sieges = SIEGES.map(nomSiege => {
+    form.sieges = props.siegesDisponibles.map(nomSiege => {
         const existant = item.sieges?.find(s => s.siege === nomSiege);
         return {
             siege: nomSiege,
@@ -153,8 +189,47 @@ const deletePiece = (id) => {
 };
 
 const handleSearch = () => {
-    router.get(route('admin.pieces.index'), { search: search.value }, { preserveState: true, replace: true });
+    clearTimeout(searchTimer);
+    rechercheEnCours.value = true;
+    router.get(
+        route('admin.pieces.index'),
+        {
+            search: search.value.trim() || undefined,
+            filter: filtreStock.value === 'tous' ? undefined : filtreStock.value,
+            siege: siegeFiltre.value || undefined,
+        },
+        {
+            preserveState: true,
+            preserveScroll: true,
+            replace: true,
+            onFinish: () => { rechercheEnCours.value = false; },
+        }
+    );
 };
+
+watch([search, filtreStock, siegeFiltre], () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(handleSearch, 300);
+    if (typeof window !== 'undefined') {
+        sessionStorage.setItem('admin-pieces-search', search.value);
+        sessionStorage.setItem('admin-pieces-filter', filtreStock.value);
+        sessionStorage.setItem('admin-pieces-siege', siegeFiltre.value);
+    }
+});
+
+onMounted(() => {
+    if (!filtresMemorises) return;
+    const filtresServeur = props.filters ?? {};
+    if (
+        filtresMemorises.search !== (filtresServeur.search || '')
+        || filtresMemorises.filter !== (filtresServeur.filter || 'tous')
+        || filtresMemorises.siege !== (filtresServeur.siege || '')
+    ) {
+        handleSearch();
+    }
+});
+
+onBeforeUnmount(() => clearTimeout(searchTimer));
 
 // Exporter vers Excel (CSV)
 const exporterExcel = () => {
@@ -164,21 +239,49 @@ const exporterExcel = () => {
 const openImportModal = () => {
     importForm.reset();
     importForm.clearErrors();
+    importPreview.value = null;
+    erreurApercu.value = '';
     showImportModal.value = true;
 };
 
 const handleFileChange = (e) => {
-    importForm.fichier = e.target.files[0];
+    importForm.fichier = e.target.files?.[0] ?? null;
+    importPreview.value = null;
+    erreurApercu.value = '';
+    importForm.clearErrors();
+};
+
+const analyserImport = async () => {
+    if (!importForm.fichier || previewEnCours.value) return;
+
+    previewEnCours.value = true;
+    erreurApercu.value = '';
+    importPreview.value = null;
+
+    const donnees = new FormData();
+    donnees.append('fichier', importForm.fichier);
+
+    try {
+        const { data } = await axios.post(route('administration.stocks.import.preview'), donnees);
+        importPreview.value = data;
+    } catch (error) {
+        erreurApercu.value = error.response?.data?.errors?.fichier?.[0]
+            || error.response?.data?.message
+            || 'Impossible d’analyser le fichier. Vérifiez votre connexion et réessayez.';
+    } finally {
+        previewEnCours.value = false;
+    }
 };
 
 const submitImport = () => {
-    if (!importForm.fichier) return;
+    if (!importForm.fichier || !importPreview.value?.can_import || importForm.processing) return;
 
     importForm.post(route('administration.stocks.import'), {
         preserveScroll: true,
         onSuccess: () => {
             showImportModal.value = false;
             importForm.reset();
+            importPreview.value = null;
         }
     });
 };
@@ -213,15 +316,120 @@ const submitImport = () => {
                 </div>
             </div>
 
+            <section class="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Résumé du stock">
+                <article class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <p class="text-[11px] font-bold uppercase tracking-wide text-slate-500">Références</p>
+                    <p class="mt-1 text-2xl font-black text-slate-900">{{ resumeStock.total }}</p>
+                </article>
+                <button
+                    type="button"
+                    class="rounded-xl border p-4 text-left shadow-sm transition"
+                    :class="filtreStock === 'stock_bas' ? 'border-amber-400 bg-amber-100' : 'border-amber-200 bg-amber-50 hover:bg-amber-100'"
+                    @click="filtreStock = 'stock_bas'; siegeFiltre = ''"
+                >
+                    <p class="text-[11px] font-bold uppercase tracking-wide text-amber-800">Stock bas global (≤ {{ seuilStockBas }})</p>
+                    <p class="mt-1 text-2xl font-black text-amber-900">{{ resumeStock.stock_bas }}</p>
+                </button>
+                <button
+                    type="button"
+                    class="rounded-xl border p-4 text-left shadow-sm transition"
+                    :class="filtreStock === 'stock_normal' ? 'border-emerald-400 bg-emerald-100' : 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100'"
+                    @click="filtreStock = 'stock_normal'; siegeFiltre = ''"
+                >
+                    <p class="text-[11px] font-bold uppercase tracking-wide text-emerald-800">Stock normal global</p>
+                    <p class="mt-1 text-2xl font-black text-emerald-900">{{ resumeStock.stock_normal }}</p>
+                </button>
+                <article class="rounded-xl border border-violet-200 bg-violet-50 p-4 shadow-sm">
+                    <p class="text-[11px] font-bold uppercase tracking-wide text-violet-800">Unités à attribuer</p>
+                    <p class="mt-1 text-2xl font-black text-violet-900">{{ resumeStock.non_attribues }}</p>
+                </article>
+            </section>
+
             <!-- Barre de recherche -->
-            <div class="flex items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                <input type="text" v-model="search" @keyup.enter="handleSearch" placeholder="Rechercher par référence, désignation, famille, marque..." class="w-full bg-slate-50 border border-slate-200 rounded-lg text-xs p-2.5" />
-                <button @click="handleSearch" class="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-800 transition">Filtrer</button>
+            <div class="space-y-3 rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+                <div class="flex items-center gap-3">
+                    <label for="recherche-pieces" class="sr-only">Rechercher une pièce</label>
+                    <div class="relative min-w-0 flex-1">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true"></i>
+                    <input
+                        id="recherche-pieces"
+                        type="search"
+                        v-model="search"
+                        @keyup.enter="handleSearch"
+                        placeholder="Rechercher par référence, désignation, famille, marque..."
+                        class="w-full rounded-lg border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-10 text-xs focus:border-slate-400 focus:ring-slate-300"
+                    />
+                    <button
+                        v-if="search"
+                        type="button"
+                        @click="search = ''"
+                        class="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+                        aria-label="Effacer la recherche"
+                    >
+                        <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                    </button>
+                    </div>
+                    <span v-if="rechercheEnCours" class="shrink-0 text-xs font-semibold text-slate-500" role="status" aria-live="polite">
+                        <i class="fa-solid fa-spinner fa-spin mr-1" aria-hidden="true"></i>Recherche…
+                    </span>
+                    <button v-else @click="handleSearch" class="shrink-0 rounded-lg bg-slate-900 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-slate-800">
+                        Rechercher
+                    </button>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex flex-wrap items-center gap-2">
+                    <div class="flex flex-wrap gap-2" role="group" aria-label="Filtrer les pièces par niveau de stock">
+                        <button
+                            type="button"
+                            class="rounded-lg border px-3 py-2 text-xs font-bold transition"
+                            :class="filtreStock === 'tous' ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'"
+                            :aria-pressed="filtreStock === 'tous'"
+                            @click="filtreStock = 'tous'"
+                        >
+                            Toutes les pièces
+                        </button>
+                        <button
+                            type="button"
+                            class="rounded-lg border px-3 py-2 text-xs font-bold transition"
+                            :class="filtreStock === 'stock_bas' ? 'border-amber-600 bg-amber-600 text-white' : 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'"
+                            :aria-pressed="filtreStock === 'stock_bas'"
+                            @click="filtreStock = 'stock_bas'"
+                        >
+                            <i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>
+                            <template v-if="siegeFiltre">Stock bas au siège (≤ {{ seuilStockBas }})</template>
+                            <template v-else>Stock bas (≤ {{ seuilStockBas }})</template>
+                        </button>
+                        <button
+                            type="button"
+                            class="rounded-lg border px-3 py-2 text-xs font-bold transition"
+                            :class="filtreStock === 'stock_normal' ? 'border-emerald-700 bg-emerald-700 text-white' : 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'"
+                            :aria-pressed="filtreStock === 'stock_normal'"
+                            @click="filtreStock = 'stock_normal'"
+                        >
+                            <i class="fa-solid fa-circle-check mr-1" aria-hidden="true"></i>
+                            <template v-if="siegeFiltre">Stock normal au siège (&gt; {{ seuilStockBas }})</template>
+                            <template v-else>Stock normal (&gt; {{ seuilStockBas }})</template>
+                        </button>
+                    </div>
+                    <label class="sr-only" for="filtre-siege">Filtrer par siège</label>
+                    <select
+                        id="filtre-siege"
+                        v-model="siegeFiltre"
+                        class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 focus:border-slate-400 focus:ring-slate-300"
+                    >
+                        <option value="">Tous les sièges</option>
+                        <option v-for="siege in siegesDisponibles" :key="siege" :value="siege">{{ siege }}</option>
+                    </select>
+                    </div>
+                    <span class="text-xs font-semibold text-slate-500">
+                        {{ stocks.total }} pièce{{ stocks.total === 1 ? '' : 's' }} trouvée{{ stocks.total === 1 ? '' : 's' }}
+                    </span>
+                </div>
             </div>
 
             <!-- Tableau unique et complet -->
             <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div class="overflow-x-auto">
+                <div class="hidden overflow-x-auto lg:block">
                     <table class="w-full text-left border-collapse">
                         <thead>
                             <tr class="bg-slate-50 border-b text-[11px] font-bold text-slate-400 uppercase">
@@ -235,8 +443,8 @@ const submitImport = () => {
                                 <th class="p-3">Sièges (Attrib. / Sortie → Restant)</th>
                                 <th class="p-3 text-right">Prix d'achat</th>
                                 <th class="p-3 text-right">Marge</th>
-                                <th class="p-3 text-right">Total Sorties</th>
-                                <th class="p-3 text-right">Stock Restant</th>
+                                <th class="p-3 text-right">Sorties <span v-if="siegeFiltre">({{ siegeFiltre }})</span><span v-else>totales</span></th>
+                                <th class="p-3 text-right">Stock restant <span v-if="siegeFiltre">({{ siegeFiltre }})</span><span v-else>global</span></th>
                                 <th class="p-3 text-right">Actions</th>
                             </tr>
                         </thead>
@@ -246,8 +454,8 @@ const submitImport = () => {
                                 <td class="p-3 font-mono font-semibold">{{ item.reference || '-' }}</td>
                                 <td class="p-3 font-bold text-slate-900">
                                     {{ item.designation_piece }}
-                                    <div v-if="stockRestant(item) <= SEUIL_STOCK_BAS" class="mt-1 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                                        <i class="fa-solid fa-triangle-exclamation mr-1"></i> Stock bas (&le; {{ SEUIL_STOCK_BAS }})
+                                    <div v-if="stockRestantAffiche(item) <= seuilStockBas" class="mt-1 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                        <i class="fa-solid fa-triangle-exclamation mr-1"></i> Stock bas (&le; {{ seuilStockBas }})
                                     </div>
                                 </td>
                                 <td class="p-3">
@@ -262,7 +470,7 @@ const submitImport = () => {
                                 <td class="p-3 font-medium">{{ item.quantite ?? 0 }}</td>
 
                                 <td class="p-3 text-[11px] min-w-[230px]">
-                                    <div v-for="s in (item.sieges || [])" :key="s.id"
+                                    <div v-for="s in siegesAffiches(item)" :key="s.id"
                                          class="mb-1 flex items-center justify-between gap-3 bg-slate-50 rounded-lg px-2 py-1">
                                         <span class="font-semibold text-slate-900">{{ s.siege }}</span>
                                         <span class="flex items-center gap-1.5">
@@ -271,23 +479,23 @@ const submitImport = () => {
                                             <span class="text-rose-600 font-semibold" title="Sorties">{{ s.sortie }}</span>
                                             <span class="text-slate-300">&rarr;</span>
                                             <span class="px-1.5 py-0.5 rounded font-black"
-                                                  :class="restantSiege(s) <= SEUIL_STOCK_BAS ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'"
+                                                  :class="restantSiege(s) <= seuilStockBas ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'"
                                                   title="Restant">{{ restantSiege(s) }}</span>
                                         </span>
                                     </div>
                                     <div v-if="nonAttribue(item) > 0" class="text-[10px] font-bold text-violet-600 mt-1">
                                         <i class="fa-solid fa-box-open mr-1"></i>{{ nonAttribue(item) }} non attribué(s)
                                     </div>
-                                    <span v-if="!item.sieges || item.sieges.length === 0" class="text-slate-400 italic">-</span>
+                                    <span v-if="!siegesAffiches(item).length" class="text-slate-400 italic">-</span>
                                 </td>
 
                                 <td class="p-3 text-right font-semibold">{{ item.prix_achat ? item.prix_achat + ' FCFA' : '-' }}</td>
                                 <td class="p-3 text-right font-semibold text-blue-600">{{ item.marge_vente ? item.marge_vente + ' FCFA' : '-' }}</td>
                                 <td class="p-3 text-right text-rose-600 font-semibold">
-                                    {{ totalSorties(item) }}
+                                    {{ sortiesAffichees(item) }}
                                 </td>
-                                <td class="p-3 text-right font-black" :class="stockRestant(item) <= SEUIL_STOCK_BAS ? 'text-amber-600' : 'text-slate-900'">
-                                    {{ stockRestant(item) }}
+                                <td class="p-3 text-right font-black" :class="stockRestantAffiche(item) <= seuilStockBas ? 'text-amber-600' : 'text-slate-900'">
+                                    {{ stockRestantAffiche(item) }}
                                 </td>
                                 <td class="p-3 text-right space-x-1">
                                     <button @click="openEditModal(item)" class="p-1.5 bg-slate-100 rounded-lg hover:bg-slate-200" title="Modifier"><i class="fa-solid fa-pen"></i></button>
@@ -299,6 +507,86 @@ const submitImport = () => {
                             </tr>
                         </tbody>
                     </table>
+                </div>
+
+                <div class="space-y-3 p-3 lg:hidden">
+                    <article v-for="item in stocks.data" :key="`mobile-${item.id}`" class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0">
+                                <h2 class="truncate text-sm font-black text-slate-900">{{ item.designation_piece || 'Pièce sans désignation' }}</h2>
+                                <p class="mt-1 truncate font-mono text-[11px] text-slate-500">{{ item.reference || 'Sans référence' }}</p>
+                            </div>
+                            <span
+                                class="shrink-0 rounded-full px-2 py-1 text-[10px] font-bold"
+                                :class="stockRestantAffiche(item) <= seuilStockBas ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'"
+                            >
+                                {{ stockRestantAffiche(item) <= seuilStockBas ? 'Stock bas' : 'Stock normal' }}
+                            </span>
+                        </div>
+
+                        <div class="mt-4 grid grid-cols-2 gap-3">
+                            <div class="rounded-lg bg-slate-50 p-3">
+                                <p class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Stock restant</p>
+                                <p class="mt-1 text-xl font-black" :class="stockRestantAffiche(item) <= seuilStockBas ? 'text-amber-700' : 'text-slate-900'">
+                                    {{ stockRestantAffiche(item) }}
+                                </p>
+                            </div>
+                            <div class="rounded-lg bg-slate-50 p-3">
+                                <p class="text-[10px] font-bold uppercase tracking-wide text-slate-500">Lot initial</p>
+                                <p class="mt-1 text-xl font-black text-slate-900">{{ item.quantite ?? 0 }}</p>
+                            </div>
+                        </div>
+
+                        <div class="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Famille</p>
+                                <p class="mt-0.5 font-semibold text-slate-800">{{ item.famille || '—' }}<span v-if="item.sous_famille"> · {{ item.sous_famille }}</span></p>
+                            </div>
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Marque / modèle</p>
+                                <p class="mt-0.5 font-semibold text-slate-800">{{ [item.marque, item.modele].filter(Boolean).join(' ') || '—' }}</p>
+                            </div>
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Prix Kagnan HT</p>
+                                <p class="mt-0.5 font-semibold text-slate-800">{{ item.prix_kagnan_ht ? `${item.prix_kagnan_ht} FCFA` : '—' }}</p>
+                            </div>
+                            <div>
+                                <p class="text-[10px] font-bold uppercase tracking-wide text-slate-400">Sorties</p>
+                                <p class="mt-0.5 font-semibold text-rose-700">{{ sortiesAffichees(item) }}</p>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 border-t border-slate-100 pt-3">
+                            <p class="mb-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">Stock par siège</p>
+                            <div v-if="siegesAffiches(item).length" class="space-y-1.5">
+                                <div v-for="siege in siegesAffiches(item)" :key="`mobile-${item.id}-${siege.id}`" class="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2 text-xs">
+                                    <span class="font-semibold text-slate-800">{{ siege.siege }}</span>
+                                    <span class="font-black" :class="restantSiege(siege) <= seuilStockBas ? 'text-amber-700' : 'text-emerald-700'">
+                                        {{ restantSiege(siege) }} restant
+                                    </span>
+                                </div>
+                            </div>
+                            <p v-else class="text-xs italic text-slate-400">Aucune quantité attribuée aux sièges.</p>
+                            <p v-if="nonAttribue(item) > 0" class="mt-2 text-xs font-bold text-violet-700">
+                                {{ nonAttribue(item) }} pièce(s) non attribuée(s)
+                            </p>
+                        </div>
+
+                        <div class="mt-4 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
+                            <span class="text-[11px] text-slate-500">Entrée : {{ item.date_entree || '—' }}</span>
+                            <div class="flex gap-2">
+                                <button type="button" @click="openEditModal(item)" class="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-200" :aria-label="`Modifier ${item.designation_piece}`">
+                                    <i class="fa-solid fa-pen" aria-hidden="true"></i>Modifier
+                                </button>
+                                <button v-if="estAdmin" type="button" @click="deletePiece(item.id)" class="inline-flex items-center gap-1.5 rounded-lg bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100" :aria-label="`Supprimer ${item.designation_piece}`">
+                                    <i class="fa-solid fa-trash" aria-hidden="true"></i>Supprimer
+                                </button>
+                            </div>
+                        </div>
+                    </article>
+                    <div v-if="stocks.data.length === 0" class="rounded-xl border border-slate-200 bg-slate-50 p-8 text-center text-sm text-slate-500">
+                        Aucune pièce trouvée.
+                    </div>
                 </div>
 
                 <!-- Pagination -->
@@ -428,7 +716,7 @@ const submitImport = () => {
                                 <div class="flex items-center justify-between">
                                     <span class="text-xs font-extrabold text-slate-800">{{ ligne.siege }}</span>
                                     <span class="text-[11px] font-bold px-2 py-0.5 rounded"
-                                          :class="restantSiege(ligne) <= SEUIL_STOCK_BAS ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'">
+                                          :class="restantSiege(ligne) <= seuilStockBas ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'">
                                         Restant : {{ restantSiege(ligne) }}
                                     </span>
                                 </div>
@@ -469,7 +757,7 @@ const submitImport = () => {
 
             <!-- Modal d'Importation Excel / CSV -->
             <div v-if="showImportModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                <div class="bg-white rounded-2xl max-w-md w-full p-6 space-y-6 shadow-2xl">
+                <div class="max-h-[90vh] w-full max-w-2xl space-y-5 overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl sm:p-6">
                     <div class="flex items-center justify-between border-b border-slate-100 pb-4">
                         <h3 class="text-base font-black text-slate-900">Importer un fichier Excel ou CSV</h3>
                         <button @click="showImportModal = false" class="text-slate-400 hover:text-slate-600">
@@ -492,6 +780,71 @@ const submitImport = () => {
                             </p>
                         </div>
 
+                        <div v-if="erreurApercu" class="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700" role="alert">
+                            {{ erreurApercu }}
+                        </div>
+
+                        <button
+                            type="button"
+                            @click="analyserImport"
+                            :disabled="!importForm.fichier || previewEnCours || importForm.processing"
+                            class="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                            <i class="fa-solid" :class="previewEnCours ? 'fa-spinner fa-spin' : 'fa-magnifying-glass-chart'" aria-hidden="true"></i>
+                            {{ previewEnCours ? 'Analyse en cours…' : 'Analyser le fichier' }}
+                        </button>
+
+                        <section v-if="importPreview" class="space-y-3 rounded-xl border p-4" :class="importPreview.can_import ? 'border-emerald-200 bg-emerald-50/60' : 'border-amber-200 bg-amber-50/70'" aria-live="polite">
+                            <div>
+                                <h4 class="text-sm font-black text-slate-900">
+                                    {{ importPreview.can_import ? 'Aperçu prêt' : 'Vérifiez le fichier avant de continuer' }}
+                                </h4>
+                                <p class="mt-1 text-xs text-slate-600">
+                                    {{ importPreview.crees }} création{{ importPreview.crees === 1 ? '' : 's' }} ·
+                                    {{ importPreview.mis_a_jour }} mise{{ importPreview.mis_a_jour === 1 ? '' : 's' }} à jour ·
+                                    {{ importPreview.ignores }} ligne{{ importPreview.ignores === 1 ? '' : 's' }} ignorée{{ importPreview.ignores === 1 ? '' : 's' }}
+                                </p>
+                            </div>
+
+                            <ul v-if="importPreview.issues.length" class="max-h-28 space-y-1 overflow-y-auto text-xs text-amber-900" aria-label="Erreurs à corriger">
+                                <li v-for="(issue, index) in importPreview.issues" :key="index">
+                                    <i class="fa-solid fa-triangle-exclamation mr-1" aria-hidden="true"></i>{{ issue }}
+                                </li>
+                                <li v-if="importPreview.issue_count > importPreview.issues.length" class="font-bold">
+                                    Et {{ importPreview.issue_count - importPreview.issues.length }} autre(s) erreur(s).
+                                </li>
+                            </ul>
+
+                            <div v-if="importPreview.rows.length" class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                                <table class="w-full text-left text-xs">
+                                    <thead class="bg-slate-100 text-[10px] uppercase text-slate-500">
+                                        <tr>
+                                            <th class="px-3 py-2">Ligne</th>
+                                            <th class="px-3 py-2">Désignation</th>
+                                            <th class="px-3 py-2">Référence</th>
+                                            <th class="px-3 py-2">Action prévue</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-slate-100">
+                                        <tr v-for="row in importPreview.rows" :key="row.ligne">
+                                            <td class="px-3 py-2 text-slate-500">{{ row.ligne }}</td>
+                                            <td class="px-3 py-2 font-semibold text-slate-800">{{ row.designation }}</td>
+                                            <td class="px-3 py-2 font-mono text-slate-600">{{ row.reference || '—' }}</td>
+                                            <td class="px-3 py-2 font-bold" :class="row.action === 'Création' ? 'text-emerald-700' : row.action === 'Mise à jour' ? 'text-blue-700' : 'text-amber-700'">
+                                                {{ row.action }}
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p v-if="importPreview.can_import" class="text-[11px] font-semibold text-emerald-800">
+                                L’import peut être lancé. Seules les 12 premières lignes sont affichées.
+                            </p>
+                            <p v-else class="text-[11px] font-semibold text-amber-800">
+                                L’import est bloqué tant que les erreurs listées ne sont pas corrigées.
+                            </p>
+                        </section>
+
                         <div class="p-3 bg-blue-50/50 border border-blue-100 rounded-xl text-[11px] text-blue-800 space-y-1">
                             <p class="font-bold"><i class="fa-solid fa-circle-info mr-1"></i> Structure attendue (1re ligne = en-têtes, colonnes dans cet ordre) :</p>
                             <p class="text-slate-600">
@@ -502,8 +855,8 @@ const submitImport = () => {
 
                         <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
                             <button type="button" @click="showImportModal = false" class="px-4 py-2 bg-slate-100 text-slate-600 text-xs font-bold rounded-xl hover:bg-slate-200 transition">Annuler</button>
-                            <button type="submit" :disabled="importForm.processing || !importForm.fichier" class="px-5 py-2 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition shadow-sm disabled:opacity-50">
-                                <i class="fa-solid fa-upload mr-1.5"></i> Importer
+                            <button type="submit" :disabled="importForm.processing || !importPreview?.can_import" class="px-5 py-2 bg-blue-600 text-white text-xs font-bold rounded-xl hover:bg-blue-700 transition shadow-sm disabled:cursor-not-allowed disabled:opacity-50">
+                                <i class="fa-solid fa-upload mr-1.5"></i>{{ importForm.processing ? 'Import en cours…' : 'Importer' }}
                             </button>
                         </div>
                     </form>

@@ -82,6 +82,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
 
     // Demandes de suppression des collaborateurs (dossiers, devis directs) à valider
     Route::get('/demandes-suppression', [\App\Http\Controllers\Admin\DemandeSuppressionController::class, 'index'])->name('demandes-suppression.index');
+    Route::post('/demandes-suppression/approuver-selection', [\App\Http\Controllers\Admin\DemandeSuppressionController::class, 'approuverSelection'])->name('demandes-suppression.approuver-selection');
+    Route::post('/demandes-suppression/refuser-selection', [\App\Http\Controllers\Admin\DemandeSuppressionController::class, 'refuserSelection'])->name('demandes-suppression.refuser-selection');
     Route::post('/demandes-suppression/{demande}/approuver', [\App\Http\Controllers\Admin\DemandeSuppressionController::class, 'approuver'])->name('demandes-suppression.approuver');
     Route::post('/demandes-suppression/{demande}/refuser', [\App\Http\Controllers\Admin\DemandeSuppressionController::class, 'refuser'])->name('demandes-suppression.refuser');
     Route::get('/charge-clients/{user}/activites', [UserController::class, 'chargeClientActivities'])->name('charge_clients.activities');
@@ -275,6 +277,7 @@ Route::middleware(['auth'])->prefix('administration')->name('administration.')->
     Route::put('/stocks/{stock}', [StockController::class, 'update'])->name('stocks.update');
     Route::delete('/stocks/{stock}', [StockController::class, 'destroy'])->name('stocks.destroy');
     Route::get('/stocks/export', [StockController::class, 'export'])->name('stocks.export');
+    Route::post('/stocks/import/preview', [StockController::class, 'previewImport'])->name('stocks.import.preview');
     Route::post('/stocks/import', [StockController::class, 'import'])->name('stocks.import');
     Route::get('/stocks/historique', [StockController::class, 'historiqueMouvements'])->name('stocks.historique');
     // Annulation d'une sortie (Administration)
