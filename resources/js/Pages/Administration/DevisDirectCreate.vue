@@ -75,9 +75,40 @@ const clientSelectionne = computed(() =>
 );
 const vehiculesDuClient = computed(() => clientSelectionne.value?.vehicules ?? []);
 
+// ─── Recherche du client existant ───
+const rechercheClient = ref('');
+const listeClientsOuverte = ref(false);
+
+const normaliser = (v = '') =>
+    String(v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+const clientsFiltres = computed(() => {
+    const q = normaliser(rechercheClient.value.trim());
+    if (!q) return props.clients;
+    return props.clients.filter((c) =>
+        normaliser(`${c.nom} ${c.prenom} ${c.telephone}`).includes(q) ||
+        (c.vehicules ?? []).some((v) => normaliser(`${v.marque} ${v.modele} ${v.immatriculation}`).includes(q))
+    );
+});
+
+const choisirClient = (client) => {
+    form.client_id = client.id;
+    rechercheClient.value = '';
+    listeClientsOuverte.value = false;
+};
+const effacerClient = () => {
+    form.client_id = '';
+    rechercheClient.value = '';
+    listeClientsOuverte.value = true;
+};
+const fermerListeClients = () => {
+    setTimeout(() => { listeClientsOuverte.value = false; }, 150);
+};
+
 watch(() => form.client_mode, () => {
     form.client_id = '';
     form.vehicule_id = '';
+    rechercheClient.value = '';
     form.clearErrors('client_id', 'vehicule_id');
 });
 
@@ -242,6 +273,11 @@ watch(petiteFournitureManuelle, (manuel) => {
 
 // Soumission : on retire le drapeau interne famille_verrouillee avant l'envoi
 const submitDevis = () => {
+    if (form.client_mode === 'existant' && !form.client_id) {
+        form.setError('client_id', 'Veuillez sélectionner un client.');
+        return;
+    }
+
     form.transform((data) => {
         const { client_mode, vehicule_mode, ...payload } = data;
         return {
@@ -305,12 +341,59 @@ const submitDevis = () => {
                             <template v-if="form.client_mode === 'existant'">
                                 <div class="sm:col-span-2">
                                     <label class="block text-xs font-semibold text-slate-600 mb-1">Sélectionner le client <span class="text-[#E11D48]">*</span></label>
-                                    <select v-model="form.client_id" required class="w-full bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48]">
-                                        <option value="" disabled>Choisir un client</option>
-                                        <option v-for="client in clients" :key="client.id" :value="client.id">
-                                            {{ client.nom }} {{ client.prenom }} — {{ client.telephone }}
-                                        </option>
-                                    </select>
+
+                                    <!-- Client choisi -->
+                                    <div v-if="clientSelectionne" class="flex items-center justify-between gap-2 w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs">
+                                        <span class="min-w-0 truncate font-semibold text-slate-900">
+                                            {{ clientSelectionne.nom }} {{ clientSelectionne.prenom }}
+                                            <span class="font-normal text-slate-500">— {{ clientSelectionne.telephone }}</span>
+                                        </span>
+                                        <button type="button" @click="effacerClient" aria-label="Changer de client" class="shrink-0 w-6 h-6 rounded-full text-slate-400 hover:text-[#E11D48] hover:bg-rose-50 transition">
+                                            <i class="fa-solid fa-xmark text-[11px]"></i>
+                                        </button>
+                                    </div>
+
+                                    <!-- Recherche -->
+                                    <div v-else class="relative">
+                                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-[11px] pointer-events-none"></i>
+                                        <input
+                                            type="text"
+                                            v-model="rechercheClient"
+                                            @focus="listeClientsOuverte = true"
+                                            @input="listeClientsOuverte = true"
+                                            @blur="fermerListeClients"
+                                            @keydown.esc="listeClientsOuverte = false"
+                                            placeholder="Rechercher par nom, prénom, téléphone ou immatriculation…"
+                                            autocomplete="off"
+                                            class="w-full pl-8 bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:border-[#E11D48] focus:ring-1 focus:ring-[#E11D48]"
+                                        />
+
+                                        <div v-if="listeClientsOuverte" class="absolute left-0 right-0 z-[999] mt-1 bg-white border border-slate-200 rounded-lg shadow-2xl max-h-56 overflow-y-auto">
+                                            <button
+                                                v-for="client in clientsFiltres.slice(0, 50)"
+                                                :key="client.id"
+                                                type="button"
+                                                @mousedown.prevent="choisirClient(client)"
+                                                class="w-full text-left px-3 py-2 hover:bg-slate-100 text-xs border-b border-slate-100 last:border-none flex items-center justify-between gap-3"
+                                            >
+                                                <span class="min-w-0">
+                                                    <span class="font-bold text-slate-800 block truncate">{{ client.nom }} {{ client.prenom }}</span>
+                                                    <span v-if="client.vehicules?.length" class="text-[10px] text-slate-400 block truncate">
+                                                        {{ client.vehicules.map(v => v.immatriculation || `${v.marque} ${v.modele}`).join(' · ') }}
+                                                    </span>
+                                                </span>
+                                                <span class="font-mono text-[11px] text-slate-500 whitespace-nowrap">{{ client.telephone }}</span>
+                                            </button>
+
+                                            <p v-if="clientsFiltres.length > 50" class="px-3 py-2 text-[10px] text-slate-400 text-center">
+                                                {{ clientsFiltres.length - 50 }} autres résultats : affinez la recherche.
+                                            </p>
+                                            <p v-if="!clientsFiltres.length" class="px-3 py-3 text-xs text-slate-500">
+                                                Aucun client ne correspond à « {{ rechercheClient }} ».
+                                            </p>
+                                        </div>
+                                    </div>
+
                                     <p v-if="form.errors.client_id" class="mt-1 text-[11px] font-bold text-[#E11D48]">{{ form.errors.client_id }}</p>
                                     <p v-if="!clients.length" class="mt-1 text-[11px] text-slate-500">Aucun client enregistré pour ce siège. Créez une nouvelle fiche client.</p>
                                 </div>
