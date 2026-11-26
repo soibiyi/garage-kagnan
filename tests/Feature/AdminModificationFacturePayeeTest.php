@@ -18,11 +18,13 @@ class AdminModificationFacturePayeeTest extends TestCase
 
     private User $admin;
     private Intervention $dossier;
+    private string $premierVersementLe;
 
     protected function setUp(): void
     {
         parent::setUp();
 
+        $this->premierVersementLe = now()->subDay()->toDateString();
         $this->admin = User::factory()->create(['role' => 'admin']);
         $client = Client::create(['nom' => 'Kone', 'prenom' => 'Awa', 'telephone' => '0700000000', 'siege' => 'SGK']);
         $vehicule = Vehicule::create(['client_id' => $client->id, 'immatriculation' => 'FAC-001', 'marque' => 'Toyota', 'modele' => 'Hilux']);
@@ -56,9 +58,36 @@ class AdminModificationFacturePayeeTest extends TestCase
             ->post(route('administration.factures.encaisser', $this->dossier->id), [
                 'montant' => 60000,
                 'mode_paiement' => 'Especes',
+                'date_paiement' => $this->premierVersementLe,
+            ])
+            ->assertSessionHasNoErrors();
+    }
+
+    public function test_invoice_date_is_the_first_payment_date_and_does_not_change_with_later_payments(): void
+    {
+        $facture = Facture::where('intervention_id', $this->dossier->id)->firstOrFail();
+        $this->assertSame($this->premierVersementLe, $facture->date_facture->toDateString());
+
+        $this->actingAs($this->admin)
+            ->post(route('administration.factures.encaisser', $this->dossier->id), [
+                'montant' => 1000,
+                'mode_paiement' => 'Especes',
                 'date_paiement' => now()->toDateString(),
             ])
             ->assertSessionHasNoErrors();
+
+        $this->assertSame(
+            $this->premierVersementLe,
+            $facture->fresh()->date_facture->toDateString()
+        );
+
+        $this->actingAs($this->admin)
+            ->get(route('administration.factures.show', $this->dossier->id))
+            ->assertInertia(fn ($page) => $page->where('dateFacture', $this->premierVersementLe));
+
+        $this->actingAs($this->admin)
+            ->get(route('administration.facturation.show', $this->dossier->id))
+            ->assertInertia(fn ($page) => $page->where('dateFacture', $this->premierVersementLe));
     }
 
     private function ligne(string $designation, int $prix, bool $acceptee = true): array

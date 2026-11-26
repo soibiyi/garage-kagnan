@@ -19,6 +19,7 @@ const estAdmin = computed(() => page.props.auth?.user?.role === 'admin');
 const props = defineProps({
     dossier: Object,
     devisId: { type: Number, default: null },
+    dateFacture: { type: String, default: null },
     // Modification d'un devis déjà accepté (aucun paiement) : lignes modifiables + cases à cocher
     modeEdition: { type: Boolean, default: false },
     // Facture déjà payée en partie (modification par l'admin) : { encaisse, total_autres_devis }
@@ -505,7 +506,7 @@ const retour = () => {
                                 <div class="border-2 border-gray-900 p-2 text-right rounded-xl min-w-[220px] bg-gray-50/50">
                                     <p class="text-xs font-bold uppercase bg-gray-200/80 px-2 py-0.5 mb-1 text-center rounded text-gray-900 tracking-wider">Devis / Facture Provisoire</p>
                                     <p class="text-xs text-gray-700 mb-0.5"><span class="font-semibold text-gray-900">N° :</span> {{ numeroFacture }}</p>
-                                    <p class="text-xs text-gray-700 mb-0.5"><span class="font-semibold text-gray-900">Date :</span> {{ formatDate(dossier.devis.created_at) }}</p>
+                                    <p class="text-xs text-gray-700 mb-0.5"><span class="font-semibold text-gray-900">Date :</span> {{ formatDate(dateFacture || dossier.devis.created_at) }}</p>
                                     <p class="text-xs text-gray-700"><span class="font-semibold text-gray-900">Statut :</span> <span class="capitalize font-semibold text-[#E11D48]">{{ dossier.devis.statut?.replace('_', ' ') }}</span></p>
                                 </div>
                             </div>
@@ -845,7 +846,7 @@ const retour = () => {
                             <div class="border-2 border-gray-900 p-2 text-right rounded-xl min-w-[220px] bg-gray-50/50">
                                 <p class="text-xs font-bold uppercase bg-emerald-100 px-2 py-0.5 mb-1 text-center rounded text-emerald-800 tracking-wider">Devis Validé</p>
                                 <p class="text-xs text-gray-700 mb-0.5"><span class="font-semibold text-gray-900">N° :</span> {{ numeroFacture }}</p>
-                                <p class="text-xs text-gray-700 mb-0.5"><span class="font-semibold text-gray-900">Date :</span> {{ formatDate(dossier.devis.created_at) }}</p>
+                                <p class="text-xs text-gray-700 mb-0.5"><span class="font-semibold text-gray-900">Date :</span> {{ formatDate(dateFacture || dossier.devis.created_at) }}</p>
                                 <p class="text-xs text-gray-700"><span class="font-semibold text-gray-900">Statut :</span> <span class="capitalize font-semibold text-emerald-600">Accepté</span></p>
                             </div>
                         </div>

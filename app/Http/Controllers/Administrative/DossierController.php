@@ -96,6 +96,7 @@ class DossierController extends Controller
                 ?? ($dossier->devis?->id === (int) $request->input('devis_id') ? $dossier->devis : null)
             : $dossier->devis;
         abort_unless($devis, 404);
+        $facture = Facture::where('intervention_id', $dossier->id)->first();
         $dossier->setRelation('devis', $devis);
         $dossier->setAttribute(
             'devis_initial_id',
@@ -110,6 +111,8 @@ class DossierController extends Controller
         return Inertia::render('Administration/FacturationShow', [
             'dossier' => $dossier,
             'devisId' => $devis->id,
+            'dateFacture' => $facture?->date_facture?->toDateString()
+                ?? $devis->created_at?->toDateString(),
         ]);
     }
 
@@ -380,6 +383,8 @@ class DossierController extends Controller
             return Inertia::render('Administration/FacturationShow', [
                 'dossier' => $dossier,
                 'devisId' => $devis->id,
+                'dateFacture' => Facture::where('intervention_id', $dossier->id)->value('date_facture')
+                    ?? $devis->created_at?->toDateString(),
                 'modeEdition' => true,
                 // Facture déjà payée en partie (modification réservée à l'admin) : montant encaissé
                 // et total des autres devis, pour afficher le nouveau reste à payer.

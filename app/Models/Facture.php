@@ -8,6 +8,10 @@ class Facture extends Model
 {
     use \App\Models\Concerns\Audite;
 
+    protected $casts = [
+        'date_facture' => 'date',
+    ];
+
     public function intervention()
     {
         return $this->belongsTo(Intervention::class);

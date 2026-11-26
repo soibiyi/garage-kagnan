@@ -164,7 +164,9 @@ class FactureController extends Controller
                 $clientPrenom = $dossier->vehicule?->client?->prenom ?? $dossier->vehicule?->client?->name ?? '';
                 $client = trim("{$clientNom} {$clientPrenom}") ?: 'N/A';
 
-                $dateFacture = optional($dossier->created_at)->format('d/m/Y') ?? '';
+                $dateFacture = optional(
+                    $facture?->date_facture ?? $dossier->devis?->created_at ?? $dossier->created_at
+                )->format('d/m/Y') ?? '';
                 $totalTtc = $resume['total_ttc'];
                 $remise = 0;
                 $netTtc = $totalTtc - $remise;
@@ -223,6 +225,8 @@ class FactureController extends Controller
             'dossier'   => $dossier,
             'paiements' => $paiements,
             'resume'    => $this->resume($dossier, (int) $paiements->sum('montant')),
+            'dateFacture' => $facture?->date_facture?->toDateString()
+                ?? $dossier->devis?->created_at?->toDateString(),
         ]);
     }
 
@@ -277,22 +281,29 @@ class FactureController extends Controller
                 return;
             }
 
+            $datePaiement = Carbon::parse($request->date_paiement)->setTimeFrom(now());
+
             (new Paiement)->forceFill([
                 'facture_id'     => $facture->id,
                 'enregistre_par' => auth()->id(),
                 'montant'        => (int) $request->montant,
                 'mode_paiement'  => $request->mode_paiement,
                 'notes'          => $request->notes,
-                'date_paiement'  => Carbon::parse($request->date_paiement)->setTimeFrom(now()),
+                'date_paiement'  => $datePaiement,
             ])->save();
 
             $nouveauPaye = $dejaPaye + (int) $request->montant;
 
-            $facture->forceFill([
+            $donneesFacture = [
                 'montant_total' => $total,
                 'montant_paye'  => $nouveauPaye,
                 'statut'        => $this->statutFacture($total, $nouveauPaye),
-            ])->save();
+            ];
+            if (!$facture->date_facture && $dejaPaye === 0) {
+                $donneesFacture['date_facture'] = $datePaiement->toDateString();
+            }
+
+            $facture->forceFill($donneesFacture)->save();
         });
 
         if ($erreur) {
