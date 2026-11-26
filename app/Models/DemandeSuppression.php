@@ -13,6 +13,7 @@ class DemandeSuppression extends Model
     public const TYPES = [
         'dossier' => 'Dossier',
         'devis_direct' => 'Devis direct',
+        'facturation' => 'Facturation',
     ];
 
     protected $fillable = [

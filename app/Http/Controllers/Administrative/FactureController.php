@@ -319,13 +319,17 @@ class FactureController extends Controller
     public function destroy(Request $request, $id)
     {
         $dossier = Intervention::duSiege()->findOrFail($id);
+        $type = Suppressions::estDevisDirect($dossier) ? 'devis_direct' : 'facturation';
 
-        if (! Suppressions::estDevisDirect($dossier)) {
-            return back()->withErrors(['error' => 'Seuls les devis directs peuvent être supprimés.']);
+        if (!Suppressions::estAdmin($request->user())) {
+            return Suppressions::traiter($type, $dossier, $request->input('motif'), $request->user());
         }
 
-        // Admin : suppression immédiate. Autres : demande à valider par un administrateur.
-        // Tout est tracé (audit) et restaurable par le super admin.
-        return Suppressions::traiter('devis_direct', $dossier, $request->input('motif'), $request->user());
+        Suppressions::executer($type, $dossier);
+
+        return redirect()->route('administration.factures.index')
+            ->with('success', $type === 'devis_direct'
+                ? 'Le devis direct et ses versements ont été supprimés.'
+                : 'Le dossier de facturation et ses versements ont été supprimés.');
     }
 }

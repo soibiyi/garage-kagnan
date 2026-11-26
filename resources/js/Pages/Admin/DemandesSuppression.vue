@@ -60,7 +60,7 @@ const vehicule = (c) => [c?.vehicule, c?.immatriculation ? `(${c.immatriculation
 
 function approuver(d) {
     const qui = d.contexte?.client ? ` du client ${d.contexte.client}` : '';
-    if (!window.confirm(`Supprimer ${d.libelle}${qui} ?\n\nLe dossier, son devis, sa facture et ses paiements seront supprimés. Le super administrateur pourra les restaurer.`)) return;
+    if (!window.confirm(`Supprimer ${d.libelle}${qui} ?\n\nLe dossier, son devis, sa facture et ses versements seront supprimés. Le super administrateur pourra les restaurer.`)) return;
     envoyer(d, 'approuver');
 }
 
@@ -95,7 +95,7 @@ function envoyer(d, action) {
                         <div class="min-w-0">
                             <p class="text-xs font-bold uppercase tracking-widest text-white/50">Administration</p>
                             <h1 class="text-2xl font-black tracking-tight sm:text-3xl">Demandes de suppression</h1>
-                            <p class="mt-0.5 text-sm text-white/60">Les collaborateurs ne suppriment plus eux-mêmes un dossier ou un devis direct : ils le demandent, vous décidez.</p>
+                            <p class="mt-0.5 text-sm text-white/60">Les collaborateurs demandent la suppression d’un dossier, d’un devis direct ou d’une facturation ; vous décidez.</p>
                         </div>
                     </div>
                 </header>

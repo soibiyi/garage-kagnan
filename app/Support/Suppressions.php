@@ -58,11 +58,19 @@ class Suppressions
         return back()->with('success', "Demande de suppression envoyée à l'administrateur. Le dossier reste en place tant qu'elle n'est pas validée.");
     }
 
-    private const TYPES_SUPPRIMES = ['dossier' => 'Le dossier', 'devis_direct' => 'Le devis direct'];
+    private const TYPES_SUPPRIMES = [
+        'dossier' => 'Le dossier',
+        'devis_direct' => 'Le devis direct',
+        'facturation' => 'Le dossier de facturation',
+    ];
 
     /** Supprime réellement (dossier + devis + lignes + facture + paiements), dans une transaction. */
     public static function executer(string $type, Intervention $dossier): void
     {
+        if (!array_key_exists($type, self::TYPES_SUPPRIMES)) {
+            throw new RuntimeException('Ce type de suppression n’est pas pris en charge.');
+        }
+
         if ($type === 'devis_direct' && ! self::estDevisDirect($dossier)) {
             throw new RuntimeException('Seuls les devis directs peuvent être supprimés depuis la facturation.');
         }

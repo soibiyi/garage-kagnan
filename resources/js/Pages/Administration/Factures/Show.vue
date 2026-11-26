@@ -16,6 +16,36 @@ const pageInertia = usePage();
 const peutModifierFacture = computed(() =>
     pageInertia.props.auth?.user?.role === 'admin' && props.dossier?.statut === 'accepte' && !!props.dossier?.devis
 );
+const estAdmin = computed(() => pageInertia.props.auth?.user?.role === 'admin');
+
+const supprimerFacturation = () => {
+    const identifiant = props.dossier?.numero_ot || `#${props.dossier?.id}`;
+    const estDevisDirect = props.dossier?.type === 'devis_direct'
+        || props.dossier?.is_direct
+        || !props.dossier?.numero_ot;
+    const typeElement = estDevisDirect ? 'devis direct' : 'dossier de facturation';
+    let data = {};
+
+    if (estAdmin.value) {
+        if (!window.confirm(`Supprimer le ${typeElement} ${identifiant} ? Le dossier, le devis, la facture et tous les versements seront supprimés.`)) return;
+    } else {
+        const motif = window.prompt(`Demande de suppression du ${typeElement} ${identifiant}.\nUn administrateur devra la valider.\n\nMotif de la suppression :`);
+        if (motif === null) return;
+        if (motif.trim().length < 5) {
+            window.alert('Indiquez le motif de la suppression (au moins 5 caractères).');
+            return;
+        }
+        data = { motif: motif.trim() };
+    }
+
+    router.delete(route('administration.factures.destroy', props.dossier.id), {
+        data,
+        preserveScroll: true,
+        onSuccess: () => {
+            if (!estAdmin.value) router.visit(route('administration.factures.index'));
+        },
+    });
+};
 
 // Numéro de facture déduit du numéro d'OT (même règle que la page devis) :
 //   SGK-02102026/001 (OT)  →  SGK-FAC-02102026/001 (facture)
@@ -220,6 +250,15 @@ onUnmounted(() => {
                     </h2>
                 </div>
                 <div class="flex items-center space-x-3">
+                    <button
+                        type="button"
+                        @click="supprimerFacturation"
+                        class="inline-flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold uppercase tracking-wider rounded-lg shadow-sm transition text-xs"
+                        :title="estAdmin ? 'Supprimer le dossier et ses factures' : 'Demander la suppression du dossier et de ses factures'"
+                    >
+                        <i class="fa-solid fa-trash-can text-[11px]"></i>
+                        <span>{{ estAdmin ? 'Supprimer' : 'Demander la suppression' }}</span>
+                    </button>
                     <!-- Admin : ajouter / retirer des éléments même après un versement -->
                     <Link
                         v-if="peutModifierFacture"

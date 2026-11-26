@@ -8,6 +8,7 @@ use App\Models\Devis;
 use App\Models\Facture;
 use App\Models\Intervention;
 use App\Models\MvtStock;
+use App\Models\Paiement;
 use App\Models\Stock;
 use App\Models\User;
 use App\Models\Vehicule;
@@ -86,6 +87,77 @@ class DemandeSuppressionTest extends TestCase
         $this->assertDatabaseHas('interventions', ['id' => $this->dossier->id]);
         $this->assertSame('refusee', $demande->fresh()->statut);
         $this->assertSame('Facture à conserver', $demande->fresh()->reponse);
+    }
+
+    public function test_administratif_requests_invoice_deletion_and_admin_can_refuse_it(): void
+    {
+        $facture = Facture::where('intervention_id', $this->dossier->id)->firstOrFail();
+
+        $this->actingAs($this->administratif)
+            ->delete(route('administration.factures.destroy', $this->dossier->id))
+            ->assertSessionHasErrors('motif');
+
+        $this->actingAs($this->administratif)
+            ->delete(route('administration.factures.destroy', $this->dossier->id), [
+                'motif' => 'Facture créée sur le mauvais dossier',
+            ])
+            ->assertSessionHas('success');
+
+        $demande = DemandeSuppression::where('type', 'facturation')->firstOrFail();
+        $this->assertDatabaseHas('interventions', ['id' => $this->dossier->id]);
+        $this->assertSame('FAC-77', $demande->contexte['facture']);
+
+        $this->actingAs($this->administratif)
+            ->post(route('admin.demandes-suppression.approuver', $demande))
+            ->assertForbidden();
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.demandes-suppression.refuser', $demande), [
+                'reponse' => 'Conserver le dossier pour correction',
+            ])
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseHas('interventions', ['id' => $this->dossier->id]);
+        $this->assertSame('refusee', $demande->fresh()->statut);
+    }
+
+    public function test_admin_approving_invoice_deletion_removes_dossier_invoice_and_payments(): void
+    {
+        $facture = Facture::where('intervention_id', $this->dossier->id)->firstOrFail();
+        Paiement::forceCreate([
+            'facture_id' => $facture->id,
+            'enregistre_par' => $this->administratif->id,
+            'montant' => 10000,
+            'mode_paiement' => 'Especes',
+            'date_paiement' => now(),
+        ]);
+
+        $this->actingAs($this->administratif)
+            ->delete(route('administration.factures.destroy', $this->dossier->id), [
+                'motif' => 'Facture enregistrée en double',
+            ]);
+
+        $demande = DemandeSuppression::where('type', 'facturation')->firstOrFail();
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.demandes-suppression.approuver', $demande))
+            ->assertSessionHas('success');
+
+        $this->assertDatabaseMissing('interventions', ['id' => $this->dossier->id]);
+        $this->assertDatabaseMissing('factures', ['id' => $facture->id]);
+        $this->assertDatabaseMissing('paiements', ['facture_id' => $facture->id]);
+        $this->assertSame('approuvee', $demande->fresh()->statut);
+    }
+
+    public function test_admin_can_delete_invoice_directly_from_billing(): void
+    {
+        $response = $this->actingAs($this->admin)
+            ->delete(route('administration.factures.destroy', $this->dossier->id));
+
+        $response->assertRedirect(route('administration.factures.index'));
+        $this->assertDatabaseMissing('interventions', ['id' => $this->dossier->id]);
+        $this->assertDatabaseMissing('factures', ['intervention_id' => $this->dossier->id]);
+        $this->assertSame(0, DemandeSuppression::count());
     }
 
     public function test_admin_can_approve_and_refuse_requests_in_batches(): void
