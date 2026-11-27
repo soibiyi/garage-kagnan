@@ -1,13 +1,48 @@
 <script setup>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { Head, Link, router } from '@inertiajs/vue3';
-import { onMounted, onUnmounted } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 
-defineProps({
+const props = defineProps({
     devisDirects: {
         type: Array,
         default: () => []
     }
+});
+
+const rechercheDevis = ref('');
+const normaliser = (valeur) => String(valeur ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+const devisDirectsFiltres = computed(() => {
+    const recherche = normaliser(rechercheDevis.value.trim());
+    if (!recherche) return props.devisDirects;
+
+    return props.devisDirects.filter((dossier) => {
+        const client = dossier.vehicule?.client;
+        const vehicule = dossier.vehicule;
+        const contenuDevis = (dossier.devis?.lignes ?? [])
+            .flatMap((ligne) => [ligne.designation, ligne.reference_piece]);
+        const champs = [
+            dossier.id,
+            dossier.numero_ot,
+            client?.nom,
+            client?.prenom,
+            client?.prenoms,
+            client?.telephone,
+            vehicule?.marque,
+            vehicule?.modele,
+            vehicule?.immatriculation,
+            dossier.created_at,
+            dossier.receptionniste?.name,
+            getStatutLabel(dossier),
+            ...contenuDevis,
+        ];
+
+        return normaliser(champs.join(' ')).includes(recherche);
+    });
 });
 
 // ─────────────────────────────────────────────
@@ -108,7 +143,7 @@ onUnmounted(() => {
                 
                 <!-- Tableau des devis directs -->
                 <div class="bg-white shadow-xl shadow-gray-200/50 rounded-2xl overflow-hidden border border-gray-100">
-                    <div v-if="devisDirects.length === 0" class="p-12 text-center">
+                    <div v-if="props.devisDirects.length === 0" class="p-12 text-center">
                         <div class="w-16 h-16 rounded-full bg-rose-50 border border-rose-100 flex items-center justify-center text-[#E11D48] mx-auto mb-4">
                             <i class="fa-solid fa-folder-open text-2xl"></i>
                         </div>
@@ -118,7 +153,34 @@ onUnmounted(() => {
                         </p>
                     </div>
 
-                    <div v-else class="overflow-x-auto">
+                    <template v-else>
+                        <div class="flex flex-col gap-3 border-b border-gray-100 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div class="relative w-full sm:max-w-md">
+                                <label for="recherche-devis-direct" class="sr-only">Rechercher un client ou un devis direct</label>
+                                <i class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" aria-hidden="true"></i>
+                                <input
+                                    id="recherche-devis-direct"
+                                    v-model="rechercheDevis"
+                                    type="search"
+                                    placeholder="Client, téléphone, immatriculation, numéro ou pièce…"
+                                    class="w-full rounded-lg border border-gray-200 bg-gray-50 py-2.5 pl-9 pr-10 text-xs focus:border-[#E11D48] focus:ring-[#E11D48]"
+                                />
+                                <button
+                                    v-if="rechercheDevis"
+                                    type="button"
+                                    @click="rechercheDevis = ''"
+                                    class="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-gray-400 hover:bg-gray-200 hover:text-gray-700"
+                                    aria-label="Effacer la recherche"
+                                >
+                                    <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                            <span class="text-xs font-semibold text-gray-500" aria-live="polite">
+                                {{ devisDirectsFiltres.length }} / {{ props.devisDirects.length }} devis
+                            </span>
+                        </div>
+
+                    <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200 text-left text-xs align-middle">
                             <thead class="bg-gray-50 text-gray-500 uppercase tracking-wider font-semibold">
                                 <tr>
@@ -130,7 +192,7 @@ onUnmounted(() => {
                                 </tr>
                             </thead>
                             <tbody class="divide-y divide-gray-200 bg-white">
-                                <tr v-for="dossier in devisDirects" :key="dossier.id" class="hover:bg-gray-50/50 transition">
+                                <tr v-for="dossier in devisDirectsFiltres" :key="dossier.id" class="hover:bg-gray-50/50 transition">
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <div class="font-bold text-gray-900">
                                             {{ dossier.vehicule?.client?.nom || 'Client inconnu' }} {{ dossier.vehicule?.client?.prenoms || dossier.vehicule?.client?.prenom || '' }}
@@ -171,9 +233,15 @@ onUnmounted(() => {
                                         </Link>
                                     </td>
                                 </tr>
+                                <tr v-if="devisDirectsFiltres.length === 0">
+                                    <td colspan="5" class="p-10 text-center text-sm text-gray-500">
+                                        Aucun client ou devis ne correspond à « {{ rechercheDevis }} ».
+                                    </td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
+                    </template>
                 </div>
 
             </div>
